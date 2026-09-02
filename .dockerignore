@@ -1,0 +1,16 @@
+node_modules
+dist
+coverage
+
+.env
+.env.*
+!.env.example
+
+.git
+.github
+.husky
+
+*.log
+openapi.json
+docs
+README.md
