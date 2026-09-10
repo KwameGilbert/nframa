@@ -8,6 +8,7 @@
 ## 1. Global conventions
 
 - **Naming:** tables and columns are **camelCase** (`walletTransactions.balanceAfterPesewas`), matching the TypeScript codebase so no snake↔camel mapping layer is needed. Practical consequence: Postgres folds unquoted identifiers to lowercase, so every camelCase identifier must be double-quoted — Knex's query builder quotes automatically, but any hand-written `knex.raw` SQL must quote `"camelCase"` identifiers explicitly.
+- **Phone numbers are always two columns, never one combined string:** a `...CountryCode` column (numeric calling code, digits only, no `+` — e.g. `"233"`) alongside the number itself (the **national significant number only** — no country code, no leading trunk `0`, e.g. `"201234567"` for a Ghanaian number locally written `020 123 4567`). Full E.164 for outbound SMS/OTP is reconstructed at the API/service layer as `` `+${countryCode}${number}` ``; normalizing whatever format the client submits (`0201234567`, `+233201234567`, …) into these two parts also happens there — never stored redundantly. Applies to `users.phoneCountryCode`/`phoneNumber` and `riderProfiles.emergencyContactCountryCode`/`emergencyContactPhone`.
 - **Primary keys:** `uuid` (`gen_random_uuid()`, pgcrypto is built into PG 17). The mobile doc already specifies uuid ids.
 - **Human-facing codes:** the frontends display prefixed ids (`TRP-7210`, `VER-5031`, `SUS-0048`, …). These are **not** primary keys — each table that needs one gets a `code text UNIQUE` column fed by a per-entity Postgres sequence (`'TRP-' || nextval(...)`). APIs expose both `id` and `code`; lookups by code are indexed.
 - **Money:** stored as **integer pesewas** (`bigint`, columns suffixed `Pesewas`). Exact arithmetic, no float drift; serialization to GHS numbers (`26.5`) happens in the API layer. The admin spec explicitly invites this ("Flag if the backend team prefers minor units — the frontend will adapt").
@@ -58,7 +59,8 @@ One person = one row, keyed by phone. Role is **not** a column — it's the exis
 | column | type | notes |
 |---|---|---|
 | `id` | uuid PK | used in QR payloads, JWT `sub` |
-| `phoneNumber` | text UNIQUE NOT NULL | E.164 (`+233…`) |
+| `phoneCountryCode` | text NOT NULL | numeric calling code, no `+` (e.g. `"233"`) |
+| `phoneNumber` | text NOT NULL | national significant number only, no leading `0` (e.g. `"201234567"`) — uniqueness is the composite `UNIQUE (phoneCountryCode, phoneNumber)`, not this column alone, since a national number can repeat across countries |
 | `fullName` | text | |
 | `email` | text UNIQUE NULL | |
 | `status` | text CHECK | `active` / `suspended` — account-wide; maintained by suspend/reinstate |
@@ -74,7 +76,8 @@ One person = one row, keyed by phone. Role is **not** a column — it's the exis
 | `userId` | uuid PK FK→users | 1:1 |
 | `code` | text UNIQUE | `RID-#####` |
 | `emergencyContactName` | text NULL | doc lists name only; phone added for practicality |
-| `emergencyContactPhone` | text NULL | |
+| `emergencyContactCountryCode` | text NULL | same numeric-calling-code convention as `users.phoneCountryCode` |
+| `emergencyContactPhone` | text NULL | national significant number only, same convention as `users.phoneNumber`; nullable together with the above — enforced at the service layer, not a DB CHECK |
 | `autoRefillEnabled` | boolean DEFAULT false | wallet auto-refill toggle |
 | `autoRefillThresholdPesewas` | bigint DEFAULT 1500 | "below GH₵15" |
 | `autoRefillAmountPesewas` | bigint NULL | how much to charge when triggered |
@@ -123,7 +126,7 @@ Using a real FK (`roleId`) instead of the frontend's name-string matching **diss
 
 ### Auth plumbing
 
-**`otpCodes`:** `id` · `identifier` text (phone or email) · `channel` CHECK (`sms`/`email`) · `purpose` CHECK (`riderLogin` / `driverLogin` / `adminLogin` / `passwordReset`) · `codeHash` text · `expiresAt` · `consumedAt` NULL · `attemptCount` smallint — index `(identifier, purpose, createdAt)`. Codes hashed, single-use, attempt-limited.
+**`otpCodes`:** `id` · `identifier` text (phone or email) · `channel` CHECK (`sms`/`email`) · `purpose` CHECK (`riderLogin` / `driverLogin` / `adminLogin` / `passwordReset`) · `codeHash` text · `expiresAt` · `consumedAt` NULL · `attemptCount` smallint — index `(identifier, purpose, createdAt)`. Codes hashed, single-use, attempt-limited. For phone-based OTP, `identifier` is the concatenation `phoneCountryCode + phoneNumber` (no separators, no `+`) so it matches `users` directly — a derived matching key, not itself a place the phone-splitting convention above needs to apply.
 
 **`oneTimeTokens`:** the admin forgot-password flow's step-2 `resetToken` (and later invite-activation links). `id` · `subjectType` CHECK (`admin`/`user`) · `subjectId` uuid · `kind` CHECK (`passwordReset`/`adminInvite`) · `tokenHash` UNIQUE · `expiresAt` · `consumedAt` NULL
 
@@ -392,6 +395,7 @@ These are platform **defaults**; `routes` carries its own `baseFarePesewas`/`per
 8. **Trip materialization horizon** for recurring schedules (7 days? 14?) and what happens on schedule edit vs already-materialized trips.
 9. **Eligibility computation** for `payoutApprovals` (`policyReview` / `dutyConflict`) — rules undefined in the docs.
 10. **Verification `priority` formula** — undefined; assumed job-computed from wait time + expiry proximity.
+11. **Phone country-code scope** — confirm with product whether `phoneCountryCode` is effectively fixed to Ghana (`"233"`) at launch or the platform expects other countries soon; affects whether phone-input validation/normalization (e.g. via `libphonenumber-js`) needs to support arbitrary countries from day one or can hardcode Ghana's national-number format rules.
 
 ## 13. Proposed migration order
 

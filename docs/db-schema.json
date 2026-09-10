@@ -1,0 +1,939 @@
+{
+  "meta": {
+    "title": "Nframa — Database Schema (Prisma-like JSON representation)",
+    "status": "proposed — no migrations written yet",
+    "generatedFrom": "docs/db-schema.md",
+    "provider": "postgresql",
+    "postgresVersion": "17",
+    "queryLayer": "This project uses Knex (query builder, no ORM) — see CLAUDE.md. This JSON is a planning/documentation artifact shaped like a Prisma schema for readability; it is not consumed by Prisma or any ORM.",
+    "tableCount": 42,
+    "relationDirection": "Relations are documented one-directionally from the foreign-key-owning field only (as a `relation` object on that field) — no reverse relation arrays — to keep this a compact reference rather than a full DMMF dump.",
+    "polymorphicNote": "A few columns point at different tables depending on a sibling discriminator column and are NOT real foreign keys — they carry `polymorphic: true` and a `possibleReferences` list instead of `relation`."
+  },
+
+  "conventions": {
+    "namingCase": "camelCase for every table and column (e.g. walletTransactions.balanceAfterPesewas), matching the TypeScript codebase. Postgres folds unquoted identifiers to lowercase, so every identifier must be double-quoted — Knex's query builder does this automatically.",
+    "primaryKeys": "uuid via gen_random_uuid() (pgcrypto, built into PG17) for nearly every table. Exceptions: platformSettings (fixed singleton, smallint id = 1), and the 1:1 profile tables (riderProfiles, carOwnerProfiles) which use userId itself as PK+FK.",
+    "displayCodes": "Human-facing prefixed ids (e.g. TRP-7210, VER-5031) are never the primary key — each table that needs one has a separate `code text UNIQUE` column fed by a per-table Postgres sequence. APIs expose both `id` and `code`.",
+    "money": "Integer pesewas (bigint), columns suffixed `Pesewas`. Exact arithmetic, no float drift; serialized to GHS decimal numbers only at the API layer.",
+    "timestamps": "timestamptz everywhere; API responses are ISO 8601. Every table has createdAt/updatedAt unless noted otherwise on the model.",
+    "enums": "Modeled here as named enum types for documentation clarity. Physically implemented as `text` + `CHECK` constraints per column, not native Postgres enums — adding a value is a migration-only constraint swap, not an ALTER TYPE.",
+    "softDelete": "deletedAt (timestamptz, nullable) exists only on users, verificationApplications, supportTickets. Every other table is either immutable history (trips, ledger rows, audit logs, SOS alerts) or has no delete concept at all.",
+    "phoneNumbers": "Always two columns, never one combined string: a `...CountryCode` column (numeric calling code, digits only, no `+`, e.g. \"233\") plus the number itself (national significant number only, no leading trunk `0`, e.g. \"201234567\"). Full E.164 is reconstructed at the API layer as `+${countryCode}${number}`. Applies to users.phoneCountryCode/phoneNumber and riderProfiles.emergencyContactCountryCode/emergencyContactPhone.",
+    "statusTransitions": "Allowed status transitions (e.g. dispute open → underReview → resolved) are enforced in the service layer, not the database — the DB only stores the current status plus transition timestamps."
+  },
+
+  "enums": {
+    "UserStatus": ["active", "suspended"],
+    "CarOwnerVerificationStatus": ["unverified", "pending", "approved", "rejected", "expiring"],
+    "VehicleStatus": ["active", "retired"],
+    "SuspensionReviewStatus": ["appealPending", "underReview", "actionRequired", "escalated", "noAppeal", "cleared"],
+    "AdminUserStatus": ["active", "suspended", "invited"],
+    "OtpChannel": ["sms", "email"],
+    "OtpPurpose": ["riderLogin", "driverLogin", "adminLogin", "passwordReset"],
+    "OneTimeTokenSubjectType": ["admin", "user"],
+    "OneTimeTokenKind": ["passwordReset", "adminInvite"],
+    "AuthSessionSubjectType": ["user", "admin"],
+    "FileOwnerType": ["user", "admin", "vehicle"],
+    "FilePurpose": ["verificationDocument", "selfie", "ghanaCardFront", "ghanaCardBack", "vehiclePhoto", "avatar"],
+    "RouteStatus": ["active", "inactive", "underReview"],
+    "VerificationApplicationStatus": ["pending", "approved", "rejected", "expiring", "resubmitted"],
+    "VerificationPriority": ["low", "medium", "high"],
+    "VerificationDocumentType": ["drivingLicence", "registration", "insurance", "roadworthy", "selfie", "ghanaCardFront", "ghanaCardBack", "vehiclePhoto"],
+    "VerificationDocumentStatus": ["pendingReview", "approved", "rejected", "expiringSoon", "resubmitted"],
+    "VerificationRejectionReasonCode": ["unverifiable", "mismatch", "expired", "illegible", "other"],
+    "Tone": ["success", "danger", "warning", "info", "neutral"],
+    "VerificationEventActorType": ["admin", "carOwner", "system"],
+    "ScheduleStatus": ["active", "paused", "cancelled"],
+    "TripStatus": ["scheduled", "inTransit", "completed", "cancelled"],
+    "CancelActorType": ["rider", "carOwner", "system", "admin"],
+    "BookingStatus": ["requested", "confirmed", "boarded", "completed", "rejected", "cancelled", "noShow"],
+    "PaidWith": ["walletCash", "walletCredit", "transitPass"],
+    "BoardingScanResult": ["valid", "invalidFare", "duplicate", "noMatch"],
+    "TripUpdateFailureType": ["gpsTimeout", "statusSyncError", "paymentWebhookFailed"],
+    "MisconductSeverity": ["high", "medium", "low"],
+    "MisconductReportStatus": ["open", "investigating", "resolved", "dismissed"],
+    "TripDisputeStatus": ["open", "underReview", "resolved", "escalated"],
+    "WalletAccountType": ["riderCash", "riderCredit", "ownerAvailable", "ownerPending"],
+    "WalletTransactionType": ["topup", "tripPayment", "tripEarning", "commission", "pendingRelease", "payout", "payoutFee", "refund", "serviceCredit", "passPurchase", "adjustment", "reversal"],
+    "PaymentMethodKind": ["card", "momo"],
+    "PayoutMethod": ["mobileMoney", "bankAccount"],
+    "TransitPassStatus": ["active", "exhausted", "expired", "cancelled"],
+    "WithdrawalRequestStatus": ["awaitingReview", "processing", "paid", "failed", "reversed"],
+    "WithdrawalRiskLevel": ["low", "medium", "high"],
+    "PayoutEligibility": ["eligible", "policyReview", "dutyConflict"],
+    "PayoutApprovalOutcome": ["awaitingApproval", "approved", "rejected"],
+    "RefundRequestType": ["refund", "serviceCredit"],
+    "RefundSourceType": ["trip", "dispute"],
+    "RefundRequestStatus": ["pendingReview", "completed", "processed", "rejected"],
+    "SosPriority": ["critical", "medium", "low"],
+    "SosAlertStatus": ["active", "dispatched", "resolved"],
+    "ReporterRole": ["rider", "carOwner"],
+    "SupportTicketCategory": ["fareAndBilling", "appCrashGps", "lostAndFound", "driverConduct", "accountAndSecurity", "routeNavigation"],
+    "SupportTicketPriority": ["high", "medium", "low"],
+    "SupportTicketStatus": ["open", "inProgress", "resolved"],
+    "ReplyAuthorType": ["admin", "user"],
+    "BroadcastChannel": ["inApp", "email", "push", "sms"],
+    "BroadcastAudience": ["allRiders", "allCarOwners", "everyone"],
+    "BroadcastStatus": ["draft", "scheduled", "sent"],
+    "AuditModule": ["users", "verification", "finance", "tripOperations", "safety", "support", "administration", "settings"],
+    "AuditResult": ["success", "rejected", "failed"]
+  },
+
+  "models": {
+
+    "users": {
+      "description": "Shared identity for riders and car owners, keyed by phone. Role is not a column — it's the existence of a riderProfiles/carOwnerProfiles row.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")", "note": "used in QR payloads and JWT `sub`" },
+        { "name": "phoneCountryCode", "type": "String", "dbType": "text", "required": true, "note": "numeric calling code, no + (e.g. \"233\")" },
+        { "name": "phoneNumber", "type": "String", "dbType": "text", "required": true, "note": "national significant number only, no leading 0 (e.g. \"201234567\")" },
+        { "name": "fullName", "type": "String", "dbType": "text", "required": false },
+        { "name": "email", "type": "String", "dbType": "text", "required": false, "unique": true },
+        { "name": "status", "type": "UserStatus", "dbType": "text", "required": true, "default": "active" },
+        { "name": "isProfileComplete", "type": "Boolean", "required": true, "default": false, "note": "drives the rider onboarding push" },
+        { "name": "lastActiveAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "updatedAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "deletedAt", "type": "DateTime", "dbType": "timestamptz", "required": false, "note": "soft delete + scrub PII" }
+      ],
+      "primaryKey": ["id"],
+      "uniqueConstraints": [["phoneCountryCode", "phoneNumber"]],
+      "derived": [
+        { "name": "security.passwordChanged / loginLocation / devices", "description": "admin UI's login-telemetry block — computed from authSessions, never stored on users" },
+        { "name": "tripsCompleted / averageRating", "description": "aggregated from trips/ratings; denormalize onto this table later only if measured slow" }
+      ]
+    },
+
+    "riderProfiles": {
+      "description": "1:1 rider-specific profile, keyed by users.id.",
+      "fields": [
+        { "name": "userId", "type": "String", "dbType": "uuid", "required": true, "id": true, "relation": { "model": "users", "field": "id" } },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "default": "dbgenerated(\"'RID-' || nextval('riderProfilesCodeSeq')\")" },
+        { "name": "emergencyContactName", "type": "String", "dbType": "text", "required": false },
+        { "name": "emergencyContactCountryCode", "type": "String", "dbType": "text", "required": false },
+        { "name": "emergencyContactPhone", "type": "String", "dbType": "text", "required": false, "note": "nullable together with emergencyContactCountryCode — enforced at the service layer, not a DB CHECK" },
+        { "name": "autoRefillEnabled", "type": "Boolean", "required": true, "default": false },
+        { "name": "autoRefillThresholdPesewas", "type": "BigInt", "required": true, "default": 1500, "note": "\"below GH₵15\"" },
+        { "name": "autoRefillAmountPesewas", "type": "BigInt", "required": false }
+      ],
+      "primaryKey": ["userId"]
+    },
+
+    "carOwnerProfiles": {
+      "description": "1:1 car-owner-specific profile, keyed by users.id.",
+      "fields": [
+        { "name": "userId", "type": "String", "dbType": "uuid", "required": true, "id": true, "relation": { "model": "users", "field": "id" } },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "default": "dbgenerated(\"'CAR-' || nextval('carOwnerProfilesCodeSeq')\")" },
+        { "name": "verificationStatus", "type": "CarOwnerVerificationStatus", "dbType": "text", "required": true, "default": "unverified", "note": "denormalized from the latest verificationApplications row, kept in sync by the verification service" },
+        { "name": "ghanaCardNumber", "type": "String", "dbType": "text", "required": false, "note": "e.g. GHA-123456789-0" },
+        { "name": "address", "type": "String", "dbType": "text", "required": false },
+        { "name": "isOnline", "type": "Boolean", "required": true, "default": false, "note": "\"Go Online\" shift toggle" },
+        { "name": "autoAcceptBookings", "type": "Boolean", "required": true, "default": false },
+        { "name": "termsAcceptedAt", "type": "DateTime", "dbType": "timestamptz", "required": false, "note": "post-approval /acceptance step" }
+      ],
+      "primaryKey": ["userId"]
+    },
+
+    "savedCommutes": {
+      "description": "A rider's saved default commute (\"Home to Work\"). Own table so multiple could coexist later.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "riderUserId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" } },
+        { "name": "label", "type": "String", "dbType": "text", "required": true, "note": "e.g. \"Home to Work\"" },
+        { "name": "startAddress", "type": "String", "dbType": "text", "required": true },
+        { "name": "startLat", "type": "Decimal", "dbType": "numeric(9,6)", "required": true },
+        { "name": "startLng", "type": "Decimal", "dbType": "numeric(9,6)", "required": true },
+        { "name": "endAddress", "type": "String", "dbType": "text", "required": true },
+        { "name": "endLat", "type": "Decimal", "dbType": "numeric(9,6)", "required": true },
+        { "name": "endLng", "type": "Decimal", "dbType": "numeric(9,6)", "required": true },
+        { "name": "days", "type": "Int", "dbType": "smallint[]", "required": true, "list": true, "note": "ISO 1–7" },
+        { "name": "departTime", "type": "String", "dbType": "time", "required": true },
+        { "name": "isActive", "type": "Boolean", "required": true, "default": true },
+        { "name": "isDefault", "type": "Boolean", "required": true, "default": false }
+      ],
+      "primaryKey": ["id"],
+      "partialUniqueIndexes": [
+        { "fields": ["riderUserId"], "where": "isDefault = true", "note": "exactly one default commute per rider" }
+      ]
+    },
+
+    "vehicles": {
+      "description": "A car owner's vehicle. Separate table for photos + future multi-vehicle support.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "carOwnerUserId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" } },
+        { "name": "make", "type": "String", "dbType": "text", "required": true },
+        { "name": "model", "type": "String", "dbType": "text", "required": true },
+        { "name": "year", "type": "Int", "dbType": "integer", "required": false },
+        { "name": "color", "type": "String", "dbType": "text", "required": true },
+        { "name": "plate", "type": "String", "dbType": "text", "required": true, "unique": true, "note": "e.g. GW-1234-24" },
+        { "name": "seats", "type": "Int", "dbType": "smallint", "required": true },
+        { "name": "status", "type": "VehicleStatus", "dbType": "text", "required": true, "default": "active" },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "updatedAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"],
+      "notes": ["Vehicle photos live in `files` with purpose='vehiclePhoto' and ownerId = this vehicle's id."]
+    },
+
+    "suspensionCases": {
+      "description": "A user account suspension. Reinstating closes the case (reinstatedAt set) rather than deleting it, so history survives.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "default": "dbgenerated(\"'SUS-' || nextval('suspensionCasesCodeSeq')\")" },
+        { "name": "userId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" } },
+        { "name": "reason", "type": "String", "dbType": "text", "required": true },
+        { "name": "reviewStatus", "type": "SuspensionReviewStatus", "dbType": "text", "required": true },
+        { "name": "restrictions", "type": "String", "dbType": "text", "required": true },
+        { "name": "notes", "type": "String", "dbType": "text", "required": true },
+        { "name": "suspendedByAdminId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "adminUsers", "field": "id" }, "note": "NULL = \"System\"" },
+        { "name": "suspendedAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "reinstatedAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "reinstatedByAdminId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "adminUsers", "field": "id" } }
+      ],
+      "primaryKey": ["id"],
+      "partialUniqueIndexes": [
+        { "fields": ["userId"], "where": "\"reinstatedAt\" IS NULL", "note": "at most one open case per user" }
+      ]
+    },
+
+    "adminUsers": {
+      "description": "Administration-console operators. A separate identity realm from users (email + password/OTP, not phone).",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "default": "dbgenerated(\"'ADM-' || nextval('adminUsersCodeSeq')\")" },
+        { "name": "name", "type": "String", "dbType": "text", "required": true },
+        { "name": "email", "type": "String", "dbType": "text", "required": true, "unique": true },
+        { "name": "passwordHash", "type": "String", "dbType": "text", "required": true, "note": "argon2/bcrypt" },
+        { "name": "avatarFileId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "files", "field": "id" } },
+        { "name": "roleId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "roles", "field": "id" } },
+        { "name": "department", "type": "String", "dbType": "text", "required": false },
+        { "name": "status", "type": "AdminUserStatus", "dbType": "text", "required": true, "default": "invited" },
+        { "name": "lastLoginAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "updatedAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"],
+      "notes": ["A \"Super Admin\" cannot be suspended or deleted if it's the last one remaining — enforced in the service layer."]
+    },
+
+    "roles": {
+      "description": "Admin-creatable role definitions driving sidebar/module visibility.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "slug", "type": "String", "dbType": "text", "required": true, "unique": true, "note": "e.g. \"support-admin\"" },
+        { "name": "name", "type": "String", "dbType": "text", "required": true, "unique": true },
+        { "name": "description", "type": "String", "dbType": "text", "required": true },
+        { "name": "permittedModules", "type": "Json", "dbType": "jsonb", "required": true, "note": "array of navConfig module ids" },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "updatedAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"],
+      "notes": ["Deleting a role is blocked (FK RESTRICT / 409) while any adminUsers.roleId still references it."],
+      "derived": [
+        { "name": "permissionsCount", "description": "jsonb_array_length(permittedModules), never stored" },
+        { "name": "assigned admin count", "description": "COUNT(*) over adminUsers grouped by roleId" }
+      ]
+    },
+
+    "otpCodes": {
+      "description": "One-time login/verification codes for phone (rider/driver) and email (admin) auth.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "identifier", "type": "String", "dbType": "text", "required": true, "note": "phone (phoneCountryCode+phoneNumber concatenated, no separators) or email" },
+        { "name": "channel", "type": "OtpChannel", "dbType": "text", "required": true },
+        { "name": "purpose", "type": "OtpPurpose", "dbType": "text", "required": true },
+        { "name": "codeHash", "type": "String", "dbType": "text", "required": true },
+        { "name": "expiresAt", "type": "DateTime", "dbType": "timestamptz", "required": true },
+        { "name": "consumedAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "attemptCount", "type": "Int", "dbType": "smallint", "required": true, "default": 0 },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"],
+      "indexes": [{ "fields": ["identifier", "purpose", "createdAt"] }]
+    },
+
+    "oneTimeTokens": {
+      "description": "Short-lived single-use tokens: admin forgot-password step-2 resetToken, future invite-activation links.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "subjectType", "type": "OneTimeTokenSubjectType", "dbType": "text", "required": true },
+        { "name": "subjectId", "type": "String", "dbType": "uuid", "required": true, "polymorphic": true, "possibleReferences": ["adminUsers.id", "users.id"] },
+        { "name": "kind", "type": "OneTimeTokenKind", "dbType": "text", "required": true },
+        { "name": "tokenHash", "type": "String", "dbType": "text", "required": true, "unique": true },
+        { "name": "expiresAt", "type": "DateTime", "dbType": "timestamptz", "required": true },
+        { "name": "consumedAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"]
+    },
+
+    "authSessions": {
+      "description": "Refresh-token sessions for both the user (rider/driver) and admin realms.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "subjectType", "type": "AuthSessionSubjectType", "dbType": "text", "required": true },
+        { "name": "subjectId", "type": "String", "dbType": "uuid", "required": true, "polymorphic": true, "possibleReferences": ["users.id", "adminUsers.id"] },
+        { "name": "refreshTokenHash", "type": "String", "dbType": "text", "required": true, "unique": true },
+        { "name": "userAgent", "type": "String", "dbType": "text", "required": false },
+        { "name": "ipAddress", "type": "String", "dbType": "inet", "required": true },
+        { "name": "lastUsedAt", "type": "DateTime", "dbType": "timestamptz", "required": true },
+        { "name": "expiresAt", "type": "DateTime", "dbType": "timestamptz", "required": true },
+        { "name": "revokedAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"],
+      "notes": ["Powers \"revoke other sessions on password reset\" and the admin UI's devices/loginLocation telemetry (see users.derived)."]
+    },
+
+    "files": {
+      "description": "Generic upload registry (S3-style object storage; this table stores only the pointer, not bytes).",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "ownerType", "type": "FileOwnerType", "dbType": "text", "required": true },
+        { "name": "ownerId", "type": "String", "dbType": "uuid", "required": true, "polymorphic": true, "possibleReferences": ["users.id", "adminUsers.id", "vehicles.id"] },
+        { "name": "purpose", "type": "FilePurpose", "dbType": "text", "required": true },
+        { "name": "storageKey", "type": "String", "dbType": "text", "required": true },
+        { "name": "mimeType", "type": "String", "dbType": "text", "required": true },
+        { "name": "sizeBytes", "type": "BigInt", "required": true },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"],
+      "derived": [
+        { "name": "fileUrl", "description": "a signed, time-limited URL minted from storageKey at read time — never stored" }
+      ]
+    },
+
+    "routes": {
+      "description": "Admin-managed fixed corridors that trips run on.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "default": "dbgenerated(\"'RTE-' || nextval('routesCodeSeq')\")" },
+        { "name": "name", "type": "String", "dbType": "text", "required": true, "note": "e.g. \"Accra–Tema Express\"" },
+        { "name": "corridor", "type": "String", "dbType": "text", "required": true, "note": "grouping/filter label, e.g. \"Accra–Tema\" — see open question about promoting to its own table" },
+        { "name": "originName", "type": "String", "dbType": "text", "required": true },
+        { "name": "originLat", "type": "Decimal", "dbType": "numeric(9,6)", "required": false },
+        { "name": "originLng", "type": "Decimal", "dbType": "numeric(9,6)", "required": false },
+        { "name": "destinationName", "type": "String", "dbType": "text", "required": true },
+        { "name": "destinationLat", "type": "Decimal", "dbType": "numeric(9,6)", "required": false },
+        { "name": "destinationLng", "type": "Decimal", "dbType": "numeric(9,6)", "required": false },
+        { "name": "cityId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "operatingCities", "field": "id" } },
+        { "name": "distanceKm", "type": "Decimal", "dbType": "numeric(6,2)", "required": true },
+        { "name": "baseFarePesewas", "type": "BigInt", "required": true },
+        { "name": "perKmRatePesewas", "type": "BigInt", "required": true },
+        { "name": "status", "type": "RouteStatus", "dbType": "text", "required": true, "default": "active" },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "updatedAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"],
+      "derived": [
+        { "name": "assignedCarOwners", "description": "COUNT(*) over routeAssignments where unassignedAt IS NULL — never stored" }
+      ]
+    },
+
+    "routeAssignments": {
+      "description": "Which car owners currently serve which route.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "routeId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "routes", "field": "id" } },
+        { "name": "carOwnerUserId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" } },
+        { "name": "assignedAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "unassignedAt", "type": "DateTime", "dbType": "timestamptz", "required": false }
+      ],
+      "primaryKey": ["id"],
+      "partialUniqueIndexes": [
+        { "fields": ["routeId", "carOwnerUserId"], "where": "\"unassignedAt\" IS NULL", "note": "a car owner has at most one active assignment to a given route at a time" }
+      ]
+    },
+
+    "operatingCities": {
+      "description": "Cities the platform operates in.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "name", "type": "String", "dbType": "text", "required": true, "unique": true },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"],
+      "notes": ["Deleting a city referenced by routes.cityId is blocked (FK RESTRICT) — resolved open question, consistent with every other orphan-guard in the app."]
+    },
+
+    "verificationApplications": {
+      "description": "A car owner's driver-verification application.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "default": "dbgenerated(\"'VER-' || nextval('verificationApplicationsCodeSeq')\")" },
+        { "name": "carOwnerUserId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" } },
+        { "name": "vehicleId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "vehicles", "field": "id" } },
+        { "name": "status", "type": "VerificationApplicationStatus", "dbType": "text", "required": true, "default": "pending" },
+        { "name": "priority", "type": "VerificationPriority", "dbType": "text", "required": true, "note": "computed by a scheduled job (wait-time + document expiry proximity), never admin-set" },
+        { "name": "submittedAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "reviewerAdminId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "adminUsers", "field": "id" } },
+        { "name": "decidedAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "rejectionReason", "type": "String", "dbType": "text", "required": false },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "updatedAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "deletedAt", "type": "DateTime", "dbType": "timestamptz", "required": false }
+      ],
+      "primaryKey": ["id"],
+      "notes": [
+        "Business rule: any single document rejection ⇒ application status becomes 'rejected'.",
+        "Business rule: application becomes 'approved' only once ALL required documents are 'approved'.",
+        "A BullMQ sweep flips applications/documents to 'expiring'/'expiringSoon' as expiryDate approaches."
+      ]
+    },
+
+    "verificationDocuments": {
+      "description": "One row per submitted document VERSION — a resubmission inserts a new row pointing at the one it replaces.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "applicationId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "verificationApplications", "field": "id" } },
+        { "name": "type", "type": "VerificationDocumentType", "dbType": "text", "required": true },
+        { "name": "fileId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "files", "field": "id" } },
+        { "name": "issueDate", "type": "DateTime", "dbType": "date", "required": false },
+        { "name": "expiryDate", "type": "DateTime", "dbType": "date", "required": false },
+        { "name": "status", "type": "VerificationDocumentStatus", "dbType": "text", "required": true, "default": "pendingReview" },
+        { "name": "reviewerAdminId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "adminUsers", "field": "id" } },
+        { "name": "reviewedAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "rejectionReasonCode", "type": "VerificationRejectionReasonCode", "dbType": "text", "required": false },
+        { "name": "rejectionNotes", "type": "String", "dbType": "text", "required": false },
+        { "name": "checks", "type": "Json", "dbType": "jsonb", "required": false, "note": "pipeline/automated verification check labels" },
+        { "name": "replacesDocumentId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "verificationDocuments", "field": "id" }, "note": "self-referencing; \"current\" doc per type = latest with no row referencing it" },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"]
+    },
+
+    "verificationEvents": {
+      "description": "Append-only timeline/activity log for a verification application.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "applicationId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "verificationApplications", "field": "id" } },
+        { "name": "label", "type": "String", "dbType": "text", "required": true },
+        { "name": "detail", "type": "String", "dbType": "text", "required": false, "note": "e.g. a sent-notification's full HTML body" },
+        { "name": "tone", "type": "Tone", "dbType": "text", "required": true },
+        { "name": "actorType", "type": "VerificationEventActorType", "dbType": "text", "required": true },
+        { "name": "actorAdminId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "adminUsers", "field": "id" } },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"]
+    },
+
+    "schedules": {
+      "description": "A car owner's commute template — one-off or recurring (e.g. Mon–Fri). A background job materializes concrete trips from active schedules.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "carOwnerUserId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" } },
+        { "name": "routeId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "routes", "field": "id" } },
+        { "name": "vehicleId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "vehicles", "field": "id" } },
+        { "name": "departTime", "type": "String", "dbType": "time", "required": true },
+        { "name": "recurrenceDays", "type": "Int", "dbType": "smallint[]", "required": false, "list": true, "note": "ISO 1–7; NULL = one-off" },
+        { "name": "oneOffDate", "type": "DateTime", "dbType": "date", "required": false },
+        { "name": "startsOn", "type": "DateTime", "dbType": "date", "required": true },
+        { "name": "endsOn", "type": "DateTime", "dbType": "date", "required": false },
+        { "name": "seatsOffered", "type": "Int", "dbType": "smallint", "required": true },
+        { "name": "status", "type": "ScheduleStatus", "dbType": "text", "required": true, "default": "active" }
+      ],
+      "primaryKey": ["id"],
+      "checkConstraints": ["exactly one of recurrenceDays / oneOffDate is set"],
+      "notes": ["The 2-hour freeze rule (no cancel/edit within 2h of departure) is enforced in the service layer against trips.departureAt, not on this table."]
+    },
+
+    "trips": {
+      "description": "One concrete departure on a date. Route facts are snapshotted at creation so later route edits can't rewrite history.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "default": "dbgenerated(\"'TRP-' || nextval('tripsCodeSeq')\")" },
+        { "name": "scheduleId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "schedules", "field": "id" }, "note": "NULL for ad-hoc one-offs" },
+        { "name": "routeId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "routes", "field": "id" } },
+        { "name": "carOwnerUserId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" } },
+        { "name": "vehicleId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "vehicles", "field": "id" } },
+        { "name": "originName", "type": "String", "dbType": "text", "required": true, "note": "snapshot of route.originName at trip creation" },
+        { "name": "originDetail", "type": "String", "dbType": "text", "required": false, "note": "e.g. \"Achimota, Accra\"" },
+        { "name": "destinationName", "type": "String", "dbType": "text", "required": true },
+        { "name": "destinationDetail", "type": "String", "dbType": "text", "required": false },
+        { "name": "corridor", "type": "String", "dbType": "text", "required": true },
+        { "name": "departureAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "note": "the 2-hour freeze rule's anchor" },
+        { "name": "seatsTotal", "type": "Int", "dbType": "smallint", "required": true },
+        { "name": "farePesewas", "type": "BigInt", "required": true, "note": "per seat, snapshotted from route pricing" },
+        { "name": "status", "type": "TripStatus", "dbType": "text", "required": true, "default": "scheduled" },
+        { "name": "startedAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "completedAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "cancelledAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "cancelledByType", "type": "CancelActorType", "dbType": "text", "required": false },
+        { "name": "cancelledById", "type": "String", "dbType": "uuid", "required": false, "polymorphic": true, "possibleReferences": ["users.id", "adminUsers.id"] },
+        { "name": "cancelReason", "type": "String", "dbType": "text", "required": false },
+        { "name": "lastLat", "type": "Decimal", "dbType": "numeric(9,6)", "required": false },
+        { "name": "lastLng", "type": "Decimal", "dbType": "numeric(9,6)", "required": false },
+        { "name": "positionUpdatedAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "updatedAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"],
+      "indexes": [
+        { "fields": ["status", "departureAt"] },
+        { "fields": ["carOwnerUserId", "departureAt"] },
+        { "fields": ["routeId"] }
+      ],
+      "derived": [
+        { "name": "seatsAvailable", "description": "seatsTotal − SUM(confirmed booking seats), computed under a row lock at booking time — never stored" },
+        { "name": "\"Disputed\" badge (admin UI)", "description": "derived as: status = completed AND an open tripDisputes row exists for this trip" }
+      ]
+    },
+
+    "bookings": {
+      "description": "One rider's seat reservation on a trip.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "default": "dbgenerated(\"'BKG-' || nextval('bookingsCodeSeq')\")" },
+        { "name": "tripId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "trips", "field": "id" } },
+        { "name": "riderUserId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" } },
+        { "name": "seats", "type": "Int", "dbType": "smallint", "required": true, "default": 1 },
+        { "name": "status", "type": "BookingStatus", "dbType": "text", "required": true, "default": "requested" },
+        { "name": "farePesewas", "type": "BigInt", "required": true, "note": "snapshot: trip fare × seats" },
+        { "name": "paidWith", "type": "PaidWith", "dbType": "text", "required": false },
+        { "name": "transitPassId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "transitPasses", "field": "id" } },
+        { "name": "qrToken", "type": "String", "dbType": "text", "required": true, "unique": true, "note": "random opaque server-issued token encoded in the boarding QR — NOT the guessable NFR-USERID-SCHEDULEID display format" },
+        { "name": "confirmedAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "boardedAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "cancelledAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "cancelledBy", "type": "CancelActorType", "dbType": "text", "required": false },
+        { "name": "cancelReason", "type": "String", "dbType": "text", "required": false, "note": "standardized reasons, e.g. \"Personal Emergency\"" },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "updatedAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"],
+      "uniqueConstraints": [["tripId", "riderUserId"]],
+      "indexes": [
+        { "fields": ["riderUserId", "status"] },
+        { "fields": ["tripId", "status"] }
+      ]
+    },
+
+    "boardingScans": {
+      "description": "Append-only log of every QR boarding scan attempt, including failed ones.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "default": "dbgenerated(\"'QR-' || nextval('boardingScansCodeSeq')\")" },
+        { "name": "tripId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "trips", "field": "id" } },
+        { "name": "bookingId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "bookings", "field": "id" }, "note": "NULL when the scan matched nothing" },
+        { "name": "scannedByUserId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" }, "note": "the driver" },
+        { "name": "payloadRaw", "type": "String", "dbType": "text", "required": true },
+        { "name": "result", "type": "BoardingScanResult", "dbType": "text", "required": true },
+        { "name": "scannedAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"]
+    },
+
+    "tripUpdateFailures": {
+      "description": "Telemetry/status-sync failures needing manual admin attention.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "default": "dbgenerated(\"'FLR-' || nextval('tripUpdateFailuresCodeSeq')\")" },
+        { "name": "tripId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "trips", "field": "id" } },
+        { "name": "failureType", "type": "TripUpdateFailureType", "dbType": "text", "required": true },
+        { "name": "details", "type": "Json", "dbType": "jsonb", "required": false },
+        { "name": "occurredAt", "type": "DateTime", "dbType": "timestamptz", "required": true },
+        { "name": "resolved", "type": "Boolean", "required": true, "default": false },
+        { "name": "resolvedByAdminId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "adminUsers", "field": "id" } },
+        { "name": "resolvedAt", "type": "DateTime", "dbType": "timestamptz", "required": false }
+      ],
+      "primaryKey": ["id"]
+    },
+
+    "ratings": {
+      "description": "A trip-participant rating another participant after a completed trip.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "tripId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "trips", "field": "id" } },
+        { "name": "bookingId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "bookings", "field": "id" } },
+        { "name": "raterUserId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" } },
+        { "name": "rateeUserId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" } },
+        { "name": "score", "type": "Int", "dbType": "smallint", "required": true, "note": "CHECK 1–5" },
+        { "name": "comment", "type": "String", "dbType": "text", "required": false },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"],
+      "uniqueConstraints": [["bookingId", "raterUserId"]]
+    },
+
+    "misconductReports": {
+      "description": "A rider-filed misconduct report against a car owner. Governs a PERSON (behavior, account consequences) — see tripDisputes for trip-facts issues.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "default": "dbgenerated(\"'MIS-' || nextval('misconductReportsCodeSeq')\")" },
+        { "name": "tripId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "trips", "field": "id" } },
+        { "name": "reportedByUserId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" }, "note": "the rider" },
+        { "name": "againstUserId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" }, "note": "the car owner" },
+        { "name": "category", "type": "String", "dbType": "text", "required": true, "note": "curated picklist in the app, stored as free text" },
+        { "name": "description", "type": "String", "dbType": "text", "required": true },
+        { "name": "severity", "type": "MisconductSeverity", "dbType": "text", "required": true },
+        { "name": "status", "type": "MisconductReportStatus", "dbType": "text", "required": true, "default": "open" },
+        { "name": "reportedAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "resolvedAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "handledByAdminId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "adminUsers", "field": "id" } }
+      ],
+      "primaryKey": ["id"],
+      "notes": ["Status only moves forward: open → investigating → resolved OR dismissed (both terminal)."]
+    },
+
+    "tripDisputes": {
+      "description": "A fare/route/damage dispute raised after a trip completes. Fixes a TRIP (money/facts) — see misconductReports for person-facing issues.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "default": "dbgenerated(\"'DSP-' || nextval('tripDisputesCodeSeq')\")" },
+        { "name": "tripId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "trips", "field": "id" } },
+        { "name": "bookingId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "bookings", "field": "id" } },
+        { "name": "raisedByUserId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" } },
+        { "name": "category", "type": "String", "dbType": "text", "required": true },
+        { "name": "amountPesewas", "type": "BigInt", "required": false, "note": "omitted for non-monetary disputes" },
+        { "name": "status", "type": "TripDisputeStatus", "dbType": "text", "required": true, "default": "open" },
+        { "name": "openedAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "resolvedAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "resolutionNotes", "type": "String", "dbType": "text", "required": false }
+      ],
+      "primaryKey": ["id"],
+      "notes": ["Status moves open → underReview → resolved, or underReview → escalated → resolved. resolved is terminal."]
+    },
+
+    "walletAccounts": {
+      "description": "One row per (user, balance bucket) — models the four distinct rider/car-owner wallet balances.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "userId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" } },
+        { "name": "accountType", "type": "WalletAccountType", "dbType": "text", "required": true },
+        { "name": "balancePesewas", "type": "BigInt", "required": true, "default": 0, "note": "cache; authoritative value = SUM(walletTransactions.amountPesewas), reconciled by a job" },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "updatedAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"],
+      "uniqueConstraints": [["userId", "accountType"]],
+      "derived": [
+        { "name": "admin wallet status (\"Payout ready\"/\"Restricted\"/\"Setup required\")", "description": "derived from user status, open suspensionCases, and presence of a payoutAccounts row — never stored" }
+      ]
+    },
+
+    "walletTransactions": {
+      "description": "Append-only ledger. Every money movement is a row here; nothing edits or deletes one — corrections are reversal entries.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "accountId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "walletAccounts", "field": "id" } },
+        { "name": "amountPesewas", "type": "BigInt", "required": true, "note": "signed; negative = money out" },
+        { "name": "balanceAfterPesewas", "type": "BigInt", "required": true, "note": "running balance for statements" },
+        { "name": "type", "type": "WalletTransactionType", "dbType": "text", "required": true },
+        { "name": "referenceType", "type": "String", "dbType": "text", "required": false, "note": "e.g. \"booking\", \"trip\", \"withdrawalRequest\", \"refundRequest\", \"transitPass\"" },
+        { "name": "referenceId", "type": "String", "dbType": "uuid", "required": false, "polymorphic": true, "possibleReferences": ["bookings.id", "trips.id", "withdrawalRequests.id", "refundRequests.id", "transitPasses.id"] },
+        { "name": "gateway", "type": "String", "dbType": "text", "required": false },
+        { "name": "gatewayReference", "type": "String", "dbType": "text", "required": false },
+        { "name": "gatewayStatus", "type": "String", "dbType": "text", "required": false },
+        { "name": "createdByAdminId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "adminUsers", "field": "id" }, "note": "set for manual adjustments" },
+        { "name": "note", "type": "String", "dbType": "text", "required": false },
+        { "name": "idempotencyKey", "type": "String", "dbType": "text", "required": false, "unique": true, "note": "webhook/retry safety" },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"],
+      "notes": [
+        "A completed trip settles as paired entries: rider tripPayment (−fare); owner ownerPending tripEarning (+fare) and commission (−fare × commission %); later a pendingRelease pair moves pending → available on the settlement cadence.",
+        "Admin wallet-page counts (payments, adjustments) are COUNT(*) grouped by type."
+      ]
+    },
+
+    "paymentMethods": {
+      "description": "A rider's funding sources (cards/MoMo). Only PSP tokens and masked display strings are stored — never raw PANs/full numbers.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "userId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" } },
+        { "name": "kind", "type": "PaymentMethodKind", "dbType": "text", "required": true },
+        { "name": "provider", "type": "String", "dbType": "text", "required": true, "note": "visa / mastercard / mtn / telecel / at" },
+        { "name": "maskedDetails", "type": "String", "dbType": "text", "required": true, "note": "e.g. \"024•••1148\", \"•••• 4242\"" },
+        { "name": "gatewayToken", "type": "String", "dbType": "text", "required": true, "note": "tokenized at the PSP" },
+        { "name": "isDefault", "type": "Boolean", "required": true, "default": false },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"],
+      "partialUniqueIndexes": [
+        { "fields": ["userId"], "where": "\"isDefault\" = true", "note": "at most one default payment method per rider" }
+      ]
+    },
+
+    "payoutAccounts": {
+      "description": "A car owner's payout destination (Mobile Money or bank account).",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "carOwnerUserId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" } },
+        { "name": "method", "type": "PayoutMethod", "dbType": "text", "required": true },
+        { "name": "provider", "type": "String", "dbType": "text", "required": true },
+        { "name": "accountName", "type": "String", "dbType": "text", "required": true },
+        { "name": "maskedDetails", "type": "String", "dbType": "text", "required": true },
+        { "name": "gatewayToken", "type": "String", "dbType": "text", "required": false },
+        { "name": "isDefault", "type": "Boolean", "required": true, "default": false },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"]
+    },
+
+    "transitPasses": {
+      "description": "A prepaid ride bundle (\"14 of 20 rides left\"). Product details (pricing tiers, expiry policy) are under-documented — see open questions.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "code", "type": "String", "dbType": "text", "required": false, "unique": true, "note": "display prefix not specified in source docs" },
+        { "name": "riderUserId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" } },
+        { "name": "ridesTotal", "type": "Int", "dbType": "smallint", "required": true },
+        { "name": "ridesUsed", "type": "Int", "dbType": "smallint", "required": true, "default": 0 },
+        { "name": "routeId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "routes", "field": "id" }, "note": "scope; NULL = any corridor" },
+        { "name": "status", "type": "TransitPassStatus", "dbType": "text", "required": true, "default": "active" },
+        { "name": "validFrom", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "validUntil", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "purchaseTransactionId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "walletTransactions", "field": "id" } },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"]
+    },
+
+    "withdrawalRequests": {
+      "description": "A car owner's payout request. Read-only for admins — decisions happen in payoutApprovals (segregation of duties).",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "default": "dbgenerated(\"'WD-' || nextval('withdrawalRequestsCodeSeq')\")" },
+        { "name": "carOwnerUserId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" } },
+        { "name": "payoutAccountId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "payoutAccounts", "field": "id" } },
+        { "name": "amountPesewas", "type": "BigInt", "required": true },
+        { "name": "feePesewas", "type": "BigInt", "required": true },
+        { "name": "netPesewas", "type": "BigInt", "required": true },
+        { "name": "status", "type": "WithdrawalRequestStatus", "dbType": "text", "required": true, "default": "awaitingReview" },
+        { "name": "risk", "type": "WithdrawalRiskLevel", "dbType": "text", "required": true, "note": "computed at submission" },
+        { "name": "requestedAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "processedAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "gatewayReference", "type": "String", "dbType": "text", "required": false }
+      ],
+      "primaryKey": ["id"]
+    },
+
+    "payoutApprovals": {
+      "description": "The actual reviewer-decision record for a payout, hard-linked 1:1 to its withdrawalRequests row (unlike the frontend's unlinked mock fixtures).",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "default": "dbgenerated(\"'APQ-' || nextval('payoutApprovalsCodeSeq')\")" },
+        { "name": "withdrawalRequestId", "type": "String", "dbType": "uuid", "required": true, "unique": true, "relation": { "model": "withdrawalRequests", "field": "id" } },
+        { "name": "eligibility", "type": "PayoutEligibility", "dbType": "text", "required": true, "note": "computed on queue entry" },
+        { "name": "outcome", "type": "PayoutApprovalOutcome", "dbType": "text", "required": true, "default": "awaitingApproval" },
+        { "name": "enteredQueueAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "reviewedByAdminId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "adminUsers", "field": "id" } },
+        { "name": "decidedAt", "type": "DateTime", "dbType": "timestamptz", "required": false }
+      ],
+      "primaryKey": ["id"],
+      "notes": ["Only rows with outcome='awaitingApproval' AND eligibility='eligible' are decidable — enforced server-side, not just hidden in the UI."]
+    },
+
+    "refundRequests": {
+      "description": "A refund or service-credit request for a rider.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "default": "dbgenerated(\"'RFC-' || nextval('refundRequestsCodeSeq')\")" },
+        { "name": "type", "type": "RefundRequestType", "dbType": "text", "required": true },
+        { "name": "riderUserId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" } },
+        { "name": "sourceType", "type": "RefundSourceType", "dbType": "text", "required": true },
+        { "name": "sourceId", "type": "String", "dbType": "uuid", "required": true, "polymorphic": true, "possibleReferences": ["trips.id", "tripDisputes.id"] },
+        { "name": "amountPesewas", "type": "BigInt", "required": true },
+        { "name": "reason", "type": "String", "dbType": "text", "required": true },
+        { "name": "requestedByAdminId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "adminUsers", "field": "id" } },
+        { "name": "status", "type": "RefundRequestStatus", "dbType": "text", "required": true, "default": "pendingReview" },
+        { "name": "decidedByAdminId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "adminUsers", "field": "id" } },
+        { "name": "decidedAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"],
+      "notes": ["\"processed\" vs \"completed\" distinction is ambiguous in the source docs — modeled as two stages (decision made vs money actually settled); confirm with product."]
+    },
+
+    "sosAlerts": {
+      "description": "Emergency SOS Desk incident. Never deleted — status transitions only.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "default": "dbgenerated(\"'SOS-' || nextval('sosAlertsCodeSeq')\")" },
+        { "name": "tripId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "trips", "field": "id" } },
+        { "name": "riderUserId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "users", "field": "id" }, "note": "the commuter; car-owner/vehicle details join through trip, not duplicated" },
+        { "name": "locationText", "type": "String", "dbType": "text", "required": true },
+        { "name": "lat", "type": "Decimal", "dbType": "numeric(9,6)", "required": false },
+        { "name": "lng", "type": "Decimal", "dbType": "numeric(9,6)", "required": false },
+        { "name": "triggerReason", "type": "String", "dbType": "text", "required": true, "note": "e.g. \"Panic button pressed\", \"Sudden deceleration detected\"" },
+        { "name": "priority", "type": "SosPriority", "dbType": "text", "required": true },
+        { "name": "status", "type": "SosAlertStatus", "dbType": "text", "required": true, "default": "active" },
+        { "name": "triggeredAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "dispatchedAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "resolvedAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "resolvedByAdminId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "adminUsers", "field": "id" } }
+      ],
+      "primaryKey": ["id"],
+      "notes": ["Status moves active → dispatched → resolved, or active → resolved directly. sosTimeoutMinutes auto-escalation is a delayed background job, not schema."]
+    },
+
+    "sosAlertNotes": {
+      "description": "Append-only operator call/verification log on an SOS alert.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "alertId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "sosAlerts", "field": "id" } },
+        { "name": "authorAdminId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "adminUsers", "field": "id" } },
+        { "name": "message", "type": "String", "dbType": "text", "required": true, "note": "plain text, not rich HTML" },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"]
+    },
+
+    "supportTickets": {
+      "description": "A support ticket, either logged by an admin (phoned-in) or raised by a user in-app.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "default": "dbgenerated(\"'TCK-' || nextval('supportTicketsCodeSeq')\")" },
+        { "name": "userId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "users", "field": "id" } },
+        { "name": "reporterName", "type": "String", "dbType": "text", "required": true, "note": "snapshot — admin console can log a ticket for someone not yet linked to userId" },
+        { "name": "reporterRole", "type": "ReporterRole", "dbType": "text", "required": true },
+        { "name": "category", "type": "SupportTicketCategory", "dbType": "text", "required": true },
+        { "name": "subject", "type": "String", "dbType": "text", "required": true },
+        { "name": "description", "type": "String", "dbType": "text", "required": true },
+        { "name": "priority", "type": "SupportTicketPriority", "dbType": "text", "required": true },
+        { "name": "status", "type": "SupportTicketStatus", "dbType": "text", "required": true, "default": "open" },
+        { "name": "region", "type": "String", "dbType": "text", "required": true },
+        { "name": "assignedToAdminId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "adminUsers", "field": "id" } },
+        { "name": "resolvedAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "updatedAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "deletedAt", "type": "DateTime", "dbType": "timestamptz", "required": false }
+      ],
+      "primaryKey": ["id"],
+      "notes": ["Replying to an open+unassigned ticket auto-transitions it to inProgress and auto-assigns the replying admin (service layer)."]
+    },
+
+    "ticketReplies": {
+      "description": "One message in a support ticket's two-sided conversation thread.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "ticketId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "supportTickets", "field": "id" } },
+        { "name": "authorType", "type": "ReplyAuthorType", "dbType": "text", "required": true },
+        { "name": "authorAdminId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "adminUsers", "field": "id" } },
+        { "name": "authorUserId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "users", "field": "id" } },
+        { "name": "messageHtml", "type": "String", "dbType": "text", "required": true },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"],
+      "checkConstraints": ["exactly one of authorAdminId / authorUserId is set, matching authorType"]
+    },
+
+    "broadcasts": {
+      "description": "A notice composed and sent (or drafted) to riders/car owners via Broadcast Studio.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "default": "dbgenerated(\"'BRD-' || nextval('broadcastsCodeSeq')\")" },
+        { "name": "title", "type": "String", "dbType": "text", "required": true },
+        { "name": "channel", "type": "BroadcastChannel", "dbType": "text", "required": true },
+        { "name": "message", "type": "String", "dbType": "text", "required": true, "note": "HTML for inApp/email; plain text for push (150 char) / sms (160 char), length validated server-side" },
+        { "name": "audience", "type": "BroadcastAudience", "dbType": "text", "required": true },
+        { "name": "status", "type": "BroadcastStatus", "dbType": "text", "required": true, "default": "sent" },
+        { "name": "scheduledFor", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "sentAt", "type": "DateTime", "dbType": "timestamptz", "required": false },
+        { "name": "reach", "type": "Int", "dbType": "integer", "required": true, "default": 0, "note": "recipient count stamped at send" },
+        { "name": "createdByAdminId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "adminUsers", "field": "id" } },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" },
+        { "name": "updatedAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"],
+      "notes": ["A 'sent' broadcast is permanent — no edit/delete once sent (409 CONFLICT), enforced server-side. Duplicating (any status, including sent) always creates a fresh 'draft' copy."]
+    },
+
+    "auditLogs": {
+      "description": "One append-only table serving three consumers: Administration Activity Logs, Finance Financial Audit Logs (module='finance'), and the Overview 'recent actions' feed. Written as a side effect of every consequential mutation.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "note": "prefix depends on consuming view — ACL- (Administration) or FAL- (Finance) — chosen by application logic, not a single DB sequence" },
+        { "name": "actorAdminId", "type": "String", "dbType": "uuid", "required": false, "relation": { "model": "adminUsers", "field": "id" }, "note": "NULL = system" },
+        { "name": "module", "type": "AuditModule", "dbType": "text", "required": true },
+        { "name": "action", "type": "String", "dbType": "text", "required": true, "note": "e.g. \"Approved payout\"" },
+        { "name": "targetType", "type": "String", "dbType": "text", "required": false },
+        { "name": "targetId", "type": "String", "dbType": "uuid", "required": false, "polymorphic": true, "possibleReferences": ["users.id", "verificationApplications.id", "withdrawalRequests.id", "..."] },
+        { "name": "targetLabel", "type": "String", "dbType": "text", "required": false, "note": "name snapshot — survives target deletion" },
+        { "name": "referenceCode", "type": "String", "dbType": "text", "required": false, "note": "e.g. \"APQ-201\"" },
+        { "name": "result", "type": "AuditResult", "dbType": "text", "required": true },
+        { "name": "ipAddress", "type": "String", "dbType": "inet", "required": false },
+        { "name": "metadata", "type": "Json", "dbType": "jsonb", "required": false },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"],
+      "indexes": [
+        { "fields": ["module", "createdAt"] },
+        { "fields": ["actorAdminId", "createdAt"] }
+      ]
+    },
+
+    "platformSettings": {
+      "description": "Single-row table of platform-wide default configuration. routes carries its own baseFarePesewas/perKmRatePesewas which override these defaults per route.",
+      "fields": [
+        { "name": "id", "type": "Int", "dbType": "smallint", "required": true, "id": true, "default": 1 },
+        { "name": "baseFarePesewas", "type": "BigInt", "required": true },
+        { "name": "perKmRatePesewas", "type": "BigInt", "required": true },
+        { "name": "perMinRatePesewas", "type": "BigInt", "required": true },
+        { "name": "platformCommissionPct", "type": "Decimal", "dbType": "numeric(5,2)", "required": true },
+        { "name": "maxSurgeMultiplier", "type": "Decimal", "dbType": "numeric(4,2)", "required": true },
+        { "name": "autoPayoutThresholdPesewas", "type": "BigInt", "required": true },
+        { "name": "momoEnabled", "type": "Boolean", "required": true },
+        { "name": "bankTransferEnabled", "type": "Boolean", "required": true },
+        { "name": "sosTimeoutMinutes", "type": "Int", "dbType": "smallint", "required": true },
+        { "name": "autoNotifyPolice", "type": "Boolean", "required": true },
+        { "name": "ghanaCardMandatory", "type": "Boolean", "required": true },
+        { "name": "licenceExpiryNoticeDays", "type": "Int", "dbType": "smallint", "required": true },
+        { "name": "minDriverAge", "type": "Int", "dbType": "smallint", "required": true, "note": "CHECK >= 18" },
+        { "name": "updatedByAdminId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "adminUsers", "field": "id" } },
+        { "name": "updatedAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"],
+      "checkConstraints": ["id = 1 (singleton row)"]
+    },
+
+    "settingsChangeLogs": {
+      "description": "Read-only diff-based trail of platform settings changes, written automatically on every settings update.",
+      "fields": [
+        { "name": "id", "type": "String", "dbType": "uuid", "required": true, "id": true, "default": "dbgenerated(\"gen_random_uuid()\")" },
+        { "name": "code", "type": "String", "dbType": "text", "required": true, "unique": true, "default": "dbgenerated(\"'CFG-' || nextval('settingsChangeLogsCodeSeq')\")" },
+        { "name": "adminId", "type": "String", "dbType": "uuid", "required": true, "relation": { "model": "adminUsers", "field": "id" } },
+        { "name": "summary", "type": "String", "dbType": "text", "required": true },
+        { "name": "changes", "type": "Json", "dbType": "jsonb", "required": true, "note": "[{ field, old, new }, ...] — diff-based, not one generic string" },
+        { "name": "createdAt", "type": "DateTime", "dbType": "timestamptz", "required": true, "default": "now()" }
+      ],
+      "primaryKey": ["id"]
+    }
+  },
+
+  "derivedNotStored": [
+    "All Overview/stat-tile numbers, trends, donut breakdowns, cash-flow charts — aggregate queries (materialize/cache per-minute later if slow).",
+    "seatsAvailable on trips, assignedCarOwners on routes, permissionsCount on roles, per-role admin counts.",
+    "tripsCompleted, averageRating on users (aggregate over trips/ratings; denormalize only if measured slow).",
+    "Wallet display statuses (Payout ready / Restricted / Setup required), trip 'Disputed' badge, rider wallet Active/Suspended status.",
+    "The admin 'security' block (devices, loginLocation, passwordChanged) — from authSessions + users.",
+    "Filter-option lists (corridors, joined months, suspension reasons, …) — SELECT DISTINCT with indexes.",
+    "Wallet balances are cached on walletAccounts but the walletTransactions ledger is authoritative."
+  ],
+
+  "openQuestions": [
+    "Hard vs soft delete for users / verification applications / tickets — this plan assumes soft delete + PII scrub.",
+    "Pesewas vs decimal GHS at the API boundary — this plan uses integer pesewas.",
+    "'processed' vs 'completed' refund status distinction.",
+    "Transit pass product definition (pricing tiers, corridor scope, expiry policy) is under-documented.",
+    "Whether 'corridor' should become its own first-class table.",
+    "QR payload format — plan uses a server-issued random qrToken instead of the guessable NFR-USERID-SCHEDULEID display string.",
+    "Whether the same phone number is allowed to hold both a rider and a car-owner profile.",
+    "Trip materialization horizon for recurring schedules, and what happens to already-materialized trips on schedule edit.",
+    "Eligibility computation rules for payoutApprovals (policyReview / dutyConflict) are undefined in the source docs.",
+    "verificationApplications.priority computation formula is undefined; assumed job-computed from wait time + expiry proximity.",
+    "Whether phoneCountryCode is effectively fixed to Ghana (\"233\") at launch or must support other countries from day one."
+  ],
+
+  "migrationOrder": [
+    { "group": 1, "title": "Extensions + identity", "tables": ["users", "riderProfiles", "carOwnerProfiles", "savedCommutes", "files", "vehicles"] },
+    { "group": 2, "title": "Admin & auth", "tables": ["roles", "adminUsers", "otpCodes", "oneTimeTokens", "authSessions", "suspensionCases"] },
+    { "group": 3, "title": "Catalog", "tables": ["operatingCities", "routes", "routeAssignments"] },
+    { "group": 4, "title": "Verification", "tables": ["verificationApplications", "verificationDocuments", "verificationEvents"] },
+    { "group": 5, "title": "Trips", "tables": ["schedules", "trips", "bookings", "boardingScans", "tripUpdateFailures", "ratings", "misconductReports", "tripDisputes"] },
+    { "group": 6, "title": "Finance", "tables": ["walletAccounts", "walletTransactions", "paymentMethods", "payoutAccounts", "transitPasses", "withdrawalRequests", "payoutApprovals", "refundRequests"] },
+    { "group": 7, "title": "Safety & support", "tables": ["sosAlerts", "sosAlertNotes", "supportTickets", "ticketReplies", "broadcasts"] },
+    { "group": 8, "title": "Audit & settings", "tables": ["auditLogs", "platformSettings", "settingsChangeLogs"] }
+  ]
+}
