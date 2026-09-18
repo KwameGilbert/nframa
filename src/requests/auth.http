@@ -2,11 +2,40 @@
 
 # Prerequisites:
 # - pnpm migrate:rollback then pnpm migrate must have been run (otpCodes/authSessions tables)
-# - The phone/email below must belong to a real user (see users.http)
 # - ARKESEL_API_KEY / RESEND_API_KEY must be set in .env.development for delivery to actually work
 # - Replace "code" below with whatever code you actually received before running verify
 
-### Request OTP via phone (rider/driver)
+### Sign up a brand-new phone number (no account exists yet -> role required)
+POST {{baseUrl}}/auth/otp/request
+Content-Type: application/json
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "541436414",
+  "role": "rider"
+}
+
+### Same new number, but no role provided (expect 400 - role required to sign up)
+POST {{baseUrl}}/auth/otp/request
+Content-Type: application/json
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "541436414"
+}
+
+### Verify the signup OTP (creates the user on success)
+POST {{baseUrl}}/auth/otp/verify
+Content-Type: application/json
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "541436414",
+  "role": "rider",
+  "code": "718740"
+}
+
+### Request OTP via phone for an EXISTING account (login, no role needed)
 POST {{baseUrl}}/auth/otp/request
 Content-Type: application/json
 
@@ -23,13 +52,12 @@ Content-Type: application/json
   "email": "ops-admin@example.com"
 }
 
-### Request OTP for an identifier with no account (expect 404)
+### Request OTP for an email with no account (expect 404 - email never self-signs-up)
 POST {{baseUrl}}/auth/otp/request
 Content-Type: application/json
 
 {
-  "phoneCountryCode": "+233",
-  "phoneNumber": "500000000"
+  "email": "no-such-admin@example.com"
 }
 
 ### Verify OTP via phone (replace code with the one received)
@@ -40,7 +68,7 @@ Content-Type: application/json
 {
   "phoneCountryCode": "+233",
   "phoneNumber": "541436414",
-  "code": "123456"
+  "code": "718740"
 }
 
 ### Verify with a wrong code (expect 400, increments attemptCount)

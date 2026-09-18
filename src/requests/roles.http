@@ -1,8 +1,22 @@
 @baseUrl = http://localhost:3000
 
+# POST /roles is admin-only now - see users.http for how to get an admin token.
+@token = PASTE_ADMIN_ACCESS_TOKEN_HERE
+
+### No token at all (expect 401)
+POST {{baseUrl}}/roles
+Content-Type: application/json
+
+{
+  "slug": "support-admin",
+  "name": "Support Admin",
+  "description": "Handles support tickets"
+}
+
 ### Create role
 # @name createRole
 POST {{baseUrl}}/roles
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -15,6 +29,7 @@ Content-Type: application/json
 
 ### Duplicate slug (expect 409)
 POST {{baseUrl}}/roles
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -23,10 +38,10 @@ Content-Type: application/json
   "description": "x"
 }
 
-### Get role
+### Get role (no auth required)
 GET {{baseUrl}}/roles/{{roleId}}
 
-### Update role description
+### Update role description (no auth required)
 PATCH {{baseUrl}}/roles/{{roleId}}
 Content-Type: application/json
 

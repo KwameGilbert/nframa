@@ -27,6 +27,8 @@ There is no real test suite yet (`pnpm test` is a stub that just echoes, so the 
 
 **Never run `pnpm migrate` / `pnpm migrate:rollback` automatically.** Write and edit migration files as needed, but leave running them to the user — they run migrations themselves.
 
+Note this is distinct from the app's own runtime behavior: `src/index.ts` calls `runMigrations()` (from `src/database/knex.ts`, wraps `db.migrate.latest()`) on every boot, in every environment, before the HTTP server starts listening — so `pnpm dev` and `pnpm start` both auto-apply any pending migrations. This is intentional (asked for explicitly), but means restarting the dev server (including tsx watch's auto-restart on file changes) re-checks migrations every time. If a migration file's **content** changes after Knex already recorded it as applied (tracked by filename, not content), `migrate:latest` won't pick up the change — that still needs an explicit `migrate:rollback` + `migrate` from the user.
+
 Postgres must be reachable at the host/port/credentials in `.env.development` for the app to boot or for migrations to run (`db/knex` connects on startup-adjacent calls, not lazily in a way that tolerates a missing DB for most routes). `docker-compose.yml` provides a Postgres 17 container (`nframa`/`nframa`/`nframa` on port 5432), but note the dev machine this was built on already had a **native** Postgres bound to 5432, so the compose file and `.env.development` may not agree with each other — check both before assuming the DB connection works.
 
 ## Architecture

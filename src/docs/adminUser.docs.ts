@@ -10,7 +10,8 @@ registry.registerPath({
   method: "post",
   path: "/admin",
   tags: ["Admin Users"],
-  summary: "Create an admin user",
+  summary: "Create an admin user (admin only)",
+  security: [{ bearerAuth: [] }],
   request: {
     body: {
       content: { "application/json": { schema: createAdminUserSchema } },
@@ -22,6 +23,8 @@ registry.registerPath({
       content: { "application/json": { schema: adminUserResponseSchema } },
     },
     400: { description: "Validation error" },
+    401: { description: "Missing or invalid access token" },
+    403: { description: "Caller is not an admin" },
   },
 });
 
@@ -29,7 +32,8 @@ registry.registerPath({
   method: "get",
   path: "/admin/{userId}",
   tags: ["Admin Users"],
-  summary: "Get an admin user by user id",
+  summary: "Get an admin user by user id (admin only)",
+  security: [{ bearerAuth: [] }],
   request: {
     params: adminUserParamsSchema,
   },
@@ -39,6 +43,8 @@ registry.registerPath({
       content: { "application/json": { schema: adminUserResponseSchema } },
     },
     400: { description: "Validation error" },
+    401: { description: "Missing or invalid access token" },
+    403: { description: "Caller is not an admin" },
     404: { description: "Admin user not found" },
   },
 });
@@ -47,7 +53,8 @@ registry.registerPath({
   method: "patch",
   path: "/admin/{userId}",
   tags: ["Admin Users"],
-  summary: "Update an admin user",
+  summary: "Update an admin user (admin only)",
+  security: [{ bearerAuth: [] }],
   request: {
     params: adminUserParamsSchema,
     body: {
@@ -60,6 +67,8 @@ registry.registerPath({
       content: { "application/json": { schema: adminUserResponseSchema } },
     },
     400: { description: "Validation error" },
+    401: { description: "Missing or invalid access token" },
+    403: { description: "Caller is not an admin" },
     404: { description: "Admin user not found" },
   },
 });

@@ -6,7 +6,8 @@ registry.registerPath({
   method: "post",
   path: "/roles",
   tags: ["Roles"],
-  summary: "Create a role",
+  summary: "Create a role (admin only)",
+  security: [{ bearerAuth: [] }],
   request: {
     body: {
       content: { "application/json": { schema: createRoleSchema } },
@@ -18,6 +19,8 @@ registry.registerPath({
       content: { "application/json": { schema: roleResponseSchema } },
     },
     400: { description: "Validation error" },
+    401: { description: "Missing or invalid access token" },
+    403: { description: "Caller is not an admin" },
     409: { description: "A role with this slug or name already exists" },
   },
 });

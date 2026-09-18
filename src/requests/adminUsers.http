@@ -1,8 +1,13 @@
 @baseUrl = http://localhost:3000
 
+# All /admin endpoints (and creating a role/admin-role user) require an admin token.
+# See users.http for how to get one.
+@token = PASTE_ADMIN_ACCESS_TOKEN_HERE
+
 ### Create a role for the admin to reference
 # @name createRole
 POST {{baseUrl}}/roles
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -16,6 +21,7 @@ Content-Type: application/json
 ### Create an admin-role user (identity lives on users, per the schema)
 # @name createAdminUser
 POST {{baseUrl}}/users
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -25,8 +31,19 @@ Content-Type: application/json
 
 @adminUserId = {{createAdminUser.response.body.id}}
 
+### No token at all (expect 401)
+POST {{baseUrl}}/admin
+Content-Type: application/json
+
+{
+  "userId": "{{adminUserId}}",
+  "roleId": "{{roleId}}",
+  "department": "Operations"
+}
+
 ### Create the admin extension record
 POST {{baseUrl}}/admin
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -37,6 +54,7 @@ Content-Type: application/json
 
 ### Create admin extension with a nonexistent role (expect 400, FK violation)
 POST {{baseUrl}}/admin
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -46,9 +64,14 @@ Content-Type: application/json
 
 ### Get admin user
 GET {{baseUrl}}/admin/{{adminUserId}}
+Authorization: Bearer {{token}}
+
+### Get admin user without a token (expect 401)
+GET {{baseUrl}}/admin/{{adminUserId}}
 
 ### Activate the admin (status starts as "invited")
 PATCH {{baseUrl}}/admin/{{adminUserId}}
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -57,6 +80,7 @@ Content-Type: application/json
 
 ### Attempt to change roleId via update (roleId is stripped -> expect "at least one field" 400)
 PATCH {{baseUrl}}/admin/{{adminUserId}}
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -65,3 +89,4 @@ Content-Type: application/json
 
 ### Get a nonexistent admin (expect 404)
 GET {{baseUrl}}/admin/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}

@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
-import { userModel } from "../models/user.model.js";
+import { userModel, type User } from "../models/user.model.js";
 import { adminUserModel } from "../models/adminUser.model.js";
+import { driverProfileModel } from "../models/driverProfile.model.js";
+import { riderProfileModel } from "../models/riderProfile.model.js";
 import { otpCodeModel, OTP_EXPIRY_MINUTES, OTP_MAX_ATTEMPTS } from "../models/otpCode.model.js";
 import { authSessionModel } from "../models/authSession.model.js";
 import { sendSms } from "../services/sms.service.js";
@@ -14,7 +16,8 @@ import type { RequestOtpInput, VerifyOtpInput, RefreshTokenInput } from "../sche
 
 const REFRESH_TOKEN_EXPIRES_IN_DAYS = Number(process.env.REFRESH_TOKEN_EXPIRES_IN_DAYS ?? 30);
 
-type Identifier = { phoneCountryCode: string; phoneNumber: string } | { email: string };
+type Identifier =
+  { phoneCountryCode: string; phoneNumber: string; role?: "rider" | "driver" } | { email: string };
 
 function toDbIdentifier(input: Identifier) {
   if ("email" in input) {
@@ -41,18 +44,38 @@ async function resolveOtpTarget(input: Identifier) {
           phoneNumber: input.phoneNumber,
         });
 
-  if (!user) {
+  if (user) {
+    if (user.role === "admin") {
+      const adminUser = await adminUserModel.findById(user.id);
+      if (!adminUser || adminUser.status !== "active") {
+        throw AppError.forbidden("Admin account is not active");
+      }
+    }
+    return { user, identifier, channel, role: user.role };
+  }
+
+  // No account yet — email never self-signs-up (admins are provisioned, not registered).
+  if ("email" in input) {
     throw AppError.notFound("No account found for this identifier");
   }
-
-  if (user.role === "admin") {
-    const adminUser = await adminUserModel.findById(user.id);
-    if (!adminUser || adminUser.status !== "active") {
-      throw AppError.forbidden("Admin account is not active");
-    }
+  if (!input.role) {
+    throw AppError.badRequest("role is required to sign up");
   }
 
-  return { user, identifier, channel };
+  return { user: undefined, identifier, channel, role: input.role };
+}
+
+async function fetchProfile(account: User) {
+  if (account.role === "rider") {
+    return (await riderProfileModel.findById(account.id)) ?? null;
+  }
+  if (account.role === "driver") {
+    return (await driverProfileModel.findById(account.id)) ?? null;
+  }
+  if (account.role === "admin") {
+    return (await adminUserModel.findById(account.id)) ?? null;
+  }
+  return null;
 }
 
 function createSessionExpiry(): Date {
@@ -77,7 +100,7 @@ async function issueTokens(userId: string, userType: "user" | "admin", role: str
 
 export async function requestOtp(req: Request, res: Response) {
   const input = req.validated.body as RequestOtpInput;
-  const { user, identifier, channel } = await resolveOtpTarget(input);
+  const { identifier, channel, role } = await resolveOtpTarget(input);
 
   const code = generateOtpCode();
   const codeHash = hashOtpCode(code);
@@ -86,7 +109,7 @@ export async function requestOtp(req: Request, res: Response) {
   await otpCodeModel.createOtp({
     identifier,
     channel,
-    purpose: toPurpose(user.role),
+    purpose: toPurpose(role),
     codeHash,
     expiresAt,
   });
@@ -104,9 +127,9 @@ export async function requestOtp(req: Request, res: Response) {
 
 export async function verifyOtp(req: Request, res: Response) {
   const input = req.validated.body as VerifyOtpInput;
-  const { user, identifier } = await resolveOtpTarget(input);
+  const { user, identifier, role } = await resolveOtpTarget(input);
 
-  const otp = await otpCodeModel.findLatestPending(identifier, toPurpose(user.role));
+  const otp = await otpCodeModel.findLatestPending(identifier, toPurpose(role));
 
   if (!otp) {
     throw AppError.badRequest("No pending verification code for this identifier");
@@ -124,10 +147,25 @@ export async function verifyOtp(req: Request, res: Response) {
 
   await otpCodeModel.markConsumed(otp.id);
 
-  const userType = user.role === "admin" ? "admin" : "user";
-  const tokens = await issueTokens(user.id, userType, user.role, req);
+  let account = user;
+  if (!account && !("email" in input)) {
+    account = await userModel.createUser({
+      phoneCountryCode: input.phoneCountryCode,
+      phoneNumber: input.phoneNumber,
+      role: role as "rider" | "driver",
+    });
+  }
+  if (!account) {
+    throw AppError.notFound("No account found for this identifier");
+  }
 
-  sendSuccess(res, tokens);
+  const userType = account.role === "admin" ? "admin" : "user";
+  const [tokens, profile] = await Promise.all([
+    issueTokens(account.id, userType, account.role, req),
+    fetchProfile(account),
+  ]);
+
+  sendSuccess(res, { ...tokens, user: { ...account, profile } });
 }
 
 export async function refreshSession(req: Request, res: Response) {

@@ -43,6 +43,11 @@ export abstract class BaseModel<T extends object> {
     return row && this.sanitize(row);
   }
 
+  async findAllBy(criteria: Partial<T>): Promise<T[]> {
+    const rows = await this.table.where(criteria);
+    return rows.map((row: T) => this.sanitize(row));
+  }
+
   async insert(input: Partial<T>): Promise<T> {
     try {
       const [row] = await this.table.insert(input).returning("*");

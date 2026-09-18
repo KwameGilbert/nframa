@@ -1,28 +1,50 @@
 @baseUrl = http://localhost:3000
 
+# POST /users is admin-only now. To get a token:
+# 1. pnpm exec tsx ./node_modules/knex/bin/cli.js seed:run   (creates the bootstrap admin from BOOTSTRAP_ADMIN_EMAIL)
+# 2. Run auth.http's email-based request/verify flow for that address to get an accessToken
+# 3. Paste it below
+@token = PASTE_ADMIN_ACCESS_TOKEN_HERE
+
+### No token at all (expect 401)
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "541436414",
+  "role": "rider"
+}
+
+### Non-admin token would land here too (expect 403) - swap {{token}} for a rider/driver's own token to see it
+
 ### Create a rider
 # @name createRider
 POST {{baseUrl}}/users
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
   "phoneCountryCode": "+233",
-  "phoneNumber": "501234567",
+  "phoneNumber": "541436414",
   "role": "rider"
 }
 
 ### Create a driver
 POST {{baseUrl}}/users
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
   "phoneCountryCode": "+233",
-  "phoneNumber": "502345678",
+  "phoneNumber": "541436414",
   "role": "driver"
 }
 
 ### Create an admin (email required, no phone)
 POST {{baseUrl}}/users
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -32,6 +54,7 @@ Content-Type: application/json
 
 ### Missing phone for a rider (expect 400)
 POST {{baseUrl}}/users
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -40,6 +63,7 @@ Content-Type: application/json
 
 ### Missing email for an admin (expect 400)
 POST {{baseUrl}}/users
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -48,10 +72,10 @@ Content-Type: application/json
 
 @riderId = {{createRider.response.body.id}}
 
-### Get the created rider
+### Get the created rider (no auth required)
 GET {{baseUrl}}/users/{{riderId}}
 
-### Update the rider's profile
+### Update the rider's profile (no auth required)
 PATCH {{baseUrl}}/users/{{riderId}}
 Content-Type: application/json
 

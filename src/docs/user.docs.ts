@@ -10,7 +10,10 @@ registry.registerPath({
   method: "post",
   path: "/users",
   tags: ["Users"],
-  summary: "Create a user",
+  summary: "Create a user (admin only)",
+  description:
+    "Rider/driver signup normally happens via /auth/otp/*, not this endpoint. This exists for admins provisioning other accounts (most commonly other admins).",
+  security: [{ bearerAuth: [] }],
   request: {
     body: {
       content: { "application/json": { schema: createUserSchema } },
@@ -22,6 +25,8 @@ registry.registerPath({
       content: { "application/json": { schema: userResponseSchema } },
     },
     400: { description: "Validation error" },
+    401: { description: "Missing or invalid access token" },
+    403: { description: "Caller is not an admin" },
   },
 });
 
