@@ -71,31 +71,9 @@ function columnType(field) {
   }
 }
 
-// Extracts { prefixLiteral, seqName } from a "'RID-' || nextval('riderProfilesCodeSeq')" style default.
-function parseCodeSequenceDefault(raw) {
-  const m = raw.match(/'([^']*)-'\s*\|\|\s*nextval\('(\w+)'\)/);
-  if (!m) return null;
-  return { prefix: m[1], seqName: m[2] };
-}
-
 function unwrapDbGenerated(defaultVal) {
   const m = defaultVal.match(/^dbgenerated\("(.*)"\)$/s);
   return m ? m[1] : null;
-}
-
-// Collects every code-sequence a table needs, so they can all be created up front.
-function collectSequences() {
-  const seqs = [];
-  for (const [tableName, model] of Object.entries(models)) {
-    for (const field of model.fields) {
-      if (typeof field.default !== 'string') continue;
-      const inner = unwrapDbGenerated(field.default);
-      if (!inner) continue;
-      const parsed = parseCodeSequenceDefault(inner);
-      if (parsed) seqs.push({ tableName, fieldName: field.name, ...parsed });
-    }
-  }
-  return seqs;
 }
 
 function fieldDefaultSql(field) {
@@ -110,10 +88,6 @@ function fieldDefaultSql(field) {
 
     const inner = unwrapDbGenerated(def);
     if (inner !== null) {
-      const parsed = parseCodeSequenceDefault(inner);
-      if (parsed) {
-        return `(${sqlStringLiteral(parsed.prefix + '-')} || nextval('${sqlIdentInsideString(parsed.seqName)}'))`;
-      }
       // e.g. gen_random_uuid()
       return inner;
     }
@@ -123,12 +97,6 @@ function fieldDefaultSql(field) {
   }
 
   return null;
-}
-
-// Produces the nextval() text argument with the identifier double-quoted to preserve case,
-// e.g. nextval('"riderProfilesCodeSeq"')
-function sqlIdentInsideString(name) {
-  return `"${name}"`;
 }
 
 function columnDefinitionSql(tableName, field) {
@@ -268,17 +236,6 @@ p();
 p('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
 p();
 
-// ---- sequences (all up front, so table-creation order never matters for defaults) ----
-const sequences = collectSequences();
-p('-- ----------------------------------------------------------------------------');
-p('-- Sequences backing human-facing display codes (e.g. TRP-7210). These are');
-p('-- NEVER primary keys — see the `code` column on each table below.');
-p('-- ----------------------------------------------------------------------------');
-for (const seq of sequences) {
-  p(`CREATE SEQUENCE IF NOT EXISTS ${sqlIdent(seq.seqName)};`);
-}
-p();
-
 // ---- tables, grouped by migrationOrder (also the correct FK dependency order) ----
 for (const group of migrationOrder) {
   p('-- ============================================================================');
@@ -288,13 +245,6 @@ for (const group of migrationOrder) {
   for (const tableName of group.tables) {
     p(generateTable(tableName));
     p();
-
-    // attach sequence ownership right after its table exists
-    const ownedSeqs = sequences.filter((s) => s.tableName === tableName);
-    for (const seq of ownedSeqs) {
-      p(`ALTER SEQUENCE ${sqlIdent(seq.seqName)} OWNED BY ${sqlIdent(tableName)}.${sqlIdent(seq.fieldName)};`);
-    }
-    if (ownedSeqs.length) p();
 
     const idxSql = generateIndexes(tableName);
     if (idxSql) {
