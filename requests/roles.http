@@ -1,0 +1,44 @@
+@baseUrl = http://localhost:3000
+
+### Create role
+# @name createRole
+POST {{baseUrl}}/roles
+Content-Type: application/json
+
+{
+  "slug": "support-admin",
+  "name": "Support Admin",
+  "description": "Handles support tickets"
+}
+
+@roleId = {{createRole.response.body.id}}
+
+### Duplicate slug (expect 409)
+POST {{baseUrl}}/roles
+Content-Type: application/json
+
+{
+  "slug": "support-admin",
+  "name": "Other",
+  "description": "x"
+}
+
+### Get role
+GET {{baseUrl}}/roles/{{roleId}}
+
+### Update role description
+PATCH {{baseUrl}}/roles/{{roleId}}
+Content-Type: application/json
+
+{
+  "description": "Updated description"
+}
+
+### Update with empty body (expect 400)
+PATCH {{baseUrl}}/roles/{{roleId}}
+Content-Type: application/json
+
+{}
+
+### Get a nonexistent role (expect 404)
+GET {{baseUrl}}/roles/00000000-0000-0000-0000-000000000000

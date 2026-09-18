@@ -1,0 +1,75 @@
+@baseUrl = http://localhost:3000
+
+### Create a rider
+# @name createRider
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "501234567",
+  "role": "rider"
+}
+
+### Create a driver
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "502345678",
+  "role": "driver"
+}
+
+### Create an admin (email required, no phone)
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "role": "admin"
+}
+
+### Missing phone for a rider (expect 400)
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+{
+  "role": "rider"
+}
+
+### Missing email for an admin (expect 400)
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+{
+  "role": "admin"
+}
+
+@riderId = {{createRider.response.body.id}}
+
+### Get the created rider
+GET {{baseUrl}}/users/{{riderId}}
+
+### Update the rider's profile
+PATCH {{baseUrl}}/users/{{riderId}}
+Content-Type: application/json
+
+{
+  "fullName": "Kwame Test",
+  "email": "kwame@example.com",
+  "dateOfBirth": "1995-06-20",
+  "profilePicture": "https://cdn.example.com/avatar.png"
+}
+
+### Update with empty body (expect 400)
+PATCH {{baseUrl}}/users/{{riderId}}
+Content-Type: application/json
+
+{}
+
+### Get a nonexistent user (expect 404)
+GET {{baseUrl}}/users/00000000-0000-0000-0000-000000000000
+
+### Get with a malformed id (expect 400)
+GET {{baseUrl}}/users/not-a-uuid

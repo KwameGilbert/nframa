@@ -1,0 +1,101 @@
+@baseUrl = http://localhost:3000
+
+# Prerequisites:
+# - pnpm migrate:rollback then pnpm migrate must have been run (otpCodes/authSessions tables)
+# - The phone/email below must belong to a real user (see users.http)
+# - ARKESEL_API_KEY / RESEND_API_KEY must be set in .env.development for delivery to actually work
+# - Replace "code" below with whatever code you actually received before running verify
+
+### Request OTP via phone (rider/driver)
+POST {{baseUrl}}/auth/otp/request
+Content-Type: application/json
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "541436414"
+}
+
+### Request OTP via email (admin)
+POST {{baseUrl}}/auth/otp/request
+Content-Type: application/json
+
+{
+  "email": "ops-admin@example.com"
+}
+
+### Request OTP for an identifier with no account (expect 404)
+POST {{baseUrl}}/auth/otp/request
+Content-Type: application/json
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "500000000"
+}
+
+### Verify OTP via phone (replace code with the one received)
+# @name verifyPhoneOtp
+POST {{baseUrl}}/auth/otp/verify
+Content-Type: application/json
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "541436414",
+  "code": "123456"
+}
+
+### Verify with a wrong code (expect 400, increments attemptCount)
+POST {{baseUrl}}/auth/otp/verify
+Content-Type: application/json
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "541436414",
+  "code": "000000"
+}
+
+### Verify OTP via email (admin) (replace code with the one received)
+# @name verifyAdminOtp
+POST {{baseUrl}}/auth/otp/verify
+Content-Type: application/json
+
+{
+  "email": "ops-admin@example.com",
+  "code": "123456"
+}
+
+@refreshToken = {{verifyPhoneOtp.response.body.refreshToken}}
+
+### Refresh the token pair
+# @name refreshed
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
+### Refresh again with the now-rotated-out old token (expect 401)
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
+@rotatedRefreshToken = {{refreshed.response.body.refreshToken}}
+
+### Logout (revokes the session)
+POST {{baseUrl}}/auth/logout
+Content-Type: application/json
+
+{
+  "refreshToken": "{{rotatedRefreshToken}}"
+}
+
+### Refresh after logout (expect 401)
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{rotatedRefreshToken}}"
+}

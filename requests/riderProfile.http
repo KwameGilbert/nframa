@@ -1,0 +1,44 @@
+@baseUrl = http://localhost:3000
+
+### Create a rider user first
+# @name createRiderUser
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "505555555",
+  "role": "rider"
+}
+
+@riderUserId = {{createRiderUser.response.body.id}}
+
+### Create rider profile
+POST {{baseUrl}}/rider
+Content-Type: application/json
+
+{
+  "userId": "{{riderUserId}}"
+}
+
+### Duplicate rider profile (expect 409)
+POST {{baseUrl}}/rider
+Content-Type: application/json
+
+{
+  "userId": "{{riderUserId}}"
+}
+
+### Rider profile for a nonexistent user (expect 400, FK violation)
+POST {{baseUrl}}/rider
+Content-Type: application/json
+
+{
+  "userId": "00000000-0000-0000-0000-000000000000"
+}
+
+### Get rider profile
+GET {{baseUrl}}/rider/{{riderUserId}}
+
+### Get a nonexistent rider profile (expect 404)
+GET {{baseUrl}}/rider/00000000-0000-0000-0000-000000000000

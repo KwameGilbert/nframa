@@ -1,0 +1,66 @@
+@baseUrl = http://localhost:3000
+
+### Create a driver user to own the vehicle
+# @name createDriverUser
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "506666666",
+  "role": "driver"
+}
+
+@driverUserId = {{createDriverUser.response.body.id}}
+
+### Create vehicle
+# @name createVehicle
+POST {{baseUrl}}/vehicles
+Content-Type: application/json
+
+{
+  "carOwnerUserId": "{{driverUserId}}",
+  "make": "Toyota",
+  "model": "Corolla",
+  "color": "Silver",
+  "plate": "GW-1234-24",
+  "seats": 4
+}
+
+@vehicleId = {{createVehicle.response.body.id}}
+
+### Duplicate plate (expect 409)
+POST {{baseUrl}}/vehicles
+Content-Type: application/json
+
+{
+  "carOwnerUserId": "{{driverUserId}}",
+  "make": "Honda",
+  "model": "Civic",
+  "color": "Black",
+  "plate": "GW-1234-24",
+  "seats": 4
+}
+
+### Missing required fields (expect 400)
+POST {{baseUrl}}/vehicles
+Content-Type: application/json
+
+{
+  "carOwnerUserId": "{{driverUserId}}",
+  "make": "Honda"
+}
+
+### Get vehicle
+GET {{baseUrl}}/vehicles/{{vehicleId}}
+
+### Update vehicle color
+PATCH {{baseUrl}}/vehicles/{{vehicleId}}
+Content-Type: application/json
+
+{
+  "color": "Red"
+}
+
+### Get a nonexistent vehicle (expect 404)
+GET {{baseUrl}}/vehicles/00000000-0000-0000-0000-000000000000

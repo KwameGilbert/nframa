@@ -1,0 +1,54 @@
+@baseUrl = http://localhost:3000
+
+### Create a driver user first
+# @name createDriverUser
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "504444444",
+  "role": "driver"
+}
+
+@driverUserId = {{createDriverUser.response.body.id}}
+
+### Create driver profile
+POST {{baseUrl}}/driver
+Content-Type: application/json
+
+{
+  "userId": "{{driverUserId}}",
+  "ghanaCardNumber": "GHA-123456789-0"
+}
+
+### Duplicate driver profile (expect 409)
+POST {{baseUrl}}/driver
+Content-Type: application/json
+
+{
+  "userId": "{{driverUserId}}"
+}
+
+### Driver profile for a nonexistent user (expect 400, FK violation)
+POST {{baseUrl}}/driver
+Content-Type: application/json
+
+{
+  "userId": "00000000-0000-0000-0000-000000000000"
+}
+
+### Get driver profile
+GET {{baseUrl}}/driver/{{driverUserId}}
+
+### Update driver profile (go online)
+PATCH {{baseUrl}}/driver/{{driverUserId}}
+Content-Type: application/json
+
+{
+  "isOnline": true,
+  "autoAcceptBookings": true
+}
+
+### Get a nonexistent driver profile (expect 404)
+GET {{baseUrl}}/driver/00000000-0000-0000-0000-000000000000

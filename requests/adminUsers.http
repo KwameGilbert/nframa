@@ -1,0 +1,67 @@
+@baseUrl = http://localhost:3000
+
+### Create a role for the admin to reference
+# @name createRole
+POST {{baseUrl}}/roles
+Content-Type: application/json
+
+{
+  "slug": "ops-admin",
+  "name": "Ops Admin",
+  "description": "Operations admin"
+}
+
+@roleId = {{createRole.response.body.id}}
+
+### Create an admin-role user (identity lives on users, per the schema)
+# @name createAdminUser
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+{
+  "email": "ops-admin@example.com",
+  "role": "admin"
+}
+
+@adminUserId = {{createAdminUser.response.body.id}}
+
+### Create the admin extension record
+POST {{baseUrl}}/admin
+Content-Type: application/json
+
+{
+  "userId": "{{adminUserId}}",
+  "roleId": "{{roleId}}",
+  "department": "Operations"
+}
+
+### Create admin extension with a nonexistent role (expect 400, FK violation)
+POST {{baseUrl}}/admin
+Content-Type: application/json
+
+{
+  "userId": "{{adminUserId}}",
+  "roleId": "00000000-0000-0000-0000-000000000000"
+}
+
+### Get admin user
+GET {{baseUrl}}/admin/{{adminUserId}}
+
+### Activate the admin (status starts as "invited")
+PATCH {{baseUrl}}/admin/{{adminUserId}}
+Content-Type: application/json
+
+{
+  "status": "active"
+}
+
+### Attempt to change roleId via update (roleId is stripped -> expect "at least one field" 400)
+PATCH {{baseUrl}}/admin/{{adminUserId}}
+Content-Type: application/json
+
+{
+  "roleId": "00000000-0000-0000-0000-000000000000"
+}
+
+### Get a nonexistent admin (expect 404)
+GET {{baseUrl}}/admin/00000000-0000-0000-0000-000000000000
