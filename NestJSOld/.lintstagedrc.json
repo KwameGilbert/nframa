@@ -1,3 +1,0 @@
-{
-  "*.ts": ["oxlint --fix", "prettier --write"]
-}

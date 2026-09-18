@@ -1,6 +1,0 @@
-allowBuilds:
-  '@scarf/scarf': false
-  esbuild: true
-  msgpackr-extract: true
-minimumReleaseAgeExclude:
-  - '@nestjs/terminus@12.0.0'
