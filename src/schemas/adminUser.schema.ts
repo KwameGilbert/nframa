@@ -1,9 +1,11 @@
 import { z } from "zod";
+import { passwordSchema } from "./common.schema.js";
 
 export const createAdminUserSchema = z.object({
   userId: z.uuid(),
   roleId: z.uuid(),
   department: z.string().min(1).optional(),
+  password: passwordSchema.optional(),
 });
 
 export type CreateAdminUserInput = z.infer<typeof createAdminUserSchema>;

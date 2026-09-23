@@ -12,7 +12,7 @@ registry.registerPath({
   tags: ["Users"],
   summary: "Create a user (admin only)",
   description:
-    "Rider/driver signup normally happens via /auth/otp/*, not this endpoint. This exists for admins provisioning other accounts (most commonly other admins).",
+    "Rider/driver signup normally happens via /auth/login/otp + /auth/login/verify, not this endpoint. This exists for admins provisioning other accounts (most commonly other admins).",
   security: [{ bearerAuth: [] }],
   request: {
     body: {

@@ -70,5 +70,4 @@ Knex, not an ORM — query builder only, models hand-write queries. `knexfile.ts
 ### Known gaps / stale pieces
 
 - `.github/workflows/ci.yml` predates this Express rewrite — it still runs `pnpm test:e2e` (no such script exists) and spins up a Redis service that nothing in the app currently uses.
-- No auth/session layer yet — the `users` table and CRUD exist, but there's no password hashing, login, or token/session handling.
 - `typescript` is pinned to `^6.x`, not the newer `7.x` line, because `typescript-eslint` doesn't yet support TypeScript 7's new architecture.

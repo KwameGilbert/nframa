@@ -34,6 +34,16 @@ class UserModel extends BaseModel<User> {
   updateUser(id: string, input: UpdateUserInput) {
     return this.updateById(id, { ...input, updatedAt: new Date() } as unknown as Partial<User>);
   }
+
+  // Unlike findOne, keeps passwordHash — only for verifying a password, never for responses.
+  findWithCredentials(criteria: Partial<User>): Promise<User | undefined> {
+    return this.table.where(criteria).first();
+  }
+
+  // bcrypt embeds the salt in the hash, so passwordSalt is always cleared.
+  setPassword(id: string, passwordHash: string) {
+    return this.updateById(id, { passwordHash, passwordSalt: null, updatedAt: new Date() });
+  }
 }
 
 export const userModel = new UserModel();

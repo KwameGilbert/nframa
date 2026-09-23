@@ -8,13 +8,23 @@ import { authSessionModel } from "../models/authSession.model.js";
 import { sendSms } from "../services/sms.service.js";
 import { sendEmail } from "../services/email.service.js";
 import { generateOtpCode, hashOtpCode } from "../utils/otp.js";
+import { hashPassword, verifyPassword } from "../utils/password.js";
 import { generateRefreshToken, hashRefreshToken } from "../utils/refreshToken.js";
 import { signAccessToken } from "../utils/jwt.js";
 import { AppError } from "../utils/AppError.js";
 import { sendSuccess, sendNoContent } from "../utils/response.js";
-import type { RequestOtpInput, VerifyOtpInput, RefreshTokenInput } from "../schemas/auth.schema.js";
+import type {
+  LoginInput,
+  RequestOtpInput,
+  VerifyOtpInput,
+  RefreshTokenInput,
+  ForgotPasswordInput,
+  ResetPasswordInput,
+  ChangePasswordInput,
+} from "../schemas/auth.schema.js";
 
 const REFRESH_TOKEN_EXPIRES_IN_DAYS = Number(process.env.REFRESH_TOKEN_EXPIRES_IN_DAYS ?? 30);
+const PASSWORD_RESET_PURPOSE = "passwordReset";
 
 type Identifier =
   { phoneCountryCode: string; phoneNumber: string; role?: "rider" | "driver" } | { email: string };
@@ -33,6 +43,15 @@ function toPurpose(role: string) {
   return `${role}Login`;
 }
 
+async function assertAccountActive(user: User) {
+  if (user.role === "admin") {
+    const adminUser = await adminUserModel.findById(user.id);
+    if (!adminUser || adminUser.status !== "active") {
+      throw AppError.forbidden("Admin account is not active");
+    }
+  }
+}
+
 async function resolveOtpTarget(input: Identifier) {
   const { identifier, channel } = toDbIdentifier(input);
 
@@ -45,12 +64,7 @@ async function resolveOtpTarget(input: Identifier) {
         });
 
   if (user) {
-    if (user.role === "admin") {
-      const adminUser = await adminUserModel.findById(user.id);
-      if (!adminUser || adminUser.status !== "active") {
-        throw AppError.forbidden("Admin account is not active");
-      }
-    }
+    await assertAccountActive(user);
     return { user, identifier, channel, role: user.role };
   }
 
@@ -63,6 +77,51 @@ async function resolveOtpTarget(input: Identifier) {
   }
 
   return { user: undefined, identifier, channel, role: input.role };
+}
+
+async function sendOtp(
+  identifier: string,
+  channel: "sms" | "email",
+  purpose: string,
+  label: string,
+) {
+  const code = generateOtpCode();
+
+  await otpCodeModel.createOtp({
+    identifier,
+    channel,
+    purpose,
+    codeHash: hashOtpCode(code),
+    expiresAt: new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000),
+  });
+
+  const message = `Your Nframa ${label} is ${code}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`;
+
+  if (channel === "sms") {
+    await sendSms(identifier, message);
+  } else {
+    await sendEmail(identifier, `Your Nframa ${label}`, `<p>${message}</p>`);
+  }
+}
+
+async function consumeOtp(identifier: string, purpose: string, code: string) {
+  const otp = await otpCodeModel.findLatestPending(identifier, purpose);
+
+  if (!otp) {
+    throw AppError.badRequest("No pending verification code for this identifier");
+  }
+  if (otp.expiresAt.getTime() < Date.now()) {
+    throw AppError.badRequest("Verification code has expired");
+  }
+  if (otp.attemptCount >= OTP_MAX_ATTEMPTS) {
+    throw AppError.badRequest("Too many attempts, request a new code");
+  }
+  if (otp.codeHash !== hashOtpCode(code)) {
+    await otpCodeModel.incrementAttempts(otp.id);
+    throw AppError.badRequest("Invalid verification code");
+  }
+
+  await otpCodeModel.markConsumed(otp.id);
 }
 
 async function fetchProfile(account: User) {
@@ -98,54 +157,53 @@ async function issueTokens(userId: string, userType: "user" | "admin", role: str
   return { accessToken, refreshToken };
 }
 
-export async function requestOtp(req: Request, res: Response) {
+async function completeLogin(account: User, req: Request, res: Response) {
+  const userType = account.role === "admin" ? "admin" : "user";
+  const [tokens, profile] = await Promise.all([
+    issueTokens(account.id, userType, account.role, req),
+    fetchProfile(account),
+  ]);
+
+  sendSuccess(res, { ...tokens, user: { ...account, profile } });
+}
+
+export async function login(req: Request, res: Response) {
+  const { email, password } = req.validated.body as LoginInput;
+  const user = await userModel.findWithCredentials({ email });
+
+  if (!user?.passwordHash) {
+    // Hash anyway so an unknown email takes as long to reject as a wrong password.
+    await hashPassword(password);
+    throw AppError.unauthorized("Invalid email or password");
+  }
+  if (!(await verifyPassword(password, user.passwordHash))) {
+    throw AppError.unauthorized("Invalid email or password");
+  }
+
+  // Re-read through findById so the password columns are stripped before the account is returned.
+  const account = await userModel.findById(user.id);
+  if (!account) {
+    throw AppError.unauthorized("Invalid email or password");
+  }
+  await assertAccountActive(account);
+
+  await completeLogin(account, req, res);
+}
+
+export async function requestLoginOtp(req: Request, res: Response) {
   const input = req.validated.body as RequestOtpInput;
   const { identifier, channel, role } = await resolveOtpTarget(input);
 
-  const code = generateOtpCode();
-  const codeHash = hashOtpCode(code);
-  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
-
-  await otpCodeModel.createOtp({
-    identifier,
-    channel,
-    purpose: toPurpose(role),
-    codeHash,
-    expiresAt,
-  });
-
-  const message = `Your Nframa verification code is ${code}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`;
-
-  if (channel === "sms") {
-    await sendSms(identifier, message);
-  } else {
-    await sendEmail(identifier, "Your Nframa verification code", `<p>${message}</p>`);
-  }
+  await sendOtp(identifier, channel, toPurpose(role), "verification code");
 
   sendSuccess(res, { message: "OTP sent" });
 }
 
-export async function verifyOtp(req: Request, res: Response) {
+export async function verifyLoginOtp(req: Request, res: Response) {
   const input = req.validated.body as VerifyOtpInput;
   const { user, identifier, role } = await resolveOtpTarget(input);
 
-  const otp = await otpCodeModel.findLatestPending(identifier, toPurpose(role));
-
-  if (!otp) {
-    throw AppError.badRequest("No pending verification code for this identifier");
-  }
-  if (otp.expiresAt.getTime() < Date.now()) {
-    throw AppError.badRequest("Verification code has expired");
-  }
-  if (otp.attemptCount >= OTP_MAX_ATTEMPTS) {
-    throw AppError.badRequest("Too many attempts, request a new code");
-  }
-  if (otp.codeHash !== hashOtpCode(input.code)) {
-    await otpCodeModel.incrementAttempts(otp.id);
-    throw AppError.badRequest("Invalid verification code");
-  }
-
-  await otpCodeModel.markConsumed(otp.id);
+  await consumeOtp(identifier, toPurpose(role), input.code);
 
   let account = user;
   if (!account && !("email" in input)) {
@@ -159,13 +217,7 @@ export async function verifyOtp(req: Request, res: Response) {
     throw AppError.notFound("No account found for this identifier");
   }
 
-  const userType = account.role === "admin" ? "admin" : "user";
-  const [tokens, profile] = await Promise.all([
-    issueTokens(account.id, userType, account.role, req),
-    fetchProfile(account),
-  ]);
-
-  sendSuccess(res, { ...tokens, user: { ...account, profile } });
+  await completeLogin(account, req, res);
 }
 
 export async function refreshSession(req: Request, res: Response) {
@@ -197,4 +249,58 @@ export async function logout(req: Request, res: Response) {
   }
 
   sendNoContent(res);
+}
+
+export async function forgotPassword(req: Request, res: Response) {
+  const { email } = req.validated.body as ForgotPasswordInput;
+  const user = await userModel.findOne({ email });
+
+  // Same response either way, so this endpoint can't be used to discover which emails have accounts.
+  if (user) {
+    await sendOtp(email, "email", PASSWORD_RESET_PURPOSE, "password reset code");
+  }
+
+  sendSuccess(res, { message: "If an account exists for this email, a reset code has been sent" });
+}
+
+export async function resetPassword(req: Request, res: Response) {
+  const { email, code, newPassword } = req.validated.body as ResetPasswordInput;
+
+  await consumeOtp(email, PASSWORD_RESET_PURPOSE, code);
+
+  const user = await userModel.findOne({ email });
+  if (!user) {
+    throw AppError.notFound("No account found for this email");
+  }
+
+  await userModel.setPassword(user.id, await hashPassword(newPassword));
+  await authSessionModel.revokeAllForUser(user.id);
+
+  sendSuccess(res, { message: "Password reset. Sign in with your new password." });
+}
+
+export async function changePassword(req: Request, res: Response) {
+  if (!req.auth) {
+    throw AppError.unauthorized();
+  }
+  const { currentPassword, newPassword } = req.validated.body as ChangePasswordInput;
+
+  const credentials = await userModel.findWithCredentials({ id: req.auth.id });
+  if (!credentials) {
+    throw AppError.unauthorized("User no longer exists");
+  }
+  if (!credentials.passwordHash) {
+    throw AppError.badRequest("This account has no password yet — use forgot password to set one");
+  }
+  if (!(await verifyPassword(currentPassword, credentials.passwordHash))) {
+    throw AppError.badRequest("Current password is incorrect");
+  }
+
+  await userModel.setPassword(credentials.id, await hashPassword(newPassword));
+
+  // Signs out every other device; the caller gets a fresh token pair so it stays signed in.
+  await authSessionModel.revokeAllForUser(credentials.id);
+  const tokens = await issueTokens(credentials.id, req.auth.userType, credentials.role, req);
+
+  sendSuccess(res, tokens);
 }

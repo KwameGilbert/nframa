@@ -41,7 +41,7 @@ Content-Type: application/json
   "department": "Operations"
 }
 
-### Create the admin extension record
+### Create the admin extension record (password is optional; without one the admin sets it via /auth/password/forgot)
 POST {{baseUrl}}/admin
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -49,7 +49,8 @@ Content-Type: application/json
 {
   "userId": "{{adminUserId}}",
   "roleId": "{{roleId}}",
-  "department": "Operations"
+  "department": "Operations",
+  "password": "ChangeMe123!"
 }
 
 ### Create admin extension with a nonexistent role (expect 400, FK violation)

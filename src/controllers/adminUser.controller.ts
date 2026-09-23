@@ -1,13 +1,20 @@
 import type { Request, Response } from "express";
 import { adminUserModel } from "../models/adminUser.model.js";
+import { userModel } from "../models/user.model.js";
+import { hashPassword } from "../utils/password.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 import type { CreateAdminUserInput, UpdateAdminUserInput } from "../schemas/adminUser.schema.js";
 
 export async function createAdminUser(req: Request, res: Response) {
-  const input = req.validated.body as CreateAdminUserInput;
+  const { password, ...input } = req.validated.body as CreateAdminUserInput;
 
   const adminUser = await adminUserModel.createAdminUser(input);
+
+  // The password lives on the users row, not the admin extension record.
+  if (password) {
+    await userModel.setPassword(adminUser.userId, await hashPassword(password));
+  }
 
   sendCreated(res, adminUser);
 }

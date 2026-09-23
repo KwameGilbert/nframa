@@ -1,10 +1,18 @@
 import type { Knex } from "knex";
+import { hashPassword } from "../../utils/password.js";
 
 const ADMIN_EMAIL = process.env.BOOTSTRAP_ADMIN_EMAIL ?? "admin@nframa.com";
+const ADMIN_PASSWORD = process.env.BOOTSTRAP_ADMIN_PASSWORD;
 
 export async function seed(knex: Knex): Promise<void> {
+  const credentials = ADMIN_PASSWORD ? { passwordHash: await hashPassword(ADMIN_PASSWORD) } : {};
+
   const existingUser = await knex("users").where({ email: ADMIN_EMAIL }).first();
   if (existingUser) {
+    // Lets an admin seeded before passwords existed pick one up; never overwrites a password already set.
+    if (ADMIN_PASSWORD && !existingUser.passwordHash) {
+      await knex("users").where({ id: existingUser.id }).update(credentials);
+    }
     return;
   }
 
@@ -23,6 +31,7 @@ export async function seed(knex: Knex): Promise<void> {
     .insert({
       email: ADMIN_EMAIL,
       role: "admin",
+      ...credentials,
     })
     .returning("*");
 

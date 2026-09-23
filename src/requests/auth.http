@@ -4,9 +4,32 @@
 # - pnpm migrate:rollback then pnpm migrate must have been run (otpCodes/authSessions tables)
 # - ARKESEL_API_KEY / RESEND_API_KEY must be set in .env.development for delivery to actually work
 # - Replace "code" below with whatever code you actually received before running verify
+# - Password login needs an account with a password: set BOOTSTRAP_ADMIN_PASSWORD and run pnpm seed,
+#   pass "password" to POST /admin, or use the forgot/reset requests at the bottom of this file
+
+@adminEmail = admin@nframa.com
+
+### Log in with email + password
+# @name passwordLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "ChangeMe123!"
+}
+
+### Log in with a wrong password (expect 401)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "wrong-password"
+}
 
 ### Sign up a brand-new phone number (no account exists yet -> role required)
-POST {{baseUrl}}/auth/otp/request
+POST {{baseUrl}}/auth/login/otp
 Content-Type: application/json
 
 {
@@ -16,7 +39,7 @@ Content-Type: application/json
 }
 
 ### Same new number, but no role provided (expect 400 - role required to sign up)
-POST {{baseUrl}}/auth/otp/request
+POST {{baseUrl}}/auth/login/otp
 Content-Type: application/json
 
 {
@@ -25,7 +48,7 @@ Content-Type: application/json
 }
 
 ### Verify the signup OTP (creates the user on success)
-POST {{baseUrl}}/auth/otp/verify
+POST {{baseUrl}}/auth/login/verify
 Content-Type: application/json
 
 {
@@ -36,7 +59,7 @@ Content-Type: application/json
 }
 
 ### Request OTP via phone for an EXISTING account (login, no role needed)
-POST {{baseUrl}}/auth/otp/request
+POST {{baseUrl}}/auth/login/otp
 Content-Type: application/json
 
 {
@@ -45,7 +68,7 @@ Content-Type: application/json
 }
 
 ### Request OTP via email (admin)
-POST {{baseUrl}}/auth/otp/request
+POST {{baseUrl}}/auth/login/otp
 Content-Type: application/json
 
 {
@@ -53,7 +76,7 @@ Content-Type: application/json
 }
 
 ### Request OTP for an email with no account (expect 404 - email never self-signs-up)
-POST {{baseUrl}}/auth/otp/request
+POST {{baseUrl}}/auth/login/otp
 Content-Type: application/json
 
 {
@@ -62,7 +85,7 @@ Content-Type: application/json
 
 ### Verify OTP via phone (replace code with the one received)
 # @name verifyPhoneOtp
-POST {{baseUrl}}/auth/otp/verify
+POST {{baseUrl}}/auth/login/verify
 Content-Type: application/json
 
 {
@@ -72,7 +95,7 @@ Content-Type: application/json
 }
 
 ### Verify with a wrong code (expect 400, increments attemptCount)
-POST {{baseUrl}}/auth/otp/verify
+POST {{baseUrl}}/auth/login/verify
 Content-Type: application/json
 
 {
@@ -83,7 +106,7 @@ Content-Type: application/json
 
 ### Verify OTP via email (admin) (replace code with the one received)
 # @name verifyAdminOtp
-POST {{baseUrl}}/auth/otp/verify
+POST {{baseUrl}}/auth/login/verify
 Content-Type: application/json
 
 {
@@ -126,4 +149,44 @@ Content-Type: application/json
 
 {
   "refreshToken": "{{rotatedRefreshToken}}"
+}
+
+### Forgot password (always 200, even for unknown emails)
+POST {{baseUrl}}/auth/password/forgot
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}"
+}
+
+### Reset password with the emailed code (replace code; signs out every session)
+POST {{baseUrl}}/auth/password/reset
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "code": "123456",
+  "newPassword": "ChangeMe123!"
+}
+
+@accessToken = {{passwordLogin.response.body.accessToken}}
+
+### Change password while signed in (returns a fresh token pair; other sessions are signed out)
+POST {{baseUrl}}/auth/password/change
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "currentPassword": "ChangeMe123!",
+  "newPassword": "EvenBetter456!"
+}
+
+### Change password to the same value (expect 400)
+POST {{baseUrl}}/auth/password/change
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "currentPassword": "ChangeMe123!",
+  "newPassword": "ChangeMe123!"
 }

@@ -45,6 +45,10 @@ class AuthSessionModel extends BaseModel<AuthSession> {
   revoke(id: string) {
     return this.updateById(id, { revokedAt: new Date() });
   }
+
+  revokeAllForUser(userId: string) {
+    return this.table.where({ userId }).whereNull("revokedAt").update({ revokedAt: new Date() });
+  }
 }
 
 export const authSessionModel = new AuthSessionModel();
