@@ -1,4 +1,4 @@
-import { errorResponse, registry } from "./registry.js";
+import { errorResponse, registry, successResponse } from "./registry.js";
 import {
   createUserSchema,
   updateUserSchema,
@@ -20,10 +20,7 @@ registry.registerPath({
     },
   },
   responses: {
-    201: {
-      description: "User created",
-      content: { "application/json": { schema: userResponseSchema } },
-    },
+    201: successResponse("User created successfully", userResponseSchema),
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller lacks users: create (roles: create for an admin account)"),
@@ -42,10 +39,7 @@ registry.registerPath({
     params: userIdParamsSchema,
   },
   responses: {
-    200: {
-      description: "The user",
-      content: { "application/json": { schema: userResponseSchema } },
-    },
+    200: successResponse("User retrieved successfully", userResponseSchema),
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse(
@@ -70,10 +64,7 @@ registry.registerPath({
     },
   },
   responses: {
-    200: {
-      description: "The updated user",
-      content: { "application/json": { schema: userResponseSchema } },
-    },
+    200: successResponse("User updated successfully", userResponseSchema),
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse(
@@ -96,7 +87,7 @@ registry.registerPath({
     params: userIdParamsSchema,
   },
   responses: {
-    204: { description: "User deleted" },
+    200: successResponse("User deleted successfully"),
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse(

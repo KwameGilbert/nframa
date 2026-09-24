@@ -1,4 +1,4 @@
-import { errorResponse, registry } from "./registry.js";
+import { errorResponse, registry, successResponse } from "./registry.js";
 import {
   createAdminUserSchema,
   updateAdminUserSchema,
@@ -20,10 +20,7 @@ registry.registerPath({
     },
   },
   responses: {
-    201: {
-      description: "Admin user created",
-      content: { "application/json": { schema: adminUserResponseSchema } },
-    },
+    201: successResponse("Admin user created successfully", adminUserResponseSchema),
     400: errorResponse("Validation error, or userId/roleId doesn't match an existing record"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller lacks roles: create"),
@@ -42,10 +39,7 @@ registry.registerPath({
     params: adminUserParamsSchema,
   },
   responses: {
-    200: {
-      description: "The admin user",
-      content: { "application/json": { schema: adminUserResponseSchema } },
-    },
+    200: successResponse("Admin user retrieved successfully", adminUserResponseSchema),
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller lacks roles: read"),
@@ -68,10 +62,7 @@ registry.registerPath({
     },
   },
   responses: {
-    200: {
-      description: "The updated admin user",
-      content: { "application/json": { schema: adminUserResponseSchema } },
-    },
+    200: successResponse("Admin user updated successfully", adminUserResponseSchema),
     400: errorResponse("Validation error, or roleId doesn't match an existing role"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller lacks roles: update, or tried to change their own role or status"),
@@ -91,11 +82,7 @@ registry.registerPath({
     params: adminUserParamsSchema,
   },
   responses: {
-    200: {
-      description:
-        "Admin user deleted — returns the admin record as it was (the deletion is on the user account, see deletedAt via GET /users/{id})",
-      content: { "application/json": { schema: adminUserResponseSchema } },
-    },
+    200: successResponse("Admin user deleted successfully", adminUserResponseSchema),
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse(

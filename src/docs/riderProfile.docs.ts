@@ -1,4 +1,4 @@
-import { errorResponse, registry } from "./registry.js";
+import { errorResponse, registry, successResponse } from "./registry.js";
 import {
   createRiderProfileSchema,
   riderProfileParamsSchema,
@@ -18,10 +18,7 @@ registry.registerPath({
     },
   },
   responses: {
-    201: {
-      description: "Rider profile created",
-      content: { "application/json": { schema: riderProfileResponseSchema } },
-    },
+    201: successResponse("Rider profile created successfully", riderProfileResponseSchema),
     400: errorResponse("Validation error, or userId doesn't match an existing user"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("userId isn't the caller and the caller lacks users: create"),
@@ -39,10 +36,7 @@ registry.registerPath({
     params: riderProfileParamsSchema,
   },
   responses: {
-    200: {
-      description: "The rider profile",
-      content: { "application/json": { schema: riderProfileResponseSchema } },
-    },
+    200: successResponse("Rider profile retrieved successfully", riderProfileResponseSchema),
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller isn't this rider and lacks users: read"),

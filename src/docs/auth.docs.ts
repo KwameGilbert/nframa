@@ -1,4 +1,4 @@
-import { errorResponse, rateLimitedResponse, registry } from "./registry.js";
+import { errorResponse, rateLimitedResponse, registry, successResponse } from "./registry.js";
 import {
   loginSchema,
   requestOtpSchema,
@@ -10,7 +10,6 @@ import {
   authTokensResponseSchema,
   loginResponseSchema,
   accountResponseSchema,
-  messageResponseSchema,
 } from "../schemas/auth.schema.js";
 
 const loginResponseDescription =
@@ -32,10 +31,7 @@ registry.registerPath({
     },
   },
   responses: {
-    200: {
-      description: "Login successful",
-      content: { "application/json": { schema: loginResponseSchema } },
-    },
+    200: successResponse("Login successful", loginResponseSchema),
     400: errorResponse("Validation error"),
     401: errorResponse("Invalid email or password"),
     403: accountBlocked,
@@ -74,10 +70,7 @@ registry.registerPath({
     },
   },
   responses: {
-    200: {
-      description: "OTP sent",
-      content: { "application/json": { schema: messageResponseSchema } },
-    },
+    200: successResponse("Verification code sent"),
     400: errorResponse("Validation error, or role missing when signing up"),
     403: accountBlocked,
     404: errorResponse("No account found for this identifier (email identifiers only)"),
@@ -120,10 +113,7 @@ registry.registerPath({
     },
   },
   responses: {
-    200: {
-      description: "Login or signup successful",
-      content: { "application/json": { schema: loginResponseSchema } },
-    },
+    200: successResponse("Login successful", loginResponseSchema),
     400: errorResponse(
       "Validation error, or the code is missing, expired, wrong, or out of attempts",
     ),
@@ -146,10 +136,7 @@ registry.registerPath({
     },
   },
   responses: {
-    200: {
-      description: "New tokens issued",
-      content: { "application/json": { schema: authTokensResponseSchema } },
-    },
+    200: successResponse("Tokens refreshed successfully", authTokensResponseSchema),
     400: errorResponse("Validation error"),
     401: errorResponse("Invalid, expired, or already-used refresh token"),
     403: errorResponse(
@@ -168,10 +155,7 @@ registry.registerPath({
     "Same account shape as login returns (profile, and for admins adminRole + permissions) — use it to refresh the admin app's view of what the user can do after roles change.",
   security: [{ bearerAuth: [] }],
   responses: {
-    200: {
-      description: "The signed-in account",
-      content: { "application/json": { schema: accountResponseSchema } },
-    },
+    200: successResponse("Account retrieved successfully", accountResponseSchema),
     401: errorResponse("Missing or invalid access token, or the user no longer exists"),
     403: accountBlocked,
   },
@@ -189,7 +173,7 @@ registry.registerPath({
     },
   },
   responses: {
-    204: { description: "Logged out" },
+    200: successResponse("Logged out successfully"),
     400: errorResponse("Validation error"),
   },
 });
@@ -207,10 +191,7 @@ registry.registerPath({
     },
   },
   responses: {
-    200: {
-      description: "Reset code sent (if the account exists)",
-      content: { "application/json": { schema: messageResponseSchema } },
-    },
+    200: successResponse("If an account exists for this email, a reset code has been sent"),
     400: errorResponse("Validation error"),
     429: rateLimitedResponse,
   },
@@ -229,10 +210,7 @@ registry.registerPath({
     },
   },
   responses: {
-    200: {
-      description: "Password reset",
-      content: { "application/json": { schema: messageResponseSchema } },
-    },
+    200: successResponse("Password reset successfully. Sign in with your new password."),
     400: errorResponse(
       "Validation error, or the code is missing, expired, wrong, or out of attempts",
     ),
@@ -255,10 +233,7 @@ registry.registerPath({
     },
   },
   responses: {
-    200: {
-      description: "Password changed; new tokens issued",
-      content: { "application/json": { schema: authTokensResponseSchema } },
-    },
+    200: successResponse("Password changed successfully", authTokensResponseSchema),
     400: errorResponse(
       "Validation error, current password incorrect, or the account has no password yet",
     ),

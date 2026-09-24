@@ -24,9 +24,11 @@ export const phoneCountryCodeSchema = z
   .min(1)
   .meta({ description: "Country calling code, including the +", example: "+233" });
 
-// Every error response (validation, auth, not found, conflict, rate limit) has this shape.
+// Every error response (validation, auth, not found, conflict, rate limit) has this shape — the success
+// envelope ({ success, message, data }) with success: false and no data.
 export const errorResponseSchema = z
   .object({
-    error: z.string().meta({ example: "email: Invalid email address" }),
+    success: z.literal(false),
+    message: z.string().meta({ example: "email: Invalid email address" }),
   })
   .meta({ id: "Error" });

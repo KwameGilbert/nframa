@@ -15,7 +15,7 @@ Content-Type: application/json
   "role": "driver"
 }
 
-@driverUserId = {{createDriverUser.response.body.id}}
+@driverUserId = {{createDriverUser.response.body.data.id}}
 
 ### Create vehicle
 # @name createVehicle
@@ -32,7 +32,7 @@ Content-Type: application/json
   "seats": 4
 }
 
-@vehicleId = {{createVehicle.response.body.id}}
+@vehicleId = {{createVehicle.response.body.data.id}}
 
 ### Duplicate plate (expect 409)
 POST {{baseUrl}}/vehicles

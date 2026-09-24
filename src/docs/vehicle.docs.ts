@@ -1,4 +1,4 @@
-import { errorResponse, registry } from "./registry.js";
+import { errorResponse, registry, successResponse } from "./registry.js";
 import { idParamsSchema } from "../schemas/common.schema.js";
 import {
   createVehicleSchema,
@@ -20,10 +20,7 @@ registry.registerPath({
     },
   },
   responses: {
-    201: {
-      description: "Vehicle created",
-      content: { "application/json": { schema: vehicleResponseSchema } },
-    },
+    201: successResponse("Vehicle created successfully", vehicleResponseSchema),
     400: errorResponse("Validation error, or carOwnerUserId doesn't match an existing user"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("carOwnerUserId isn't the caller and the caller lacks users: create"),
@@ -41,10 +38,7 @@ registry.registerPath({
     params: idParamsSchema,
   },
   responses: {
-    200: {
-      description: "The vehicle",
-      content: { "application/json": { schema: vehicleResponseSchema } },
-    },
+    200: successResponse("Vehicle retrieved successfully", vehicleResponseSchema),
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller doesn't own this vehicle and lacks users: read"),
@@ -66,10 +60,7 @@ registry.registerPath({
     },
   },
   responses: {
-    200: {
-      description: "The updated vehicle",
-      content: { "application/json": { schema: vehicleResponseSchema } },
-    },
+    200: successResponse("Vehicle updated successfully", vehicleResponseSchema),
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller doesn't own this vehicle and lacks users: update"),

@@ -1,4 +1,4 @@
-import { errorResponse, registry } from "./registry.js";
+import { errorResponse, registry, successResponse } from "./registry.js";
 import {
   createDriverProfileSchema,
   updateDriverProfileSchema,
@@ -20,10 +20,7 @@ registry.registerPath({
     },
   },
   responses: {
-    201: {
-      description: "Driver profile created",
-      content: { "application/json": { schema: driverProfileResponseSchema } },
-    },
+    201: successResponse("Driver profile created successfully", driverProfileResponseSchema),
     400: errorResponse("Validation error, or userId doesn't match an existing user"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("userId isn't the caller and the caller lacks users: create"),
@@ -41,10 +38,7 @@ registry.registerPath({
     params: driverProfileParamsSchema,
   },
   responses: {
-    200: {
-      description: "The driver profile",
-      content: { "application/json": { schema: driverProfileResponseSchema } },
-    },
+    200: successResponse("Driver profile retrieved successfully", driverProfileResponseSchema),
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller isn't this driver and lacks users: read"),
@@ -66,10 +60,7 @@ registry.registerPath({
     },
   },
   responses: {
-    200: {
-      description: "The updated driver profile",
-      content: { "application/json": { schema: driverProfileResponseSchema } },
-    },
+    200: successResponse("Driver profile updated successfully", driverProfileResponseSchema),
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller isn't this driver and lacks users: update"),

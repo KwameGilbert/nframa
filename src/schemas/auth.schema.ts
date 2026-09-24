@@ -80,10 +80,6 @@ export const changePasswordSchema = z
 
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 
-export const messageResponseSchema = z.object({
-  message: z.string().meta({ example: "OTP sent" }),
-});
-
 export const authTokensResponseSchema = z.object({
   accessToken: z.string().meta({
     description: "JWT for the Authorization: Bearer header; expires after 15 minutes",

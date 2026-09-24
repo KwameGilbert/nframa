@@ -12,7 +12,19 @@ registry.registerComponent("securitySchemes", "bearerAuth", {
   bearerFormat: "JWT",
 });
 
-// Every non-2xx response carries { error: string } — use this so each one documents that body.
+// Every 2xx response is { success: true, message, data } (utils/response.ts) — use this so each one documents
+// the envelope: the message (also used as Swagger's label for the response, which OpenAPI requires) and the
+// data schema (null when there's no payload).
+export function successResponse(message: string, data: z.ZodType = z.null()) {
+  const schema = z.object({
+    success: z.literal(true),
+    message: z.string().meta({ example: message }),
+    data,
+  });
+  return { description: message, content: { "application/json": { schema } } };
+}
+
+// Every non-2xx response is { success: false, message } — use this so each one documents that body.
 export function errorResponse(description: string) {
   return { description, content: { "application/json": { schema: errorResponseSchema } } };
 }

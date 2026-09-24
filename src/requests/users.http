@@ -70,7 +70,7 @@ Content-Type: application/json
   "role": "admin"
 }
 
-@riderId = {{createRider.response.body.id}}
+@riderId = {{createRider.response.body.data.id}}
 
 ### Get the created rider
 GET {{baseUrl}}/users/{{riderId}}
@@ -103,7 +103,7 @@ Authorization: Bearer {{token}}
 GET {{baseUrl}}/users/not-a-uuid
 Authorization: Bearer {{token}}
 
-### Delete the rider (soft delete — expect 204; a rider can also delete their own account with their own token)
+### Delete the rider (soft delete — expect 200 with data null; a rider can also delete their own account with their own token)
 DELETE {{baseUrl}}/users/{{riderId}}
 Authorization: Bearer {{token}}
 

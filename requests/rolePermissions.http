@@ -16,7 +16,7 @@ Content-Type: application/json
   "description": "Handles support tickets"
 }
 
-@roleId = {{createRole.response.body.id}}
+@roleId = {{createRole.response.body.data.id}}
 
 ### No token at all (expect 401)
 GET {{baseUrl}}/roles/{{roleId}}/permissions

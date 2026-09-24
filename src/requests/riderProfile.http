@@ -15,7 +15,7 @@ Content-Type: application/json
   "role": "rider"
 }
 
-@riderUserId = {{createRiderUser.response.body.id}}
+@riderUserId = {{createRiderUser.response.body.data.id}}
 
 ### Create rider profile
 POST {{baseUrl}}/rider

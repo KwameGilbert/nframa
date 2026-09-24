@@ -1,4 +1,4 @@
-import { errorResponse, registry } from "./registry.js";
+import { errorResponse, registry, successResponse } from "./registry.js";
 import { idParamsSchema } from "../schemas/common.schema.js";
 import { createRoleSchema, updateRoleSchema, roleResponseSchema } from "../schemas/role.schema.js";
 
@@ -17,10 +17,7 @@ registry.registerPath({
     "Every role, its per-module permissions, and how many admins are assigned to it. Needs roles: read.",
   security: [{ bearerAuth: [] }],
   responses: {
-    200: {
-      description: "All roles, sorted by name",
-      content: { "application/json": { schema: roleResponseSchema.array() } },
-    },
+    200: successResponse("Roles retrieved successfully", roleResponseSchema.array()),
     401: unauthorized,
     403: missingPermission("read"),
   },
@@ -40,10 +37,7 @@ registry.registerPath({
     },
   },
   responses: {
-    201: {
-      description: "Role created",
-      content: { "application/json": { schema: roleResponseSchema } },
-    },
+    201: successResponse("Role created successfully", roleResponseSchema),
     400: errorResponse("Validation error (e.g. an unknown module)"),
     401: unauthorized,
     403: missingPermission("create"),
@@ -62,10 +56,7 @@ registry.registerPath({
     params: idParamsSchema,
   },
   responses: {
-    200: {
-      description: "The role",
-      content: { "application/json": { schema: roleResponseSchema } },
-    },
+    200: successResponse("Role retrieved successfully", roleResponseSchema),
     400: errorResponse("Validation error"),
     401: unauthorized,
     403: missingPermission("read"),
@@ -88,10 +79,7 @@ registry.registerPath({
     },
   },
   responses: {
-    200: {
-      description: "The updated role",
-      content: { "application/json": { schema: roleResponseSchema } },
-    },
+    200: successResponse("Role updated successfully", roleResponseSchema),
     400: errorResponse("Validation error"),
     401: unauthorized,
     403: systemRole,
@@ -112,7 +100,7 @@ registry.registerPath({
     params: idParamsSchema,
   },
   responses: {
-    204: { description: "Role deleted" },
+    200: successResponse("Role deleted successfully"),
     400: errorResponse("Validation error"),
     401: unauthorized,
     403: systemRole,

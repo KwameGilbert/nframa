@@ -22,7 +22,7 @@ export const openApiDocument = generator.generateDocument({
       "",
       "**Permissions:** admin access is per module (`settings`, `roles`, `users`) with `create` / `read` / `update` / `delete` actions, granted through the admin's role (see Roles). `roles` also covers admin accounts (`/admin`, and admin users under `/users`); `users` covers riders, drivers and vehicles. Endpoints that need one say so, e.g. *Needs roles: update*; without it you get `403`. Riders and drivers can always act on their own records. `superadmin` is a system role with every permission and can't be edited or deleted.",
       "",
-      '**Errors:** every non-2xx response has the body `{ "error": "<message>" }`.',
+      '**Responses:** every response has the body `{ "success": true, "message": "...", "data": ... }` — `data` is `null` when there is nothing to return (deletes, logout). Errors use the same shape with `"success": false` and no `data`.',
       "",
       "**Rate limits:** auth endpoints return `429` when a limit is hit; the `RateLimit` / `RateLimit-Policy` response headers show the limit and when it resets.",
       "",

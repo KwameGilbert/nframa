@@ -16,7 +16,7 @@ Content-Type: application/json
   "description": "Operations admin"
 }
 
-@roleId = {{createRole.response.body.id}}
+@roleId = {{createRole.response.body.data.id}}
 
 ### Create an admin-role user (identity lives on users, per the schema)
 # @name createAdminUser
@@ -29,7 +29,7 @@ Content-Type: application/json
   "role": "admin"
 }
 
-@adminUserId = {{createAdminUser.response.body.id}}
+@adminUserId = {{createAdminUser.response.body.data.id}}
 
 ### No token at all (expect 401)
 POST {{baseUrl}}/admin

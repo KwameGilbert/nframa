@@ -28,7 +28,7 @@ Content-Type: application/json
   }
 }
 
-@roleId = {{createRole.response.body.id}}
+@roleId = {{createRole.response.body.data.id}}
 
 ### Duplicate slug (expect 409)
 POST {{baseUrl}}/roles
@@ -97,6 +97,6 @@ Content-Type: application/json
 GET {{baseUrl}}/roles/00000000-0000-0000-0000-000000000000
 Authorization: Bearer {{token}}
 
-### Delete the role (expect 204; 409 if any admin is still assigned to it)
+### Delete the role (expect 200 with data null; 409 if any admin is still assigned to it)
 DELETE {{baseUrl}}/roles/{{roleId}}
 Authorization: Bearer {{token}}

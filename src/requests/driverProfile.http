@@ -15,7 +15,7 @@ Content-Type: application/json
   "role": "driver"
 }
 
-@driverUserId = {{createDriverUser.response.body.id}}
+@driverUserId = {{createDriverUser.response.body.data.id}}
 
 ### Create driver profile
 POST {{baseUrl}}/driver

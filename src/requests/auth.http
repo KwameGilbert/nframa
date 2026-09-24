@@ -114,7 +114,7 @@ Content-Type: application/json
   "code": "123456"
 }
 
-@refreshToken = {{verifyPhoneOtp.response.body.refreshToken}}
+@refreshToken = {{verifyPhoneOtp.response.body.data.refreshToken}}
 
 ### Refresh the token pair
 # @name refreshed
@@ -133,7 +133,7 @@ Content-Type: application/json
   "refreshToken": "{{refreshToken}}"
 }
 
-@rotatedRefreshToken = {{refreshed.response.body.refreshToken}}
+@rotatedRefreshToken = {{refreshed.response.body.data.refreshToken}}
 
 ### Logout (revokes the session)
 POST {{baseUrl}}/auth/logout
@@ -169,7 +169,7 @@ Content-Type: application/json
   "newPassword": "ChangeMe123!"
 }
 
-@accessToken = {{passwordLogin.response.body.accessToken}}
+@accessToken = {{passwordLogin.response.body.data.accessToken}}
 
 ### Who am I — account, profile, and (for admins) adminRole + permissions
 GET {{baseUrl}}/auth/me

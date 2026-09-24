@@ -1,4 +1,4 @@
-import { errorResponse, registry } from "./registry.js";
+import { errorResponse, registry, successResponse } from "./registry.js";
 import { idParamsSchema } from "../schemas/common.schema.js";
 import { permissionsSchema } from "../schemas/role.schema.js";
 import {
@@ -12,10 +12,6 @@ const unauthorized = errorResponse("Missing or invalid access token");
 const systemRole = errorResponse(
   "Caller lacks roles: update, or the role is a system role (can't be edited)",
 );
-const updatedPermissions = {
-  description: "The role's full permission set after the change",
-  content: { "application/json": { schema: permissionsSchema } },
-};
 
 registry.registerPath({
   method: "get",
@@ -28,10 +24,7 @@ registry.registerPath({
     params: idParamsSchema,
   },
   responses: {
-    200: {
-      description: "The role's permissions",
-      content: { "application/json": { schema: permissionsSchema } },
-    },
+    200: successResponse("Role permissions retrieved successfully", permissionsSchema),
     400: errorResponse("Validation error"),
     401: unauthorized,
     403: errorResponse("Caller lacks roles: read"),
@@ -54,7 +47,7 @@ registry.registerPath({
     },
   },
   responses: {
-    200: updatedPermissions,
+    200: successResponse("Role permission updated successfully", permissionsSchema),
     400: errorResponse("Validation error (e.g. an unknown module)"),
     401: unauthorized,
     403: systemRole,
@@ -73,7 +66,7 @@ registry.registerPath({
     params: roleModuleParamsSchema,
   },
   responses: {
-    200: updatedPermissions,
+    200: successResponse("Role permission removed successfully", permissionsSchema),
     400: errorResponse("Validation error (e.g. an unknown module)"),
     401: unauthorized,
     403: systemRole,
