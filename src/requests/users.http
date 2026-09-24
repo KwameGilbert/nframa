@@ -102,3 +102,19 @@ Authorization: Bearer {{token}}
 ### Get with a malformed id (expect 400)
 GET {{baseUrl}}/users/not-a-uuid
 Authorization: Bearer {{token}}
+
+### Delete the rider (soft delete — expect 204; a rider can also delete their own account with their own token)
+DELETE {{baseUrl}}/users/{{riderId}}
+Authorization: Bearer {{token}}
+
+### Delete the same rider again (expect 409, already deleted)
+DELETE {{baseUrl}}/users/{{riderId}}
+Authorization: Bearer {{token}}
+
+### The deleted rider is still readable, with deletedAt set
+GET {{baseUrl}}/users/{{riderId}}
+Authorization: Bearer {{token}}
+
+### Delete a nonexistent user (expect 404)
+DELETE {{baseUrl}}/users/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}

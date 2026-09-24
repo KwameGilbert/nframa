@@ -14,7 +14,7 @@ import { hashPassword, verifyPassword } from "../utils/password.js";
 import { generateRefreshToken, hashRefreshToken } from "../utils/refreshToken.js";
 import { signAccessToken } from "../utils/jwt.js";
 import { AppError } from "../utils/AppError.js";
-import { sendSuccess, sendNoContent } from "../utils/response.js";
+import { sendSuccess } from "../utils/response.js";
 import type {
   LoginInput,
   RequestOtpInput,
@@ -197,7 +197,7 @@ async function completeLogin(account: User, req: Request, res: Response) {
     buildAccount(account),
   ]);
 
-  sendSuccess(res, { ...tokens, user });
+  sendSuccess(res, "Login successful", { ...tokens, user });
 }
 
 export async function getMe(req: Request, res: Response) {
@@ -211,7 +211,7 @@ export async function getMe(req: Request, res: Response) {
   }
   await assertAccountActive(account);
 
-  sendSuccess(res, await buildAccount(account));
+  sendSuccess(res, "Account retrieved successfully", await buildAccount(account));
 }
 
 export async function login(req: Request, res: Response) {
@@ -243,7 +243,7 @@ export async function requestLoginOtp(req: Request, res: Response) {
 
   await sendOtp(identifier, channel, toPurpose(role), "verification code");
 
-  sendSuccess(res, { message: "OTP sent" });
+  sendSuccess(res, "Verification code sent");
 }
 
 export async function verifyLoginOtp(req: Request, res: Response) {
@@ -286,7 +286,7 @@ export async function refreshSession(req: Request, res: Response) {
 
   const tokens = await issueTokens(user.id, session.userType as "user" | "admin", user.role, req);
 
-  sendSuccess(res, tokens);
+  sendSuccess(res, "Tokens refreshed successfully", tokens);
 }
 
 export async function logout(req: Request, res: Response) {
@@ -297,7 +297,7 @@ export async function logout(req: Request, res: Response) {
     await authSessionModel.revoke(session.id);
   }
 
-  sendNoContent(res);
+  sendSuccess(res, "Logged out successfully");
 }
 
 export async function forgotPassword(req: Request, res: Response) {
@@ -313,7 +313,7 @@ export async function forgotPassword(req: Request, res: Response) {
     });
   }
 
-  sendSuccess(res, { message: "If an account exists for this email, a reset code has been sent" });
+  sendSuccess(res, "If an account exists for this email, a reset code has been sent");
 }
 
 export async function resetPassword(req: Request, res: Response) {
@@ -329,7 +329,7 @@ export async function resetPassword(req: Request, res: Response) {
   await userModel.setPassword(user.id, await hashPassword(newPassword));
   await authSessionModel.revokeAllForUser(user.id);
 
-  sendSuccess(res, { message: "Password reset. Sign in with your new password." });
+  sendSuccess(res, "Password reset successfully. Sign in with your new password.");
 }
 
 export async function changePassword(req: Request, res: Response) {
@@ -355,5 +355,5 @@ export async function changePassword(req: Request, res: Response) {
   await authSessionModel.revokeAllForUser(credentials.id);
   const tokens = await issueTokens(credentials.id, req.auth.userType, credentials.role, req);
 
-  sendSuccess(res, tokens);
+  sendSuccess(res, "Password changed successfully", tokens);
 }

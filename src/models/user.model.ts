@@ -44,6 +44,13 @@ class UserModel extends BaseModel<User> {
   setPassword(id: string, passwordHash: string) {
     return this.updateById(id, { passwordHash, passwordSalt: null, updatedAt: new Date() });
   }
+
+  // Soft delete: the row (and its email/phone, which stay reserved) is kept; login, refresh and permission
+  // checks all treat a set deletedAt as gone.
+  softDelete(id: string) {
+    const now = new Date();
+    return this.updateById(id, { deletedAt: now, updatedAt: now });
+  }
 }
 
 export const userModel = new UserModel();

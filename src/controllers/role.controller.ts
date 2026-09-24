@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { roleModel, type Role } from "../models/role.model.js";
 import { AppError } from "../utils/AppError.js";
-import { sendCreated, sendNoContent, sendSuccess } from "../utils/response.js";
+import { sendCreated, sendSuccess } from "../utils/response.js";
 import type { CreateRoleInput, UpdateRoleInput } from "../schemas/role.schema.js";
 
 export async function findRoleOrThrow(id: string): Promise<Role> {
@@ -22,7 +22,7 @@ export function assertNotSystemRole(role: Role) {
 }
 
 export async function listRoles(_req: Request, res: Response) {
-  sendSuccess(res, await roleModel.listWithPermissions());
+  sendSuccess(res, "Roles retrieved successfully", await roleModel.listWithPermissions());
 }
 
 export async function getRole(req: Request, res: Response) {
@@ -34,7 +34,7 @@ export async function getRole(req: Request, res: Response) {
     throw AppError.notFound(`Role not found: ${id}`);
   }
 
-  sendSuccess(res, role);
+  sendSuccess(res, "Role retrieved successfully", role);
 }
 
 export async function createRole(req: Request, res: Response) {
@@ -42,7 +42,7 @@ export async function createRole(req: Request, res: Response) {
 
   const role = await roleModel.createWithPermissions(input);
 
-  sendCreated(res, role);
+  sendCreated(res, "Role created successfully", role);
 }
 
 export async function updateRole(req: Request, res: Response) {
@@ -53,7 +53,7 @@ export async function updateRole(req: Request, res: Response) {
 
   const role = await roleModel.updateWithPermissions(id, input);
 
-  sendSuccess(res, role);
+  sendSuccess(res, "Role updated successfully", role);
 }
 
 export async function deleteRole(req: Request, res: Response) {
@@ -62,14 +62,16 @@ export async function deleteRole(req: Request, res: Response) {
   const role = await findRoleOrThrow(id);
   assertNotSystemRole(role);
 
-  const assigned = (await roleModel.countAssignedAdmins([id])).get(id) ?? 0;
+  // Deleted admins count here: their admin records still reference the role, so the database would refuse.
+  const assigned =
+    (await roleModel.countAssignedAdmins([id], { includeDeleted: true })).get(id) ?? 0;
   if (assigned > 0) {
     throw AppError.conflict(
-      `${role.name} is still assigned to ${assigned} admin(s) — move them to another role first`,
+      `${role.name} is still assigned to ${assigned} admin account(s), including any deleted ones — move them to another role first`,
     );
   }
 
   await roleModel.deleteById(id);
 
-  sendNoContent(res);
+  sendSuccess(res, "Role deleted successfully");
 }

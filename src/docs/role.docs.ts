@@ -117,6 +117,6 @@ registry.registerPath({
     401: unauthorized,
     403: systemRole,
     404: errorResponse("Role not found"),
-    409: errorResponse("Admins are still assigned to this role"),
+    409: errorResponse("Admin accounts are still assigned to this role (deleted ones count too)"),
   },
 });

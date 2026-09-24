@@ -12,7 +12,7 @@ export async function createDriverProfile(req: Request, res: Response) {
 
   const profile = await driverProfileModel.createProfile(input);
 
-  sendCreated(res, profile);
+  sendCreated(res, "Driver profile created successfully", profile);
 }
 
 export async function getDriverProfile(req: Request, res: Response) {
@@ -24,7 +24,7 @@ export async function getDriverProfile(req: Request, res: Response) {
     throw AppError.notFound(`Driver profile not found for user: ${userId}`);
   }
 
-  sendSuccess(res, profile);
+  sendSuccess(res, "Driver profile retrieved successfully", profile);
 }
 
 export async function updateDriverProfile(req: Request, res: Response) {
@@ -37,5 +37,5 @@ export async function updateDriverProfile(req: Request, res: Response) {
     throw AppError.notFound(`Driver profile not found for user: ${userId}`);
   }
 
-  sendSuccess(res, profile);
+  sendSuccess(res, "Driver profile updated successfully", profile);
 }

@@ -15,7 +15,7 @@ export async function getRolePermissions(req: Request, res: Response) {
 
   await findRoleOrThrow(id);
 
-  sendSuccess(res, await rolePermissionModel.findByRole(id));
+  sendSuccess(res, "Role permissions retrieved successfully", await rolePermissionModel.findByRole(id));
 }
 
 export async function setRoleModulePermission(req: Request, res: Response) {
@@ -25,7 +25,7 @@ export async function setRoleModulePermission(req: Request, res: Response) {
   assertNotSystemRole(await findRoleOrThrow(id));
   await rolePermissionModel.setModule(id, module, actions);
 
-  sendSuccess(res, await rolePermissionModel.findByRole(id));
+  sendSuccess(res, "Role permission updated successfully", await rolePermissionModel.findByRole(id));
 }
 
 export async function removeRoleModulePermission(req: Request, res: Response) {
@@ -34,5 +34,5 @@ export async function removeRoleModulePermission(req: Request, res: Response) {
   assertNotSystemRole(await findRoleOrThrow(id));
   await rolePermissionModel.removeModule(id, module);
 
-  sendSuccess(res, await rolePermissionModel.findByRole(id));
+  sendSuccess(res, "Role permission removed successfully", await rolePermissionModel.findByRole(id));
 }

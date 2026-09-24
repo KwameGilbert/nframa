@@ -4,6 +4,7 @@ import { userModel } from "../models/user.model.js";
 import { hashPassword } from "../utils/password.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
+import { findUserOrThrow, softDeleteAccount } from "./user.controller.js";
 import type { CreateAdminUserInput, UpdateAdminUserInput } from "../schemas/adminUser.schema.js";
 
 export async function createAdminUser(req: Request, res: Response) {
@@ -16,7 +17,7 @@ export async function createAdminUser(req: Request, res: Response) {
     await userModel.setPassword(adminUser.userId, await hashPassword(password));
   }
 
-  sendCreated(res, adminUser);
+  sendCreated(res, "Admin user created successfully", adminUser);
 }
 
 export async function getAdminUser(req: Request, res: Response) {
@@ -28,7 +29,7 @@ export async function getAdminUser(req: Request, res: Response) {
     throw AppError.notFound(`Admin user not found for user: ${userId}`);
   }
 
-  sendSuccess(res, adminUser);
+  sendSuccess(res, "Admin user retrieved successfully", adminUser);
 }
 
 export async function updateAdminUser(req: Request, res: Response) {
@@ -46,5 +47,20 @@ export async function updateAdminUser(req: Request, res: Response) {
     throw AppError.notFound(`Admin user not found for user: ${userId}`);
   }
 
-  sendSuccess(res, adminUser);
+  sendSuccess(res, "Admin user updated successfully", adminUser);
+}
+
+// Soft-deletes the admin's user account (the admin record is kept for history). Same guards as
+// DELETE /users/:id on an admin: not yourself, and only a system-role admin can delete a system-role admin.
+export async function deleteAdminUser(req: Request, res: Response) {
+  const { userId } = req.validated.params as { userId: string };
+
+  const adminUser = await adminUserModel.findById(userId);
+  if (!adminUser) {
+    throw AppError.notFound(`Admin user not found for user: ${userId}`);
+  }
+
+  await softDeleteAccount(req, await findUserOrThrow(userId));
+
+  sendSuccess(res, "Admin user deleted successfully", adminUser);
 }

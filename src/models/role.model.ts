@@ -22,18 +22,34 @@ export interface RoleWithPermissions extends Role {
 class RoleModel extends BaseModel<Role> {
   protected readonly tableName = "roles";
 
-  async countAssignedAdmins(roleIds: string[]): Promise<Map<string, number>> {
+  // Soft-deleted admins are left out by default (they're not really "on" the role any more), but their admin
+  // records still reference it — pass includeDeleted when that matters, e.g. before deleting the role.
+  async countAssignedAdmins(
+    roleIds: string[],
+    { includeDeleted = false } = {},
+  ): Promise<Map<string, number>> {
     if (roleIds.length === 0) {
       return new Map();
     }
 
-    const rows = (await db("adminUsers")
-      .whereIn("roleId", roleIds)
-      .groupBy("roleId")
-      .select("roleId")
-      .count("* as count")) as unknown as { roleId: string; count: string }[];
+    const query = db("adminUsers as a")
+      .whereIn("a.roleId", roleIds)
+      .groupBy("a.roleId")
+      .select("a.roleId as roleId")
+      .count("* as count");
+    if (!includeDeleted) {
+      query.join("users as u", "u.id", "a.userId").whereNull("u.deletedAt");
+    }
 
+    const rows = (await query) as unknown as { roleId: string; count: string }[];
     return new Map(rows.map((row) => [row.roleId, Number(row.count)]));
+  }
+
+  findForAdmin(userId: string): Promise<Role | undefined> {
+    return db("roles as r")
+      .join("adminUsers as a", "a.roleId", "r.id")
+      .where("a.userId", userId)
+      .first("r.*");
   }
 
   private async withPermissions(roles: Role[]): Promise<RoleWithPermissions[]> {

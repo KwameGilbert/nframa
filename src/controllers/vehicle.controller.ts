@@ -23,7 +23,7 @@ export async function createVehicle(req: Request, res: Response) {
 
   const vehicle = await vehicleModel.createVehicle(input);
 
-  sendCreated(res, vehicle);
+  sendCreated(res, "Vehicle created successfully", vehicle);
 }
 
 export async function getVehicle(req: Request, res: Response) {
@@ -31,7 +31,7 @@ export async function getVehicle(req: Request, res: Response) {
 
   const vehicle = await findVehicleFor(req, id, "read");
 
-  sendSuccess(res, vehicle);
+  sendSuccess(res, "Vehicle retrieved successfully", vehicle);
 }
 
 export async function updateVehicle(req: Request, res: Response) {
@@ -45,5 +45,5 @@ export async function updateVehicle(req: Request, res: Response) {
     throw AppError.notFound(`Vehicle not found: ${id}`);
   }
 
-  sendSuccess(res, vehicle);
+  sendSuccess(res, "Vehicle updated successfully", vehicle);
 }

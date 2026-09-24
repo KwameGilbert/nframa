@@ -78,3 +78,30 @@ registry.registerPath({
     404: errorResponse("Admin user not found"),
   },
 });
+
+registry.registerPath({
+  method: "delete",
+  path: "/admin/{userId}",
+  tags: ["Admin Users"],
+  summary: "Delete an admin user (soft delete)",
+  description:
+    "Soft-deletes the admin's user account (deletedAt is set) and signs it out of every session; their admin permissions stop on their next request. The admin record is kept for history, and their email stays reserved. Their role no longer counts them in assignedAdminsCount, but the role still can't be deleted until they're moved off it.\n\nNeeds roles: delete. You can't delete your own admin account, and only an admin with a system role (superadmin) can delete another system-role admin.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: adminUserParamsSchema,
+  },
+  responses: {
+    200: {
+      description:
+        "Admin user deleted — returns the admin record as it was (the deletion is on the user account, see deletedAt via GET /users/{id})",
+      content: { "application/json": { schema: adminUserResponseSchema } },
+    },
+    400: errorResponse("Validation error"),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse(
+      "Caller lacks roles: delete, is deleting themselves, or lacks a system role to delete a system-role admin",
+    ),
+    404: errorResponse("Admin user not found"),
+    409: errorResponse("Admin user is already deleted"),
+  },
+});

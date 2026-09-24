@@ -80,7 +80,10 @@ export const roleResponseSchema = z.object({
     .boolean()
     .meta({ description: "System roles (e.g. superadmin) can't be edited or deleted" }),
   permissions: permissionsSchema,
-  assignedAdminsCount: z.number().int().meta({ example: 3 }),
+  assignedAdminsCount: z
+    .number()
+    .int()
+    .meta({ description: "Admins on this role, not counting deleted ones", example: 3 }),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });

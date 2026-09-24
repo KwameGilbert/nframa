@@ -36,6 +36,7 @@ registry.registerPath({
   path: "/users/{id}",
   tags: ["Users"],
   summary: "Get a user by id (the user themselves, or an admin with users: read)",
+  description: "Deleted users are still returned, with deletedAt set.",
   security: [{ bearerAuth: [] }],
   request: {
     params: userIdParamsSchema,
@@ -80,5 +81,28 @@ registry.registerPath({
     ),
     404: errorResponse("User not found"),
     409: errorResponse("Another user already has this email or phone number"),
+  },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/users/{id}",
+  tags: ["Users"],
+  summary: "Delete a user (soft delete)",
+  description:
+    "Marks the account deleted (deletedAt is set; the row is kept) and signs it out of every session — it can no longer log in or refresh, and any access token it holds stops working within 15 minutes. Its email and phone number stay reserved, so they can't be used for a new account.\n\nRiders and drivers can delete their own account. Deleting anyone else needs users: delete, or roles: delete for an admin account. Admins can't delete their own account, and only an admin with a system role (superadmin) can delete another system-role admin.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: userIdParamsSchema,
+  },
+  responses: {
+    204: { description: "User deleted" },
+    400: errorResponse("Validation error"),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse(
+      "Caller isn't this user and lacks users: delete (roles: delete for an admin account), is an admin deleting themselves, or lacks a system role to delete a system-role admin",
+    ),
+    404: errorResponse("User not found"),
+    409: errorResponse("User is already deleted"),
   },
 });

@@ -9,5 +9,6 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
 
   req.log.child({ type: "error" }).error({ err }, err.message);
 
-  res.status(statusCode).json({ error: message });
+  // Same envelope as success responses (utils/response.ts), minus data.
+  res.status(statusCode).json({ success: false, message });
 }

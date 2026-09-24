@@ -9,7 +9,7 @@ export async function createRiderProfile(req: Request, res: Response) {
 
   const profile = await riderProfileModel.createProfile(input);
 
-  sendCreated(res, profile);
+  sendCreated(res, "Rider profile created successfully", profile);
 }
 
 export async function getRiderProfile(req: Request, res: Response) {
@@ -21,5 +21,5 @@ export async function getRiderProfile(req: Request, res: Response) {
     throw AppError.notFound(`Rider profile not found for user: ${userId}`);
   }
 
-  sendSuccess(res, profile);
+  sendSuccess(res, "Rider profile retrieved successfully", profile);
 }

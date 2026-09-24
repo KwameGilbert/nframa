@@ -11,6 +11,7 @@ import {
   createAdminUser,
   getAdminUser,
   updateAdminUser,
+  deleteAdminUser,
 } from "../controllers/adminUser.controller.js";
 
 export const adminUserRouter = Router();
@@ -37,4 +38,12 @@ adminUserRouter.patch(
   requirePermission("roles", "update"),
   validate({ params: adminUserParamsSchema, body: updateAdminUserSchema }),
   updateAdminUser,
+);
+
+adminUserRouter.delete(
+  "/admin/:userId",
+  authenticate,
+  requirePermission("roles", "delete"),
+  validate({ params: adminUserParamsSchema }),
+  deleteAdminUser,
 );

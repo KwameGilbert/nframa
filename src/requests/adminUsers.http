@@ -109,3 +109,19 @@ Content-Type: application/json
 ### Get a nonexistent admin (expect 404)
 GET {{baseUrl}}/admin/00000000-0000-0000-0000-000000000000
 Authorization: Bearer {{token}}
+
+### Delete your own admin account (expect 403). Replace with your own user id.
+DELETE {{baseUrl}}/admin/PASTE_YOUR_OWN_USER_ID
+Authorization: Bearer {{token}}
+
+### Delete the admin (soft delete — expect 200 with the admin record; signs them out everywhere)
+DELETE {{baseUrl}}/admin/{{adminUserId}}
+Authorization: Bearer {{token}}
+
+### Delete the same admin again (expect 409, already deleted)
+DELETE {{baseUrl}}/admin/{{adminUserId}}
+Authorization: Bearer {{token}}
+
+### Delete a nonexistent admin (expect 404)
+DELETE {{baseUrl}}/admin/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}

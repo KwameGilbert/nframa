@@ -2,7 +2,7 @@ import { Router } from "express";
 import { validate } from "../middlewares/validate.js";
 import { authenticate } from "../middlewares/authenticate.js";
 import { createUserSchema, updateUserSchema, userIdParamsSchema } from "../schemas/user.schema.js";
-import { createUser, getUser, updateUser } from "../controllers/user.controller.js";
+import { createUser, getUser, updateUser, deleteUser } from "../controllers/user.controller.js";
 
 export const userRouter = Router();
 
@@ -18,3 +18,5 @@ userRouter.patch(
   validate({ params: userIdParamsSchema, body: updateUserSchema }),
   updateUser,
 );
+
+userRouter.delete("/users/:id", authenticate, validate({ params: userIdParamsSchema }), deleteUser);
