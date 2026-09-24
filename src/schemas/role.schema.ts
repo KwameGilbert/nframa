@@ -78,7 +78,7 @@ export const roleResponseSchema = z.object({
   description: z.string().meta({ example: "Views and edits rider and driver accounts" }),
   isSystem: z
     .boolean()
-    .meta({ description: "System roles (e.g. super-admin) can't be edited or deleted" }),
+    .meta({ description: "System roles (e.g. superadmin) can't be edited or deleted" }),
   permissions: permissionsSchema,
   assignedAdminsCount: z.number().int().meta({ example: 3 }),
   createdAt: z.iso.datetime(),

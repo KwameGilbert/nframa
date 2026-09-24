@@ -107,7 +107,7 @@ export const accountResponseSchema = userResponseSchema.extend({
   adminRole: z
     .object({
       id: z.uuid(),
-      slug: z.string().meta({ example: "super-admin" }),
+      slug: z.string().meta({ example: "superadmin" }),
       name: z.string().meta({ example: "Super Admin" }),
       isSystem: z.boolean(),
     })
