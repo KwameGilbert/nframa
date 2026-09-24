@@ -1,4 +1,4 @@
-import { registry } from "./registry.js";
+import { errorResponse, registry } from "./registry.js";
 import {
   createAdminUserSchema,
   updateAdminUserSchema,
@@ -11,6 +11,8 @@ registry.registerPath({
   path: "/admin",
   tags: ["Admin Users"],
   summary: "Create an admin user (admin only)",
+  description:
+    "Creates the admin record for an existing admin-role user (POST /users first). The admin starts as invited and can't log in until PATCHed to active. Pass password to set their initial password; otherwise they set one via /auth/password/forgot.",
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -22,9 +24,10 @@ registry.registerPath({
       description: "Admin user created",
       content: { "application/json": { schema: adminUserResponseSchema } },
     },
-    400: { description: "Validation error" },
-    401: { description: "Missing or invalid access token" },
-    403: { description: "Caller is not an admin" },
+    400: errorResponse("Validation error, or userId/roleId doesn't match an existing record"),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Caller is not an admin"),
+    409: errorResponse("This user already has an admin record"),
   },
 });
 
@@ -42,10 +45,10 @@ registry.registerPath({
       description: "The admin user",
       content: { "application/json": { schema: adminUserResponseSchema } },
     },
-    400: { description: "Validation error" },
-    401: { description: "Missing or invalid access token" },
-    403: { description: "Caller is not an admin" },
-    404: { description: "Admin user not found" },
+    400: errorResponse("Validation error"),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Caller is not an admin"),
+    404: errorResponse("Admin user not found"),
   },
 });
 
@@ -54,6 +57,8 @@ registry.registerPath({
   path: "/admin/{userId}",
   tags: ["Admin Users"],
   summary: "Update an admin user (admin only)",
+  description:
+    "Send only the fields to change (at least one). Setting status to suspended blocks new logins and refreshes; access tokens already issued last until they expire (15 minutes).",
   security: [{ bearerAuth: [] }],
   request: {
     params: adminUserParamsSchema,
@@ -66,9 +71,9 @@ registry.registerPath({
       description: "The updated admin user",
       content: { "application/json": { schema: adminUserResponseSchema } },
     },
-    400: { description: "Validation error" },
-    401: { description: "Missing or invalid access token" },
-    403: { description: "Caller is not an admin" },
-    404: { description: "Admin user not found" },
+    400: errorResponse("Validation error"),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Caller is not an admin"),
+    404: errorResponse("Admin user not found"),
   },
 });

@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-const permissionValue = z.record(z.string(), z.unknown());
+const permissionValue = z.record(z.string(), z.unknown()).meta({
+  description: "Free-form JSON object describing what the role can do",
+  example: { finance: { create: false, read: true, update: true, delete: false } },
+});
 
 export const createRolePermissionSchema = z.object({
   roleId: z.uuid(),

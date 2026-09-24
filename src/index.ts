@@ -28,6 +28,13 @@ process.on("unhandledRejection", (reason) => {
 // Create Express app and configure middlewares
 const app = express();
 
+// Behind a load balancer/reverse proxy, set TRUST_PROXY (e.g. 1 = one proxy hop) so req.ip is the real
+// client IP. Without it every request looks like it comes from the proxy and shares one rate-limit bucket.
+const trustProxy = process.env.TRUST_PROXY;
+if (trustProxy) {
+  app.set("trust proxy", /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy);
+}
+
 app.use(captureResponseBody);
 app.use(httpLogger);
 app.use(helmet());

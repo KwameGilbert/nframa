@@ -28,4 +28,8 @@ export class AppError extends Error {
   static conflict(message: string) {
     return new AppError(message, 409);
   }
+
+  static tooManyRequests(message = "Too many requests, try again later") {
+    return new AppError(message, 429);
+  }
 }

@@ -1,4 +1,4 @@
-import { registry } from "./registry.js";
+import { errorResponse, registry } from "./registry.js";
 import { idParamsSchema } from "../schemas/common.schema.js";
 import {
   createRolePermissionSchema,
@@ -23,9 +23,9 @@ registry.registerPath({
       description: "Role permission created",
       content: { "application/json": { schema: rolePermissionResponseSchema } },
     },
-    400: { description: "Validation error" },
-    401: { description: "Missing or invalid access token" },
-    403: { description: "Caller is not an admin" },
+    400: errorResponse("Validation error, or roleId doesn't match an existing role"),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Caller is not an admin"),
   },
 });
 
@@ -42,8 +42,8 @@ registry.registerPath({
       description: "The role permission",
       content: { "application/json": { schema: rolePermissionResponseSchema } },
     },
-    400: { description: "Validation error" },
-    404: { description: "Role permission not found" },
+    400: errorResponse("Validation error"),
+    404: errorResponse("Role permission not found"),
   },
 });
 
@@ -52,6 +52,7 @@ registry.registerPath({
   path: "/role-permissions/{id}",
   tags: ["Role Permissions"],
   summary: "Update a role permission",
+  description: "Replaces the whole permission object.",
   request: {
     params: idParamsSchema,
     body: {
@@ -63,8 +64,8 @@ registry.registerPath({
       description: "The updated role permission",
       content: { "application/json": { schema: rolePermissionResponseSchema } },
     },
-    400: { description: "Validation error" },
-    404: { description: "Role permission not found" },
+    400: errorResponse("Validation error"),
+    404: errorResponse("Role permission not found"),
   },
 });
 
@@ -73,6 +74,7 @@ registry.registerPath({
   path: "/roles/{roleId}/permissions",
   tags: ["Role Permissions"],
   summary: "List all permissions granted to a role",
+  description: "Returns an empty array if the role has no permissions or doesn't exist.",
   request: {
     params: roleIdParamsSchema,
   },
@@ -83,6 +85,6 @@ registry.registerPath({
         "application/json": { schema: rolePermissionResponseSchema.array() },
       },
     },
-    400: { description: "Validation error" },
+    400: errorResponse("Validation error"),
   },
 });

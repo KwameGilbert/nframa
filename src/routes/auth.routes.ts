@@ -2,6 +2,16 @@ import { Router } from "express";
 import { validate } from "../middlewares/validate.js";
 import { authenticate } from "../middlewares/authenticate.js";
 import {
+  authIpLimit,
+  refreshIpLimit,
+  loginLimit,
+  otpSendLimit,
+  otpVerifyLimit,
+  passwordForgotLimit,
+  passwordResetLimit,
+  passwordChangeLimit,
+} from "../middlewares/rateLimit.js";
+import {
   loginSchema,
   requestOtpSchema,
   verifyOtpSchema,
@@ -23,16 +33,47 @@ import {
 
 export const authRouter = Router();
 
-authRouter.post("/auth/login", validate({ body: loginSchema }), login);
-authRouter.post("/auth/login/otp", validate({ body: requestOtpSchema }), requestLoginOtp);
-authRouter.post("/auth/login/verify", validate({ body: verifyOtpSchema }), verifyLoginOtp);
-authRouter.post("/auth/refresh", validate({ body: refreshTokenSchema }), refreshSession);
+// Per-account limiters read the validated body, so they sit after validate().
+authRouter.post("/auth/login", authIpLimit, validate({ body: loginSchema }), loginLimit, login);
+authRouter.post(
+  "/auth/login/otp",
+  authIpLimit,
+  validate({ body: requestOtpSchema }),
+  otpSendLimit,
+  requestLoginOtp,
+);
+authRouter.post(
+  "/auth/login/verify",
+  authIpLimit,
+  validate({ body: verifyOtpSchema }),
+  otpVerifyLimit,
+  verifyLoginOtp,
+);
+authRouter.post(
+  "/auth/refresh",
+  refreshIpLimit,
+  validate({ body: refreshTokenSchema }),
+  refreshSession,
+);
 authRouter.post("/auth/logout", validate({ body: refreshTokenSchema }), logout);
-authRouter.post("/auth/password/forgot", validate({ body: forgotPasswordSchema }), forgotPassword);
-authRouter.post("/auth/password/reset", validate({ body: resetPasswordSchema }), resetPassword);
+authRouter.post(
+  "/auth/password/forgot",
+  authIpLimit,
+  validate({ body: forgotPasswordSchema }),
+  passwordForgotLimit,
+  forgotPassword,
+);
+authRouter.post(
+  "/auth/password/reset",
+  authIpLimit,
+  validate({ body: resetPasswordSchema }),
+  passwordResetLimit,
+  resetPassword,
+);
 authRouter.post(
   "/auth/password/change",
   authenticate,
   validate({ body: changePasswordSchema }),
+  passwordChangeLimit,
   changePassword,
 );

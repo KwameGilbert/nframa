@@ -1,4 +1,4 @@
-import { registry } from "./registry.js";
+import { errorResponse, registry } from "./registry.js";
 import {
   createRiderProfileSchema,
   riderProfileParamsSchema,
@@ -20,8 +20,8 @@ registry.registerPath({
       description: "Rider profile created",
       content: { "application/json": { schema: riderProfileResponseSchema } },
     },
-    400: { description: "Validation error" },
-    409: { description: "Rider profile already exists for this user" },
+    400: errorResponse("Validation error, or userId doesn't match an existing user"),
+    409: errorResponse("Rider profile already exists for this user"),
   },
 });
 
@@ -38,7 +38,7 @@ registry.registerPath({
       description: "The rider profile",
       content: { "application/json": { schema: riderProfileResponseSchema } },
     },
-    400: { description: "Validation error" },
-    404: { description: "Rider profile not found" },
+    400: errorResponse("Validation error"),
+    404: errorResponse("Rider profile not found"),
   },
 });

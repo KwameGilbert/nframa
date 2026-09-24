@@ -1,4 +1,4 @@
-import { registry } from "./registry.js";
+import { errorResponse, rateLimitedResponse, registry } from "./registry.js";
 import {
   loginSchema,
   requestOtpSchema,
@@ -15,12 +15,16 @@ import {
 const loginResponseDescription =
   "Returns the token pair along with the account, including its role-specific profile at user.profile (driver/rider/admin extension record). user.profile is null if the account hasn't completed that step yet (e.g. a brand-new signup with no driver profile created yet).";
 
+const accountBlocked = errorResponse(
+  "Account is suspended or deleted, or the admin account is not active",
+);
+
 registry.registerPath({
   method: "post",
   path: "/auth/login",
   tags: ["Auth"],
   summary: "Log in with email and password",
-  description: `Only accounts that have a password set can use this — admins get one at provisioning (POST /admin) or via /auth/password/forgot. ${loginResponseDescription}`,
+  description: `Works for any account that has a password set — admins get one at provisioning (POST /admin) or via /auth/password/forgot. Rate limited to 10 failed attempts per email per 15 minutes. ${loginResponseDescription}`,
   request: {
     body: {
       content: { "application/json": { schema: loginSchema } },
@@ -31,9 +35,10 @@ registry.registerPath({
       description: "Login successful",
       content: { "application/json": { schema: loginResponseSchema } },
     },
-    400: { description: "Validation error" },
-    401: { description: "Invalid email or password" },
-    403: { description: "Account is suspended or deleted, or the admin account is not active" },
+    400: errorResponse("Validation error"),
+    401: errorResponse("Invalid email or password"),
+    403: accountBlocked,
+    429: rateLimitedResponse,
   },
 });
 
@@ -43,7 +48,7 @@ registry.registerPath({
   tags: ["Auth"],
   summary: "Send a login OTP code (step 1 of OTP login)",
   description:
-    "For phone identifiers, if no account exists yet, role is required and this becomes a signup attempt (the account is created on successful verify). Email identifiers are login-only — admin accounts are provisioned via POST /admin, never self-signed-up.",
+    "For phone identifiers, if no account exists yet, role is required and this becomes a signup attempt (the account is created on successful verify). Email identifiers are login-only — admin accounts are provisioned via POST /admin, never self-signed-up. The code expires after 5 minutes. Rate limited to 5 codes per phone/email per 15 minutes.",
   request: {
     body: {
       content: {
@@ -72,9 +77,10 @@ registry.registerPath({
       description: "OTP sent",
       content: { "application/json": { schema: messageResponseSchema } },
     },
-    400: { description: "Validation error, or role missing when signing up" },
-    403: { description: "Account is suspended or deleted, or the admin account is not active" },
-    404: { description: "No account found for this identifier (email identifiers only)" },
+    400: errorResponse("Validation error, or role missing when signing up"),
+    403: accountBlocked,
+    404: errorResponse("No account found for this identifier (email identifiers only)"),
+    429: rateLimitedResponse,
   },
 });
 
@@ -83,7 +89,7 @@ registry.registerPath({
   path: "/auth/login/verify",
   tags: ["Auth"],
   summary: "Verify a login OTP code and get tokens (step 2 of OTP login)",
-  description: `Send the same identifier used for /auth/login/otp, plus the code. Creates the account first if this was a phone signup. ${loginResponseDescription}`,
+  description: `Send the same identifier used for /auth/login/otp, plus the code. Creates the account first if this was a phone signup. Each code allows 5 wrong attempts; rate limited to 10 failed attempts per phone/email per 15 minutes. ${loginResponseDescription}`,
   request: {
     body: {
       content: {
@@ -117,9 +123,12 @@ registry.registerPath({
       description: "Login or signup successful",
       content: { "application/json": { schema: loginResponseSchema } },
     },
-    400: { description: "Validation error, expired, or invalid code" },
-    403: { description: "Account is suspended or deleted, or the admin account is not active" },
-    404: { description: "No account found for this identifier (email identifiers only)" },
+    400: errorResponse(
+      "Validation error, or the code is missing, expired, wrong, or out of attempts",
+    ),
+    403: accountBlocked,
+    404: errorResponse("No account found for this identifier (email identifiers only)"),
+    429: rateLimitedResponse,
   },
 });
 
@@ -128,6 +137,8 @@ registry.registerPath({
   path: "/auth/refresh",
   tags: ["Auth"],
   summary: "Exchange a refresh token for a new access/refresh token pair",
+  description:
+    "The refresh token sent is revoked — store the new pair. Rate limited to 300 requests per IP per 15 minutes.",
   request: {
     body: {
       content: { "application/json": { schema: refreshTokenSchema } },
@@ -138,12 +149,12 @@ registry.registerPath({
       description: "New tokens issued",
       content: { "application/json": { schema: authTokensResponseSchema } },
     },
-    400: { description: "Validation error" },
-    401: { description: "Invalid or expired refresh token" },
-    403: {
-      description:
-        "Account is suspended or deleted, or the admin account is not active — the session is revoked",
-    },
+    400: errorResponse("Validation error"),
+    401: errorResponse("Invalid, expired, or already-used refresh token"),
+    403: errorResponse(
+      "Account is suspended or deleted, or the admin account is not active — the session is revoked",
+    ),
+    429: rateLimitedResponse,
   },
 });
 
@@ -152,6 +163,7 @@ registry.registerPath({
   path: "/auth/logout",
   tags: ["Auth"],
   summary: "Revoke a refresh token session",
+  description: "Always 204, even if the refresh token was already invalid.",
   request: {
     body: {
       content: { "application/json": { schema: refreshTokenSchema } },
@@ -159,7 +171,7 @@ registry.registerPath({
   },
   responses: {
     204: { description: "Logged out" },
-    400: { description: "Validation error" },
+    400: errorResponse("Validation error"),
   },
 });
 
@@ -169,7 +181,7 @@ registry.registerPath({
   tags: ["Auth"],
   summary: "Email a password reset code",
   description:
-    "Always responds 200 whether or not the email has an account, so it can't be used to discover accounts. Also how a provisioned admin without a password sets their first one.",
+    "Always responds 200 whether or not the email has an account, so it can't be used to discover accounts. Also how a provisioned admin without a password sets their first one. The code expires after 5 minutes. Rate limited to 5 requests per email per 15 minutes.",
   request: {
     body: {
       content: { "application/json": { schema: forgotPasswordSchema } },
@@ -180,7 +192,8 @@ registry.registerPath({
       description: "Reset code sent (if the account exists)",
       content: { "application/json": { schema: messageResponseSchema } },
     },
-    400: { description: "Validation error" },
+    400: errorResponse("Validation error"),
+    429: rateLimitedResponse,
   },
 });
 
@@ -189,7 +202,8 @@ registry.registerPath({
   path: "/auth/password/reset",
   tags: ["Auth"],
   summary: "Set a new password using the emailed reset code",
-  description: "Signs the account out of every session; log in again with the new password.",
+  description:
+    "Signs the account out of every session; log in again with the new password. Rate limited to 10 failed attempts per email per 15 minutes.",
   request: {
     body: {
       content: { "application/json": { schema: resetPasswordSchema } },
@@ -200,8 +214,11 @@ registry.registerPath({
       description: "Password reset",
       content: { "application/json": { schema: messageResponseSchema } },
     },
-    400: { description: "Validation error, expired, or invalid code" },
-    404: { description: "No account found for this email" },
+    400: errorResponse(
+      "Validation error, or the code is missing, expired, wrong, or out of attempts",
+    ),
+    404: errorResponse("No account found for this email"),
+    429: rateLimitedResponse,
   },
 });
 
@@ -211,7 +228,7 @@ registry.registerPath({
   tags: ["Auth"],
   summary: "Change the signed-in account's password",
   description:
-    "Signs out every other session and returns a fresh token pair — replace the stored tokens with these.",
+    "Signs out every other session and returns a fresh token pair — replace the stored tokens with these. Rate limited to 5 failed attempts per account per 15 minutes.",
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -223,10 +240,10 @@ registry.registerPath({
       description: "Password changed; new tokens issued",
       content: { "application/json": { schema: authTokensResponseSchema } },
     },
-    400: {
-      description:
-        "Validation error, current password incorrect, or the account has no password yet",
-    },
-    401: { description: "Missing or invalid access token" },
+    400: errorResponse(
+      "Validation error, current password incorrect, or the account has no password yet",
+    ),
+    401: errorResponse("Missing or invalid access token, or the user no longer exists"),
+    429: rateLimitedResponse,
   },
 });

@@ -49,7 +49,6 @@ async function assertAccountActive(user: User) {
     throw AppError.forbidden("Account is not active");
   }
 
-  
   if (user.role === "admin") {
     const adminUser = await adminUserModel.findById(user.id);
     if (!adminUser || adminUser.status !== "active") {
@@ -127,7 +126,7 @@ async function consumeOtp(identifier: string, purpose: string, code: string) {
     throw AppError.badRequest("Invalid verification code");
   }
 
-  await otpCodeModel.markConsumed(otp.id);
+  await otpCodeModel.consumeAllPending(identifier, purpose);
 }
 
 async function fetchProfile(account: User) {
@@ -264,8 +263,12 @@ export async function forgotPassword(req: Request, res: Response) {
   const user = await userModel.findOne({ email });
 
   // Same response either way, so this endpoint can't be used to discover which emails have accounts.
+  // Not awaited for the same reason: waiting would make real accounts respond slower, and a delivery
+  // failure would turn into a 500 only for emails that exist.
   if (user && !user.deletedAt) {
-    await sendOtp(email, "email", PASSWORD_RESET_PURPOSE, "password reset code");
+    sendOtp(email, "email", PASSWORD_RESET_PURPOSE, "password reset code").catch((err: unknown) => {
+      req.log.child({ type: "error" }).error({ err }, "Failed to send password reset code");
+    });
   }
 
   sendSuccess(res, { message: "If an account exists for this email, a reset code has been sent" });

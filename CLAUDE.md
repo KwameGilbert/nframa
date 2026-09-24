@@ -59,9 +59,19 @@ Socket.IO is attached to the raw `http.Server`, not to the Express `app` — `ap
 
 OpenAPI spec generated via `@asteasolutions/zod-to-openapi`, reusing the same zod schemas used for validation (no separate/duplicate schema definitions). One `*.docs.ts` file per resource registers its paths against a shared `registry` (`src/docs/registry.ts`); `src/docs/openapi.ts` imports all of them and generates the final document. Served at `GET /docs` (Swagger UI) and `GET /openapi.json` (raw spec) via `src/routes/docs.routes.ts`.
 
+Examples/descriptions live on the zod schemas themselves via zod's native `.meta({ description, example })` (zod-to-openapi reads it; no import-order dependency on `extendZodWithOpenApi`). Document every non-2xx response with `errorResponse(description)` from `registry.ts` so it carries the shared `{ error }` body. Response schemas are docs-only — responses aren't validated at runtime, so keep them in sync with the table columns by hand.
+
+### Auth
+
+- Login is `/auth/login` (email + password, bcrypt via `bcryptjs`) or `/auth/login/otp` → `/auth/login/verify` (SMS/email code; phone signup creates the account on verify). Every login path and `/auth/refresh` goes through `assertAccountActive` in `auth.controller.ts` (not soft-deleted, `users.status` active, and for admins `adminUsers.status` active).
+- Emails are lowercased by `emailSchema` (`src/schemas/common.schema.ts`) — use it for any email field, or lookups will miss.
+- Rate limits are in `src/middlewares/rateLimit.ts`. Per-account limiters read `req.validated`, so they must sit after `validate()` (or after `authenticate` for the per-user one). Counters are in-memory — they reset on restart and aren't shared across instances. Behind a proxy, `TRUST_PROXY` must be set or every client shares the proxy's IP bucket.
+
 ### Database
 
 Knex, not an ORM — query builder only, models hand-write queries. `knexfile.ts` at the repo root is a thin re-export of `src/database/knexConfig.ts` (the real config), split that way because Knex's CLI expects a root-level `knexfile.ts`, but `tsconfig.json`'s `rootDir: "src"` won't let application code import anything outside `src/`. Connection is built from discrete `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASSWORD`/`DB_NAME` env vars (not a `DATABASE_URL` string). Migrations live in `src/database/migrations/`; `db-schema.sql` there is a reference/documentation dump from an earlier NestJS iteration of this project, not something Knex runs — treat it as a schema reference when writing new migrations, not as ground truth (it has at least one syntax error: MySQL-style inline `ENUM(...)`, which isn't valid Postgres).
+
+`src/database/knex.ts` overrides pg's `DATE` parser to return the raw `YYYY-MM-DD` string instead of a JS `Date` (which would serialize with a time and can shift the day across timezones).
 
 ### Environment
 

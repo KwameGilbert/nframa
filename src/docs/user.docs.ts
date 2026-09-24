@@ -1,4 +1,4 @@
-import { registry } from "./registry.js";
+import { errorResponse, registry } from "./registry.js";
 import {
   createUserSchema,
   updateUserSchema,
@@ -12,7 +12,7 @@ registry.registerPath({
   tags: ["Users"],
   summary: "Create a user (admin only)",
   description:
-    "Rider/driver signup normally happens via /auth/login/otp + /auth/login/verify, not this endpoint. This exists for admins provisioning other accounts (most commonly other admins).",
+    "Rider/driver signup normally happens via /auth/login/otp + /auth/login/verify, not this endpoint. This exists for admins provisioning other accounts (most commonly other admins). Emails are stored lowercased.",
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -24,9 +24,10 @@ registry.registerPath({
       description: "User created",
       content: { "application/json": { schema: userResponseSchema } },
     },
-    400: { description: "Validation error" },
-    401: { description: "Missing or invalid access token" },
-    403: { description: "Caller is not an admin" },
+    400: errorResponse("Validation error"),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Caller is not an admin"),
+    409: errorResponse("A user with this email or phone number already exists"),
   },
 });
 
@@ -43,8 +44,8 @@ registry.registerPath({
       description: "The user",
       content: { "application/json": { schema: userResponseSchema } },
     },
-    400: { description: "Validation error" },
-    404: { description: "User not found" },
+    400: errorResponse("Validation error"),
+    404: errorResponse("User not found"),
   },
 });
 
@@ -53,6 +54,7 @@ registry.registerPath({
   path: "/users/{id}",
   tags: ["Users"],
   summary: "Update a user",
+  description: "Send only the fields to change (at least one). Emails are stored lowercased.",
   request: {
     params: userIdParamsSchema,
     body: {
@@ -64,7 +66,8 @@ registry.registerPath({
       description: "The updated user",
       content: { "application/json": { schema: userResponseSchema } },
     },
-    400: { description: "Validation error" },
-    404: { description: "User not found" },
+    400: errorResponse("Validation error"),
+    404: errorResponse("User not found"),
+    409: errorResponse("Another user already has this email or phone number"),
   },
 });

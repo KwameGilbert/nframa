@@ -1,4 +1,4 @@
-import { registry } from "./registry.js";
+import { errorResponse, registry } from "./registry.js";
 import {
   createDriverProfileSchema,
   updateDriverProfileSchema,
@@ -11,6 +11,7 @@ registry.registerPath({
   path: "/driver",
   tags: ["Driver Profiles"],
   summary: "Create a driver profile",
+  description: "The profile's code is generated, and verificationStatus starts as unverified.",
   request: {
     body: {
       content: { "application/json": { schema: createDriverProfileSchema } },
@@ -21,8 +22,8 @@ registry.registerPath({
       description: "Driver profile created",
       content: { "application/json": { schema: driverProfileResponseSchema } },
     },
-    400: { description: "Validation error" },
-    409: { description: "Driver profile already exists for this user" },
+    400: errorResponse("Validation error, or userId doesn't match an existing user"),
+    409: errorResponse("Driver profile already exists for this user"),
   },
 });
 
@@ -39,8 +40,8 @@ registry.registerPath({
       description: "The driver profile",
       content: { "application/json": { schema: driverProfileResponseSchema } },
     },
-    400: { description: "Validation error" },
-    404: { description: "Driver profile not found" },
+    400: errorResponse("Validation error"),
+    404: errorResponse("Driver profile not found"),
   },
 });
 
@@ -49,6 +50,7 @@ registry.registerPath({
   path: "/driver/{userId}",
   tags: ["Driver Profiles"],
   summary: "Update a driver profile",
+  description: "Send only the fields to change (at least one).",
   request: {
     params: driverProfileParamsSchema,
     body: {
@@ -60,7 +62,7 @@ registry.registerPath({
       description: "The updated driver profile",
       content: { "application/json": { schema: driverProfileResponseSchema } },
     },
-    400: { description: "Validation error" },
-    404: { description: "Driver profile not found" },
+    400: errorResponse("Validation error"),
+    404: errorResponse("Driver profile not found"),
   },
 });

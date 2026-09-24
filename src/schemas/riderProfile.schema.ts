@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const createRiderProfileSchema = z.object({
-  userId: z.uuid(),
+  userId: z.uuid().meta({ description: "An existing user with role rider" }),
 });
 
 export type CreateRiderProfileInput = z.infer<typeof createRiderProfileSchema>;

@@ -1,4 +1,4 @@
-import { registry } from "./registry.js";
+import { errorResponse, registry } from "./registry.js";
 import { idParamsSchema } from "../schemas/common.schema.js";
 import { createRoleSchema, updateRoleSchema, roleResponseSchema } from "../schemas/role.schema.js";
 
@@ -18,10 +18,10 @@ registry.registerPath({
       description: "Role created",
       content: { "application/json": { schema: roleResponseSchema } },
     },
-    400: { description: "Validation error" },
-    401: { description: "Missing or invalid access token" },
-    403: { description: "Caller is not an admin" },
-    409: { description: "A role with this slug or name already exists" },
+    400: errorResponse("Validation error"),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Caller is not an admin"),
+    409: errorResponse("A role with this slug or name already exists"),
   },
 });
 
@@ -38,8 +38,8 @@ registry.registerPath({
       description: "The role",
       content: { "application/json": { schema: roleResponseSchema } },
     },
-    400: { description: "Validation error" },
-    404: { description: "Role not found" },
+    400: errorResponse("Validation error"),
+    404: errorResponse("Role not found"),
   },
 });
 
@@ -48,6 +48,7 @@ registry.registerPath({
   path: "/roles/{id}",
   tags: ["Roles"],
   summary: "Update a role",
+  description: "Send only the fields to change (at least one).",
   request: {
     params: idParamsSchema,
     body: {
@@ -59,7 +60,8 @@ registry.registerPath({
       description: "The updated role",
       content: { "application/json": { schema: roleResponseSchema } },
     },
-    400: { description: "Validation error" },
-    404: { description: "Role not found" },
+    400: errorResponse("Validation error"),
+    404: errorResponse("Role not found"),
+    409: errorResponse("Another role already has this slug or name"),
   },
 });

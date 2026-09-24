@@ -43,8 +43,13 @@ class OtpCodeModel extends BaseModel<OtpCode> {
     return this.table.where({ id }).increment("attemptCount", 1);
   }
 
-  markConsumed(id: string) {
-    return this.updateById(id, { consumedAt: new Date() });
+  // Consumes every outstanding code, not just the one used — otherwise an older, still-unexpired code
+  // would become the "latest pending" and could be used a second time.
+  consumeAllPending(identifier: string, purpose: string) {
+    return this.table
+      .where({ identifier, purpose })
+      .whereNull("consumedAt")
+      .update({ consumedAt: new Date() });
   }
 }
 

@@ -1,7 +1,8 @@
 import type { Knex } from "knex";
 import { hashPassword } from "../../utils/password.js";
 
-const ADMIN_EMAIL = process.env.BOOTSTRAP_ADMIN_EMAIL ?? "admin@nframa.com";
+// Lowercased to match emailSchema, which lowercases every email the API receives.
+const ADMIN_EMAIL = (process.env.BOOTSTRAP_ADMIN_EMAIL ?? "admin@nframa.com").toLowerCase();
 const ADMIN_PASSWORD = process.env.BOOTSTRAP_ADMIN_PASSWORD;
 
 export async function seed(knex: Knex): Promise<void> {

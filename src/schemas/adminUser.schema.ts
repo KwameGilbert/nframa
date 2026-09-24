@@ -1,19 +1,30 @@
 import { z } from "zod";
 import { passwordSchema } from "./common.schema.js";
 
+const adminStatusSchema = z
+  .enum(["active", "suspended", "invited"])
+  .meta({ description: "Only active admins can log in. New admins start as invited." });
+
+const departmentSchema = z.string().min(1).meta({ example: "Operations" });
+
 export const createAdminUserSchema = z.object({
-  userId: z.uuid(),
+  userId: z
+    .uuid()
+    .meta({ description: "An existing user with role admin (create it via POST /users)" }),
   roleId: z.uuid(),
-  department: z.string().min(1).optional(),
-  password: passwordSchema.optional(),
+  department: departmentSchema.optional(),
+  password: passwordSchema.optional().meta({
+    description:
+      "Optional initial password. Without one, the admin sets it via /auth/password/forgot. 8+ characters, max 72 bytes.",
+  }),
 });
 
 export type CreateAdminUserInput = z.infer<typeof createAdminUserSchema>;
 
 export const updateAdminUserSchema = z
   .object({
-    department: z.string().min(1),
-    status: z.enum(["active", "suspended", "invited"]),
+    department: departmentSchema,
+    status: adminStatusSchema,
   })
   .partial()
   .refine((data) => Object.keys(data).length > 0, {
@@ -29,8 +40,8 @@ export const adminUserParamsSchema = z.object({
 export const adminUserResponseSchema = z.object({
   userId: z.uuid(),
   roleId: z.uuid(),
-  department: z.string().nullable(),
-  status: z.enum(["active", "suspended", "invited"]),
+  department: z.string().nullable().meta({ example: "Operations" }),
+  status: adminStatusSchema,
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
