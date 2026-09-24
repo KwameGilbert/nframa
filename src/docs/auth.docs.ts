@@ -33,7 +33,7 @@ registry.registerPath({
     },
     400: { description: "Validation error" },
     401: { description: "Invalid email or password" },
-    403: { description: "Admin account is not active" },
+    403: { description: "Account is suspended or deleted, or the admin account is not active" },
   },
 });
 
@@ -73,7 +73,7 @@ registry.registerPath({
       content: { "application/json": { schema: messageResponseSchema } },
     },
     400: { description: "Validation error, or role missing when signing up" },
-    403: { description: "Admin account is not active" },
+    403: { description: "Account is suspended or deleted, or the admin account is not active" },
     404: { description: "No account found for this identifier (email identifiers only)" },
   },
 });
@@ -118,7 +118,7 @@ registry.registerPath({
       content: { "application/json": { schema: loginResponseSchema } },
     },
     400: { description: "Validation error, expired, or invalid code" },
-    403: { description: "Admin account is not active" },
+    403: { description: "Account is suspended or deleted, or the admin account is not active" },
     404: { description: "No account found for this identifier (email identifiers only)" },
   },
 });
@@ -140,6 +140,10 @@ registry.registerPath({
     },
     400: { description: "Validation error" },
     401: { description: "Invalid or expired refresh token" },
+    403: {
+      description:
+        "Account is suspended or deleted, or the admin account is not active — the session is revoked",
+    },
   },
 });
 

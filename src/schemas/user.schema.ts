@@ -55,4 +55,5 @@ export const userResponseSchema = z.object({
   lastActiveAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
+  deletedAt: z.iso.datetime().nullable(),
 });

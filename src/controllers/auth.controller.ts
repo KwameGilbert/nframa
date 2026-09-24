@@ -43,7 +43,13 @@ function toPurpose(role: string) {
   return `${role}Login`;
 }
 
+// Deleted is a soft delete (deletedAt set), so a found row isn't enough — it must also be undeleted and active.
 async function assertAccountActive(user: User) {
+  if (user.deletedAt || user.status !== "active") {
+    throw AppError.forbidden("Account is not active");
+  }
+
+  
   if (user.role === "admin") {
     const adminUser = await adminUserModel.findById(user.id);
     if (!adminUser || adminUser.status !== "active") {
@@ -234,6 +240,8 @@ export async function refreshSession(req: Request, res: Response) {
   if (!user) {
     throw AppError.unauthorized("User no longer exists");
   }
+  // The session is already revoked above, so a deactivated account is signed out here for good.
+  await assertAccountActive(user);
 
   const tokens = await issueTokens(user.id, session.userType as "user" | "admin", user.role, req);
 
@@ -256,7 +264,7 @@ export async function forgotPassword(req: Request, res: Response) {
   const user = await userModel.findOne({ email });
 
   // Same response either way, so this endpoint can't be used to discover which emails have accounts.
-  if (user) {
+  if (user && !user.deletedAt) {
     await sendOtp(email, "email", PASSWORD_RESET_PURPOSE, "password reset code");
   }
 
