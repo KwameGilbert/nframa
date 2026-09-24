@@ -1,8 +1,12 @@
 @baseUrl = http://localhost:3000
 
+# Admin access token (from POST /auth/login). Owner-only routes also accept the owner's own token.
+@token = PASTE_ADMIN_ACCESS_TOKEN_HERE
+
 ### Create a driver user to own the vehicle
 # @name createDriverUser
 POST {{baseUrl}}/users
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -16,6 +20,7 @@ Content-Type: application/json
 ### Create vehicle
 # @name createVehicle
 POST {{baseUrl}}/vehicles
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -31,6 +36,7 @@ Content-Type: application/json
 
 ### Duplicate plate (expect 409)
 POST {{baseUrl}}/vehicles
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -44,6 +50,7 @@ Content-Type: application/json
 
 ### Missing required fields (expect 400)
 POST {{baseUrl}}/vehicles
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -53,9 +60,11 @@ Content-Type: application/json
 
 ### Get vehicle
 GET {{baseUrl}}/vehicles/{{vehicleId}}
+Authorization: Bearer {{token}}
 
 ### Update vehicle color
 PATCH {{baseUrl}}/vehicles/{{vehicleId}}
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -64,3 +73,4 @@ Content-Type: application/json
 
 ### Get a nonexistent vehicle (expect 404)
 GET {{baseUrl}}/vehicles/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}

@@ -1,8 +1,12 @@
 @baseUrl = http://localhost:3000
 
+# Admin access token (from POST /auth/login). Owner-only routes also accept the owner's own token.
+@token = PASTE_ADMIN_ACCESS_TOKEN_HERE
+
 ### Create a rider user first
 # @name createRiderUser
 POST {{baseUrl}}/users
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -15,6 +19,7 @@ Content-Type: application/json
 
 ### Create rider profile
 POST {{baseUrl}}/rider
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -23,6 +28,7 @@ Content-Type: application/json
 
 ### Duplicate rider profile (expect 409)
 POST {{baseUrl}}/rider
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -31,6 +37,7 @@ Content-Type: application/json
 
 ### Rider profile for a nonexistent user (expect 400, FK violation)
 POST {{baseUrl}}/rider
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -39,6 +46,8 @@ Content-Type: application/json
 
 ### Get rider profile
 GET {{baseUrl}}/rider/{{riderUserId}}
+Authorization: Bearer {{token}}
 
 ### Get a nonexistent rider profile (expect 404)
 GET {{baseUrl}}/rider/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}

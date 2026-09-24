@@ -33,7 +33,8 @@ registry.registerPath({
   method: "get",
   path: "/role-permissions/{id}",
   tags: ["Role Permissions"],
-  summary: "Get a role permission by id",
+  summary: "Get a role permission by id (admin only)",
+  security: [{ bearerAuth: [] }],
   request: {
     params: idParamsSchema,
   },
@@ -43,6 +44,8 @@ registry.registerPath({
       content: { "application/json": { schema: rolePermissionResponseSchema } },
     },
     400: errorResponse("Validation error"),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Caller is not an admin"),
     404: errorResponse("Role permission not found"),
   },
 });
@@ -51,8 +54,9 @@ registry.registerPath({
   method: "patch",
   path: "/role-permissions/{id}",
   tags: ["Role Permissions"],
-  summary: "Update a role permission",
+  summary: "Update a role permission (admin only)",
   description: "Replaces the whole permission object.",
+  security: [{ bearerAuth: [] }],
   request: {
     params: idParamsSchema,
     body: {
@@ -65,6 +69,8 @@ registry.registerPath({
       content: { "application/json": { schema: rolePermissionResponseSchema } },
     },
     400: errorResponse("Validation error"),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Caller is not an admin"),
     404: errorResponse("Role permission not found"),
   },
 });
@@ -73,8 +79,9 @@ registry.registerPath({
   method: "get",
   path: "/roles/{roleId}/permissions",
   tags: ["Role Permissions"],
-  summary: "List all permissions granted to a role",
+  summary: "List all permissions granted to a role (admin only)",
   description: "Returns an empty array if the role has no permissions or doesn't exist.",
+  security: [{ bearerAuth: [] }],
   request: {
     params: roleIdParamsSchema,
   },
@@ -86,5 +93,7 @@ registry.registerPath({
       },
     },
     400: errorResponse("Validation error"),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Caller is not an admin"),
   },
 });

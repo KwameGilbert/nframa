@@ -72,11 +72,13 @@ Content-Type: application/json
 
 @riderId = {{createRider.response.body.id}}
 
-### Get the created rider (no auth required)
+### Get the created rider
 GET {{baseUrl}}/users/{{riderId}}
+Authorization: Bearer {{token}}
 
-### Update the rider's profile (no auth required)
+### Update the rider's profile
 PATCH {{baseUrl}}/users/{{riderId}}
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -88,12 +90,15 @@ Content-Type: application/json
 
 ### Update with empty body (expect 400)
 PATCH {{baseUrl}}/users/{{riderId}}
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {}
 
 ### Get a nonexistent user (expect 404)
 GET {{baseUrl}}/users/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}
 
 ### Get with a malformed id (expect 400)
 GET {{baseUrl}}/users/not-a-uuid
+Authorization: Bearer {{token}}

@@ -1,5 +1,11 @@
 import { Router } from "express";
 import { validate } from "../middlewares/validate.js";
+import { authenticate } from "../middlewares/authenticate.js";
+import {
+  ownerFromUserIdBody,
+  ownerFromUserIdParam,
+  requireSelfOrAdmin,
+} from "../middlewares/authorize.js";
 import {
   createRiderProfileSchema,
   riderProfileParamsSchema,
@@ -8,9 +14,18 @@ import { createRiderProfile, getRiderProfile } from "../controllers/riderProfile
 
 export const riderProfileRouter = Router();
 
-riderProfileRouter.post("/rider", validate({ body: createRiderProfileSchema }), createRiderProfile);
+riderProfileRouter.post(
+  "/rider",
+  authenticate,
+  validate({ body: createRiderProfileSchema }),
+  requireSelfOrAdmin(ownerFromUserIdBody),
+  createRiderProfile,
+);
+
 riderProfileRouter.get(
   "/rider/:userId",
+  authenticate,
   validate({ params: riderProfileParamsSchema }),
+  requireSelfOrAdmin(ownerFromUserIdParam),
   getRiderProfile,
 );

@@ -15,9 +15,19 @@ roleRouter.post(
   validate({ body: createRoleSchema }),
   createRole,
 );
-roleRouter.get("/roles/:id", validate({ params: idParamsSchema }), getRole);
+
+roleRouter.get(
+  "/roles/:id",
+  authenticate,
+  requireRole("admin"),
+  validate({ params: idParamsSchema }),
+  getRole,
+);
+
 roleRouter.patch(
   "/roles/:id",
+  authenticate,
+  requireRole("admin"),
   validate({ params: idParamsSchema, body: updateRoleSchema }),
   updateRole,
 );

@@ -64,6 +64,8 @@ Examples/descriptions live on the zod schemas themselves via zod's native `.meta
 ### Auth
 
 - Login is `/auth/login` (email + password, bcrypt via `bcryptjs`) or `/auth/login/otp` → `/auth/login/verify` (SMS/email code; phone signup creates the account on verify). Every login path and `/auth/refresh` goes through `assertAccountActive` in `auth.controller.ts` (not soft-deleted, `users.status` active, and for admins `adminUsers.status` active).
+- Every route except `/auth/*`, `/health`, `/` and the docs requires `authenticate`. Authorization lives in `src/middlewares/authorize.ts`: `requireRole("admin")` for admin-only routes, `requireSelfOrAdmin(getOwnerId)` when the owner's id is in the request (path param/body — place it after `validate()`), and `isSelfOrAdmin(req, ownerId)` from the controller when the owner is only known after loading the record (vehicles). New routes need one of these — `authenticate` alone lets any signed-in user through.
+- Only admins can change a user's email/phone (`updateUser` enforces it): they're login identifiers, and an unverified change would turn a stolen access token into a permanent takeover via password reset.
 - Emails are lowercased by `emailSchema` (`src/schemas/common.schema.ts`) — use it for any email field, or lookups will miss.
 - Rate limits are in `src/middlewares/rateLimit.ts`. Per-account limiters read `req.validated`, so they must sit after `validate()` (or after `authenticate` for the per-user one). Counters are in-memory — they reset on restart and aren't shared across instances. Behind a proxy, `TRUST_PROXY` must be set or every client shares the proxy's IP bucket.
 

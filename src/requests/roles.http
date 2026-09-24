@@ -38,11 +38,13 @@ Content-Type: application/json
   "description": "x"
 }
 
-### Get role (no auth required)
+### Get role
 GET {{baseUrl}}/roles/{{roleId}}
+Authorization: Bearer {{token}}
 
-### Update role description (no auth required)
+### Update role description
 PATCH {{baseUrl}}/roles/{{roleId}}
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -51,9 +53,11 @@ Content-Type: application/json
 
 ### Update with empty body (expect 400)
 PATCH {{baseUrl}}/roles/{{roleId}}
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {}
 
 ### Get a nonexistent role (expect 404)
 GET {{baseUrl}}/roles/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}

@@ -29,7 +29,8 @@ registry.registerPath({
   method: "get",
   path: "/roles/{id}",
   tags: ["Roles"],
-  summary: "Get a role by id",
+  summary: "Get a role by id (admin only)",
+  security: [{ bearerAuth: [] }],
   request: {
     params: idParamsSchema,
   },
@@ -39,6 +40,8 @@ registry.registerPath({
       content: { "application/json": { schema: roleResponseSchema } },
     },
     400: errorResponse("Validation error"),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Caller is not an admin"),
     404: errorResponse("Role not found"),
   },
 });
@@ -47,8 +50,9 @@ registry.registerPath({
   method: "patch",
   path: "/roles/{id}",
   tags: ["Roles"],
-  summary: "Update a role",
+  summary: "Update a role (admin only)",
   description: "Send only the fields to change (at least one).",
+  security: [{ bearerAuth: [] }],
   request: {
     params: idParamsSchema,
     body: {
@@ -61,6 +65,8 @@ registry.registerPath({
       content: { "application/json": { schema: roleResponseSchema } },
     },
     400: errorResponse("Validation error"),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Caller is not an admin"),
     404: errorResponse("Role not found"),
     409: errorResponse("Another role already has this slug or name"),
   },

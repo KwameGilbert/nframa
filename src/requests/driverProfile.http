@@ -1,8 +1,12 @@
 @baseUrl = http://localhost:3000
 
+# Admin access token (from POST /auth/login). Owner-only routes also accept the owner's own token.
+@token = PASTE_ADMIN_ACCESS_TOKEN_HERE
+
 ### Create a driver user first
 # @name createDriverUser
 POST {{baseUrl}}/users
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -15,6 +19,7 @@ Content-Type: application/json
 
 ### Create driver profile
 POST {{baseUrl}}/driver
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -24,6 +29,7 @@ Content-Type: application/json
 
 ### Duplicate driver profile (expect 409)
 POST {{baseUrl}}/driver
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -32,6 +38,7 @@ Content-Type: application/json
 
 ### Driver profile for a nonexistent user (expect 400, FK violation)
 POST {{baseUrl}}/driver
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -40,9 +47,11 @@ Content-Type: application/json
 
 ### Get driver profile
 GET {{baseUrl}}/driver/{{driverUserId}}
+Authorization: Bearer {{token}}
 
 ### Update driver profile (go online)
 PATCH {{baseUrl}}/driver/{{driverUserId}}
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -52,3 +61,4 @@ Content-Type: application/json
 
 ### Get a nonexistent driver profile (expect 404)
 GET {{baseUrl}}/driver/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}

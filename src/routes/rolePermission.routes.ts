@@ -24,18 +24,27 @@ rolePermissionRouter.post(
   validate({ body: createRolePermissionSchema }),
   createRolePermission,
 );
+
 rolePermissionRouter.get(
   "/role-permissions/:id",
+  authenticate,
+  requireRole("admin"),
   validate({ params: idParamsSchema }),
   getRolePermission,
 );
+
 rolePermissionRouter.patch(
   "/role-permissions/:id",
+  authenticate,
+  requireRole("admin"),
   validate({ params: idParamsSchema, body: updateRolePermissionSchema }),
   updateRolePermission,
 );
+
 rolePermissionRouter.get(
   "/roles/:roleId/permissions",
+  authenticate,
+  requireRole("admin"),
   validate({ params: roleIdParamsSchema }),
   listRolePermissions,
 );

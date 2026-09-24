@@ -39,14 +39,17 @@ Content-Type: application/json
 
 @permissionId = {{createPermission.response.body.id}}
 
-### Get by id (no auth required)
+### Get by id
 GET {{baseUrl}}/role-permissions/{{permissionId}}
+Authorization: Bearer {{token}}
 
-### List all permissions for the role (no auth required)
+### List all permissions for the role
 GET {{baseUrl}}/roles/{{roleId}}/permissions
+Authorization: Bearer {{token}}
 
-### Update the permission (no auth required)
+### Update the permission
 PATCH {{baseUrl}}/role-permissions/{{permissionId}}
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -55,3 +58,4 @@ Content-Type: application/json
 
 ### Get a nonexistent permission (expect 404)
 GET {{baseUrl}}/role-permissions/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}
