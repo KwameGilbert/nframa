@@ -29,6 +29,7 @@ import {
   forgotPassword,
   resetPassword,
   changePassword,
+  getMe,
 } from "../controllers/auth.controller.js";
 
 export const authRouter = Router();
@@ -55,6 +56,7 @@ authRouter.post(
   validate({ body: refreshTokenSchema }),
   refreshSession,
 );
+authRouter.get("/auth/me", authenticate, getMe);
 authRouter.post("/auth/logout", validate({ body: refreshTokenSchema }), logout);
 authRouter.post(
   "/auth/password/forgot",

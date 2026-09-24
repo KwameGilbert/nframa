@@ -35,6 +35,11 @@ export async function updateAdminUser(req: Request, res: Response) {
   const { userId } = req.validated.params as { userId: string };
   const input = req.validated.body as UpdateAdminUserInput;
 
+  // Stops an admin locking themselves out, e.g. the only super admin moving to a lesser role.
+  if (req.auth?.id === userId && (input.roleId !== undefined || input.status !== undefined)) {
+    throw AppError.forbidden("You can't change your own role or status");
+  }
+
   const adminUser = await adminUserModel.updateAdminUser(userId, input);
 
   if (!adminUser) {

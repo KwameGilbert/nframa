@@ -1,49 +1,38 @@
 import type { Request, Response } from "express";
 import { rolePermissionModel } from "../models/rolePermission.model.js";
-import { AppError } from "../utils/AppError.js";
-import { sendCreated, sendSuccess } from "../utils/response.js";
+import { assertNotSystemRole, findRoleOrThrow } from "./role.controller.js";
+import { sendSuccess } from "../utils/response.js";
 import type {
-  CreateRolePermissionInput,
-  UpdateRolePermissionInput,
+  RoleModuleParams,
+  SetModulePermissionInput,
 } from "../schemas/rolePermission.schema.js";
 
-export async function createRolePermission(req: Request, res: Response) {
-  const input = req.validated.body as CreateRolePermissionInput;
+// Per-module management of a role's permissions. Each handler returns the role's full permission map
+// after the change, so the client doesn't need a second request to refresh.
 
-  const rolePermission = await rolePermissionModel.createRolePermission(input);
-
-  sendCreated(res, rolePermission);
-}
-
-export async function getRolePermission(req: Request, res: Response) {
+export async function getRolePermissions(req: Request, res: Response) {
   const { id } = req.validated.params as { id: string };
 
-  const rolePermission = await rolePermissionModel.findById(id);
+  await findRoleOrThrow(id);
 
-  if (!rolePermission) {
-    throw AppError.notFound(`Role permission not found: ${id}`);
-  }
-
-  sendSuccess(res, rolePermission);
+  sendSuccess(res, await rolePermissionModel.findByRole(id));
 }
 
-export async function updateRolePermission(req: Request, res: Response) {
-  const { id } = req.validated.params as { id: string };
-  const input = req.validated.body as UpdateRolePermissionInput;
+export async function setRoleModulePermission(req: Request, res: Response) {
+  const { id, module } = req.validated.params as RoleModuleParams;
+  const actions = req.validated.body as SetModulePermissionInput;
 
-  const rolePermission = await rolePermissionModel.updateRolePermission(id, input);
+  assertNotSystemRole(await findRoleOrThrow(id));
+  await rolePermissionModel.setModule(id, module, actions);
 
-  if (!rolePermission) {
-    throw AppError.notFound(`Role permission not found: ${id}`);
-  }
-
-  sendSuccess(res, rolePermission);
+  sendSuccess(res, await rolePermissionModel.findByRole(id));
 }
 
-export async function listRolePermissions(req: Request, res: Response) {
-  const { roleId } = req.validated.params as { roleId: string };
+export async function removeRoleModulePermission(req: Request, res: Response) {
+  const { id, module } = req.validated.params as RoleModuleParams;
 
-  const rolePermissions = await rolePermissionModel.findByRoleId(roleId);
+  assertNotSystemRole(await findRoleOrThrow(id));
+  await rolePermissionModel.removeModule(id, module);
 
-  sendSuccess(res, rolePermissions);
+  sendSuccess(res, await rolePermissionModel.findByRole(id));
 }

@@ -9,11 +9,12 @@ import {
   changePasswordSchema,
   authTokensResponseSchema,
   loginResponseSchema,
+  accountResponseSchema,
   messageResponseSchema,
 } from "../schemas/auth.schema.js";
 
 const loginResponseDescription =
-  "Returns the token pair along with the account, including its role-specific profile at user.profile (driver/rider/admin extension record). user.profile is null if the account hasn't completed that step yet (e.g. a brand-new signup with no driver profile created yet).";
+  "Returns the token pair along with the account, including its role-specific profile at user.profile (driver/rider/admin extension record). user.profile is null if the account hasn't completed that step yet (e.g. a brand-new signup with no driver profile created yet). For admins, user.adminRole and user.permissions say what they can access.";
 
 const accountBlocked = errorResponse(
   "Account is suspended or deleted, or the admin account is not active",
@@ -155,6 +156,24 @@ registry.registerPath({
       "Account is suspended or deleted, or the admin account is not active — the session is revoked",
     ),
     429: rateLimitedResponse,
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/auth/me",
+  tags: ["Auth"],
+  summary: "Get the signed-in account",
+  description:
+    "Same account shape as login returns (profile, and for admins adminRole + permissions) — use it to refresh the admin app's view of what the user can do after roles change.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "The signed-in account",
+      content: { "application/json": { schema: accountResponseSchema } },
+    },
+    401: errorResponse("Missing or invalid access token, or the user no longer exists"),
+    403: accountBlocked,
   },
 });
 

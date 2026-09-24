@@ -20,6 +20,8 @@ export const openApiDocument = generator.generateDocument({
     description: [
       "**Authentication:** log in via `/auth/login` (email + password) or `/auth/login/otp` → `/auth/login/verify` (SMS/email code). Send the returned `accessToken` as `Authorization: Bearer <token>`; it expires after 15 minutes, so exchange the `refreshToken` at `/auth/refresh` for a new pair.",
       "",
+      "**Permissions:** admin access is per module (`settings`, `roles`, `users`) with `create` / `read` / `update` / `delete` actions, granted through the admin's role (see Roles). `roles` also covers admin accounts (`/admin`, and admin users under `/users`); `users` covers riders, drivers and vehicles. Endpoints that need one say so, e.g. *Needs roles: update*; without it you get `403`. Riders and drivers can always act on their own records. `super-admin` is a system role with every permission and can't be edited or deleted.",
+      "",
       '**Errors:** every non-2xx response has the body `{ "error": "<message>" }`.',
       "",
       "**Rate limits:** auth endpoints return `429` when a limit is hit; the `RateLimit` / `RateLimit-Policy` response headers show the limit and when it resets.",

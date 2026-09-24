@@ -1,9 +1,10 @@
 @baseUrl = http://localhost:3000
 
-# POST /role-permissions is admin-only - see users.http for how to get a token.
+# Per-module permission management (the alternative to PATCHing a role's whole permission set).
+# Needs the roles permission — a super-admin token has every permission. Get one via POST /auth/login.
 @token = PASTE_ADMIN_ACCESS_TOKEN_HERE
 
-### Create a role for the permission to reference
+### Create a role to manage
 # @name createRole
 POST {{baseUrl}}/roles
 Authorization: Bearer {{token}}
@@ -12,50 +13,57 @@ Content-Type: application/json
 {
   "slug": "support-agent",
   "name": "Support Agent",
-  "description": "Read-only support access"
+  "description": "Handles support tickets"
 }
 
 @roleId = {{createRole.response.body.id}}
 
 ### No token at all (expect 401)
-POST {{baseUrl}}/role-permissions
-Content-Type: application/json
+GET {{baseUrl}}/roles/{{roleId}}/permissions
 
-{
-  "roleId": "{{roleId}}",
-  "permission": { "resource": "users", "actions": ["read"] }
-}
-
-### Create a role permission
-# @name createPermission
-POST {{baseUrl}}/role-permissions
-Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{
-  "roleId": "{{roleId}}",
-  "permission": { "resource": "users", "actions": ["read"] }
-}
-
-@permissionId = {{createPermission.response.body.id}}
-
-### Get by id
-GET {{baseUrl}}/role-permissions/{{permissionId}}
-Authorization: Bearer {{token}}
-
-### List all permissions for the role
+### Get the role's permissions (empty so far)
 GET {{baseUrl}}/roles/{{roleId}}/permissions
 Authorization: Bearer {{token}}
 
-### Update the permission
-PATCH {{baseUrl}}/role-permissions/{{permissionId}}
+### Grant users: read + update (create/delete default to false)
+PUT {{baseUrl}}/roles/{{roleId}}/permissions/users
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-  "permission": { "resource": "users", "actions": ["read", "write"] }
+  "read": true,
+  "update": true
 }
 
-### Get a nonexistent permission (expect 404)
-GET {{baseUrl}}/role-permissions/00000000-0000-0000-0000-000000000000
+### Grant settings: read
+PUT {{baseUrl}}/roles/{{roleId}}/permissions/settings
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "read": true
+}
+
+### Unknown module (expect 400)
+PUT {{baseUrl}}/roles/{{roleId}}/permissions/not-a-module
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "read": true
+}
+
+### Remove settings access
+DELETE {{baseUrl}}/roles/{{roleId}}/permissions/settings
+Authorization: Bearer {{token}}
+
+### Setting every action false also removes the module
+PUT {{baseUrl}}/roles/{{roleId}}/permissions/users
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{}
+
+### Permissions for a nonexistent role (expect 404)
+GET {{baseUrl}}/roles/00000000-0000-0000-0000-000000000000/permissions
 Authorization: Bearer {{token}}

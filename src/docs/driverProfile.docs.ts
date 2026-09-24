@@ -10,9 +10,9 @@ registry.registerPath({
   method: "post",
   path: "/driver",
   tags: ["Driver Profiles"],
-  summary: "Create a driver profile (for yourself, or any user as an admin)",
+  summary: "Create a driver profile (for yourself, or anyone with users: create)",
   description:
-    "userId must be the caller's own id unless the caller is an admin. The profile's code is generated, and verificationStatus starts as unverified.",
+    "userId must be the caller's own id unless the caller has users: create. The profile's code is generated, and verificationStatus starts as unverified.",
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -26,7 +26,7 @@ registry.registerPath({
     },
     400: errorResponse("Validation error, or userId doesn't match an existing user"),
     401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("userId isn't the caller and the caller isn't an admin"),
+    403: errorResponse("userId isn't the caller and the caller lacks users: create"),
     409: errorResponse("Driver profile already exists for this user"),
   },
 });
@@ -35,7 +35,7 @@ registry.registerPath({
   method: "get",
   path: "/driver/{userId}",
   tags: ["Driver Profiles"],
-  summary: "Get a driver profile by user id (the driver themselves, or an admin)",
+  summary: "Get a driver profile by user id (the driver themselves, or an admin with users: read)",
   security: [{ bearerAuth: [] }],
   request: {
     params: driverProfileParamsSchema,
@@ -47,7 +47,7 @@ registry.registerPath({
     },
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("Caller is neither this driver nor an admin"),
+    403: errorResponse("Caller isn't this driver and lacks users: read"),
     404: errorResponse("Driver profile not found"),
   },
 });
@@ -56,7 +56,7 @@ registry.registerPath({
   method: "patch",
   path: "/driver/{userId}",
   tags: ["Driver Profiles"],
-  summary: "Update a driver profile (the driver themselves, or an admin)",
+  summary: "Update a driver profile (the driver themselves, or an admin with users: update)",
   description: "Send only the fields to change (at least one).",
   security: [{ bearerAuth: [] }],
   request: {
@@ -72,7 +72,7 @@ registry.registerPath({
     },
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("Caller is neither this driver nor an admin"),
+    403: errorResponse("Caller isn't this driver and lacks users: update"),
     404: errorResponse("Driver profile not found"),
   },
 });

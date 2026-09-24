@@ -1,17 +1,25 @@
 import { Router } from "express";
 import { validate } from "../middlewares/validate.js";
 import { authenticate } from "../middlewares/authenticate.js";
-import { requireRole } from "../middlewares/authorize.js";
+import { requirePermission } from "../middlewares/authorize.js";
 import { idParamsSchema } from "../schemas/common.schema.js";
 import { createRoleSchema, updateRoleSchema } from "../schemas/role.schema.js";
-import { createRole, getRole, updateRole } from "../controllers/role.controller.js";
+import {
+  listRoles,
+  getRole,
+  createRole,
+  updateRole,
+  deleteRole,
+} from "../controllers/role.controller.js";
 
 export const roleRouter = Router();
+
+roleRouter.get("/roles", authenticate, requirePermission("roles", "read"), listRoles);
 
 roleRouter.post(
   "/roles",
   authenticate,
-  requireRole("admin"),
+  requirePermission("roles", "create"),
   validate({ body: createRoleSchema }),
   createRole,
 );
@@ -19,7 +27,7 @@ roleRouter.post(
 roleRouter.get(
   "/roles/:id",
   authenticate,
-  requireRole("admin"),
+  requirePermission("roles", "read"),
   validate({ params: idParamsSchema }),
   getRole,
 );
@@ -27,7 +35,15 @@ roleRouter.get(
 roleRouter.patch(
   "/roles/:id",
   authenticate,
-  requireRole("admin"),
+  requirePermission("roles", "update"),
   validate({ params: idParamsSchema, body: updateRoleSchema }),
   updateRole,
+);
+
+roleRouter.delete(
+  "/roles/:id",
+  authenticate,
+  requirePermission("roles", "delete"),
+  validate({ params: idParamsSchema }),
+  deleteRole,
 );

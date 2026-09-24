@@ -25,6 +25,7 @@ export const updateAdminUserSchema = z
   .object({
     department: departmentSchema,
     status: adminStatusSchema,
+    roleId: z.uuid().meta({ description: "Move the admin to another role" }),
   })
   .partial()
   .refine((data) => Object.keys(data).length > 0, {

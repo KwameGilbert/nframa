@@ -1,50 +1,40 @@
 import { Router } from "express";
 import { validate } from "../middlewares/validate.js";
 import { authenticate } from "../middlewares/authenticate.js";
-import { requireRole } from "../middlewares/authorize.js";
+import { requirePermission } from "../middlewares/authorize.js";
 import { idParamsSchema } from "../schemas/common.schema.js";
 import {
-  createRolePermissionSchema,
-  updateRolePermissionSchema,
-  roleIdParamsSchema,
+  roleModuleParamsSchema,
+  setModulePermissionSchema,
 } from "../schemas/rolePermission.schema.js";
 import {
-  createRolePermission,
-  getRolePermission,
-  updateRolePermission,
-  listRolePermissions,
+  getRolePermissions,
+  setRoleModulePermission,
+  removeRoleModulePermission,
 } from "../controllers/rolePermission.controller.js";
 
 export const rolePermissionRouter = Router();
 
-rolePermissionRouter.post(
-  "/role-permissions",
-  authenticate,
-  requireRole("admin"),
-  validate({ body: createRolePermissionSchema }),
-  createRolePermission,
-);
-
 rolePermissionRouter.get(
-  "/role-permissions/:id",
+  "/roles/:id/permissions",
   authenticate,
-  requireRole("admin"),
+  requirePermission("roles", "read"),
   validate({ params: idParamsSchema }),
-  getRolePermission,
+  getRolePermissions,
 );
 
-rolePermissionRouter.patch(
-  "/role-permissions/:id",
+rolePermissionRouter.put(
+  "/roles/:id/permissions/:module",
   authenticate,
-  requireRole("admin"),
-  validate({ params: idParamsSchema, body: updateRolePermissionSchema }),
-  updateRolePermission,
+  requirePermission("roles", "update"),
+  validate({ params: roleModuleParamsSchema, body: setModulePermissionSchema }),
+  setRoleModulePermission,
 );
 
-rolePermissionRouter.get(
-  "/roles/:roleId/permissions",
+rolePermissionRouter.delete(
+  "/roles/:id/permissions/:module",
   authenticate,
-  requireRole("admin"),
-  validate({ params: roleIdParamsSchema }),
-  listRolePermissions,
+  requirePermission("roles", "update"),
+  validate({ params: roleModuleParamsSchema }),
+  removeRoleModulePermission,
 );

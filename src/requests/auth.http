@@ -171,6 +171,10 @@ Content-Type: application/json
 
 @accessToken = {{passwordLogin.response.body.accessToken}}
 
+### Who am I — account, profile, and (for admins) adminRole + permissions
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{accessToken}}
+
 ### Change password while signed in (returns a fresh token pair; other sessions are signed out)
 POST {{baseUrl}}/auth/password/change
 Authorization: Bearer {{accessToken}}

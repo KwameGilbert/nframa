@@ -4,7 +4,7 @@ import { authenticate } from "../middlewares/authenticate.js";
 import {
   ownerFromUserIdBody,
   ownerFromUserIdParam,
-  requireSelfOrAdmin,
+  requireSelfOrPermission,
 } from "../middlewares/authorize.js";
 import {
   createRiderProfileSchema,
@@ -18,7 +18,7 @@ riderProfileRouter.post(
   "/rider",
   authenticate,
   validate({ body: createRiderProfileSchema }),
-  requireSelfOrAdmin(ownerFromUserIdBody),
+  requireSelfOrPermission(ownerFromUserIdBody, "users", "create"),
   createRiderProfile,
 );
 
@@ -26,6 +26,6 @@ riderProfileRouter.get(
   "/rider/:userId",
   authenticate,
   validate({ params: riderProfileParamsSchema }),
-  requireSelfOrAdmin(ownerFromUserIdParam),
+  requireSelfOrPermission(ownerFromUserIdParam, "users", "read"),
   getRiderProfile,
 );

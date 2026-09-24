@@ -10,9 +10,9 @@ registry.registerPath({
   method: "post",
   path: "/vehicles",
   tags: ["Vehicles"],
-  summary: "Create a vehicle (for yourself, or any user as an admin)",
+  summary: "Create a vehicle (for yourself, or anyone with users: create)",
   description:
-    "carOwnerUserId must be the caller's own id unless the caller is an admin. New vehicles start with status active and isVerified false.",
+    "carOwnerUserId must be the caller's own id unless the caller has users: create. New vehicles start with status active and isVerified false.",
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -26,7 +26,7 @@ registry.registerPath({
     },
     400: errorResponse("Validation error, or carOwnerUserId doesn't match an existing user"),
     401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("carOwnerUserId isn't the caller and the caller isn't an admin"),
+    403: errorResponse("carOwnerUserId isn't the caller and the caller lacks users: create"),
     409: errorResponse("A vehicle with this plate already exists"),
   },
 });
@@ -35,7 +35,7 @@ registry.registerPath({
   method: "get",
   path: "/vehicles/{id}",
   tags: ["Vehicles"],
-  summary: "Get a vehicle by id (its owner, or an admin)",
+  summary: "Get a vehicle by id (its owner, or an admin with users: read)",
   security: [{ bearerAuth: [] }],
   request: {
     params: idParamsSchema,
@@ -47,7 +47,7 @@ registry.registerPath({
     },
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("Caller doesn't own this vehicle and isn't an admin"),
+    403: errorResponse("Caller doesn't own this vehicle and lacks users: read"),
     404: errorResponse("Vehicle not found"),
   },
 });
@@ -56,7 +56,7 @@ registry.registerPath({
   method: "patch",
   path: "/vehicles/{id}",
   tags: ["Vehicles"],
-  summary: "Update a vehicle (its owner, or an admin)",
+  summary: "Update a vehicle (its owner, or an admin with users: update)",
   description: "Send only the fields to change (at least one).",
   security: [{ bearerAuth: [] }],
   request: {
@@ -72,7 +72,7 @@ registry.registerPath({
     },
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("Caller doesn't own this vehicle and isn't an admin"),
+    403: errorResponse("Caller doesn't own this vehicle and lacks users: update"),
     404: errorResponse("Vehicle not found"),
     409: errorResponse("Another vehicle already has this plate"),
   },

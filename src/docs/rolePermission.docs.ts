@@ -1,99 +1,82 @@
 import { errorResponse, registry } from "./registry.js";
 import { idParamsSchema } from "../schemas/common.schema.js";
+import { permissionsSchema } from "../schemas/role.schema.js";
 import {
-  createRolePermissionSchema,
-  updateRolePermissionSchema,
-  roleIdParamsSchema,
-  rolePermissionResponseSchema,
+  roleModuleParamsSchema,
+  setModulePermissionSchema,
 } from "../schemas/rolePermission.schema.js";
 
-registry.registerPath({
-  method: "post",
-  path: "/role-permissions",
-  tags: ["Role Permissions"],
-  summary: "Grant a permission to a role (admin only)",
-  security: [{ bearerAuth: [] }],
-  request: {
-    body: {
-      content: { "application/json": { schema: createRolePermissionSchema } },
-    },
-  },
-  responses: {
-    201: {
-      description: "Role permission created",
-      content: { "application/json": { schema: rolePermissionResponseSchema } },
-    },
-    400: errorResponse("Validation error, or roleId doesn't match an existing role"),
-    401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("Caller is not an admin"),
-  },
-});
+// Per-module management — the alternative to sending a role's whole permission set to PATCH /roles/{id}.
+
+const unauthorized = errorResponse("Missing or invalid access token");
+const systemRole = errorResponse(
+  "Caller lacks roles: update, or the role is a system role (can't be edited)",
+);
+const updatedPermissions = {
+  description: "The role's full permission set after the change",
+  content: { "application/json": { schema: permissionsSchema } },
+};
 
 registry.registerPath({
   method: "get",
-  path: "/role-permissions/{id}",
+  path: "/roles/{id}/permissions",
   tags: ["Role Permissions"],
-  summary: "Get a role permission by id (admin only)",
+  summary: "Get a role's permissions",
+  description: "Needs roles: read.",
   security: [{ bearerAuth: [] }],
   request: {
     params: idParamsSchema,
-  },
-  responses: {
-    200: {
-      description: "The role permission",
-      content: { "application/json": { schema: rolePermissionResponseSchema } },
-    },
-    400: errorResponse("Validation error"),
-    401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("Caller is not an admin"),
-    404: errorResponse("Role permission not found"),
-  },
-});
-
-registry.registerPath({
-  method: "patch",
-  path: "/role-permissions/{id}",
-  tags: ["Role Permissions"],
-  summary: "Update a role permission (admin only)",
-  description: "Replaces the whole permission object.",
-  security: [{ bearerAuth: [] }],
-  request: {
-    params: idParamsSchema,
-    body: {
-      content: { "application/json": { schema: updateRolePermissionSchema } },
-    },
-  },
-  responses: {
-    200: {
-      description: "The updated role permission",
-      content: { "application/json": { schema: rolePermissionResponseSchema } },
-    },
-    400: errorResponse("Validation error"),
-    401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("Caller is not an admin"),
-    404: errorResponse("Role permission not found"),
-  },
-});
-
-registry.registerPath({
-  method: "get",
-  path: "/roles/{roleId}/permissions",
-  tags: ["Role Permissions"],
-  summary: "List all permissions granted to a role (admin only)",
-  description: "Returns an empty array if the role has no permissions or doesn't exist.",
-  security: [{ bearerAuth: [] }],
-  request: {
-    params: roleIdParamsSchema,
   },
   responses: {
     200: {
       description: "The role's permissions",
-      content: {
-        "application/json": { schema: rolePermissionResponseSchema.array() },
-      },
+      content: { "application/json": { schema: permissionsSchema } },
     },
     400: errorResponse("Validation error"),
-    401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("Caller is not an admin"),
+    401: unauthorized,
+    403: errorResponse("Caller lacks roles: read"),
+    404: errorResponse("Role not found"),
+  },
+});
+
+registry.registerPath({
+  method: "put",
+  path: "/roles/{id}/permissions/{module}",
+  tags: ["Role Permissions"],
+  summary: "Set a role's access to one module",
+  description:
+    "Sets all four actions for the module; ones left out are false. All false removes the module from the role. Needs roles: update.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: roleModuleParamsSchema,
+    body: {
+      content: { "application/json": { schema: setModulePermissionSchema } },
+    },
+  },
+  responses: {
+    200: updatedPermissions,
+    400: errorResponse("Validation error (e.g. an unknown module)"),
+    401: unauthorized,
+    403: systemRole,
+    404: errorResponse("Role not found"),
+  },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/roles/{id}/permissions/{module}",
+  tags: ["Role Permissions"],
+  summary: "Remove a role's access to one module",
+  description: "Needs roles: update.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: roleModuleParamsSchema,
+  },
+  responses: {
+    200: updatedPermissions,
+    400: errorResponse("Validation error (e.g. an unknown module)"),
+    401: unauthorized,
+    403: systemRole,
+    404: errorResponse("Role not found"),
   },
 });

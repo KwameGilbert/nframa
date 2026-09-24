@@ -3,6 +3,7 @@ import { userResponseSchema } from "./user.schema.js";
 import { driverProfileResponseSchema } from "./driverProfile.schema.js";
 import { riderProfileResponseSchema } from "./riderProfile.schema.js";
 import { adminUserResponseSchema } from "./adminUser.schema.js";
+import { permissionsSchema } from "./role.schema.js";
 import { emailSchema, passwordSchema, phoneCountryCodeSchema } from "./common.schema.js";
 
 const otpCodeSchema = z
@@ -94,14 +95,30 @@ export const authTokensResponseSchema = z.object({
   }),
 });
 
-export const loginResponseSchema = authTokensResponseSchema.extend({
-  user: userResponseSchema.extend({
-    profile: z
-      .union([driverProfileResponseSchema, riderProfileResponseSchema, adminUserResponseSchema])
-      .nullable()
-      .meta({
-        description:
-          "Role-specific record: driver profile, rider profile, or admin record. null until it's been created.",
-      }),
+// The signed-in account as returned by login and GET /auth/me.
+export const accountResponseSchema = userResponseSchema.extend({
+  profile: z
+    .union([driverProfileResponseSchema, riderProfileResponseSchema, adminUserResponseSchema])
+    .nullable()
+    .meta({
+      description:
+        "Role-specific record: driver profile, rider profile, or admin record. null until it's been created.",
+    }),
+  adminRole: z
+    .object({
+      id: z.uuid(),
+      slug: z.string().meta({ example: "super-admin" }),
+      name: z.string().meta({ example: "Super Admin" }),
+      isSystem: z.boolean(),
+    })
+    .nullable()
+    .meta({ description: "The admin's role; null for riders and drivers" }),
+  permissions: permissionsSchema.meta({
+    description:
+      "What this account can do in the admin system, per module — use it to show/hide admin screens. {} for riders, drivers, and admins who aren't active.",
   }),
+});
+
+export const loginResponseSchema = authTokensResponseSchema.extend({
+  user: accountResponseSchema,
 });

@@ -4,7 +4,7 @@ import { authenticate } from "../middlewares/authenticate.js";
 import {
   ownerFromUserIdBody,
   ownerFromUserIdParam,
-  requireSelfOrAdmin,
+  requireSelfOrPermission,
 } from "../middlewares/authorize.js";
 import {
   createDriverProfileSchema,
@@ -23,7 +23,7 @@ driverProfileRouter.post(
   "/driver",
   authenticate,
   validate({ body: createDriverProfileSchema }),
-  requireSelfOrAdmin(ownerFromUserIdBody),
+  requireSelfOrPermission(ownerFromUserIdBody, "users", "create"),
   createDriverProfile,
 );
 
@@ -31,7 +31,7 @@ driverProfileRouter.get(
   "/driver/:userId",
   authenticate,
   validate({ params: driverProfileParamsSchema }),
-  requireSelfOrAdmin(ownerFromUserIdParam),
+  requireSelfOrPermission(ownerFromUserIdParam, "users", "read"),
   getDriverProfile,
 );
 
@@ -39,6 +39,6 @@ driverProfileRouter.patch(
   "/driver/:userId",
   authenticate,
   validate({ params: driverProfileParamsSchema, body: updateDriverProfileSchema }),
-  requireSelfOrAdmin(ownerFromUserIdParam),
+  requireSelfOrPermission(ownerFromUserIdParam, "users", "update"),
   updateDriverProfile,
 );

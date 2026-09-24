@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { validate } from "../middlewares/validate.js";
 import { authenticate } from "../middlewares/authenticate.js";
-import { requireRole } from "../middlewares/authorize.js";
+import { requirePermission } from "../middlewares/authorize.js";
 import {
   createAdminUserSchema,
   updateAdminUserSchema,
@@ -18,7 +18,7 @@ export const adminUserRouter = Router();
 adminUserRouter.post(
   "/admin",
   authenticate,
-  requireRole("admin"),
+  requirePermission("roles", "create"),
   validate({ body: createAdminUserSchema }),
   createAdminUser,
 );
@@ -26,7 +26,7 @@ adminUserRouter.post(
 adminUserRouter.get(
   "/admin/:userId",
   authenticate,
-  requireRole("admin"),
+  requirePermission("roles", "read"),
   validate({ params: adminUserParamsSchema }),
   getAdminUser,
 );
@@ -34,7 +34,7 @@ adminUserRouter.get(
 adminUserRouter.patch(
   "/admin/:userId",
   authenticate,
-  requireRole("admin"),
+  requirePermission("roles", "update"),
   validate({ params: adminUserParamsSchema, body: updateAdminUserSchema }),
   updateAdminUser,
 );

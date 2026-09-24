@@ -1,29 +1,18 @@
 import { z } from "zod";
+import { moduleActionsInputSchema, moduleSchema } from "./role.schema.js";
 
-const permissionValue = z.record(z.string(), z.unknown()).meta({
-  description: "Free-form JSON object describing what the role can do",
-  example: { finance: { create: false, read: true, update: true, delete: false } },
-});
+// Per-module management of a role's permissions — the alternative to sending the whole set to PATCH /roles/:id.
 
-export const createRolePermissionSchema = z.object({
-  roleId: z.uuid(),
-  permission: permissionValue,
-});
-
-export type CreateRolePermissionInput = z.infer<typeof createRolePermissionSchema>;
-
-export const updateRolePermissionSchema = z.object({
-  permission: permissionValue,
-});
-
-export type UpdateRolePermissionInput = z.infer<typeof updateRolePermissionSchema>;
-
-export const roleIdParamsSchema = z.object({
-  roleId: z.uuid(),
-});
-
-export const rolePermissionResponseSchema = z.object({
+export const roleModuleParamsSchema = z.object({
   id: z.uuid(),
-  roleId: z.uuid(),
-  permission: permissionValue,
+  module: moduleSchema,
 });
+
+export type RoleModuleParams = z.infer<typeof roleModuleParamsSchema>;
+
+export const setModulePermissionSchema = moduleActionsInputSchema.meta({
+  description: "Actions left out default to false. All false removes the module from the role.",
+  example: { create: false, read: true, update: true, delete: false },
+});
+
+export type SetModulePermissionInput = z.infer<typeof setModulePermissionSchema>;

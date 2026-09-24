@@ -79,13 +79,31 @@ Content-Type: application/json
   "status": "active"
 }
 
-### Attempt to change roleId via update (roleId is stripped -> expect "at least one field" 400)
+### Move the admin to another role (takes effect on their next request)
+PATCH {{baseUrl}}/admin/{{adminUserId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "roleId": "{{roleId}}"
+}
+
+### Move the admin to a nonexistent role (expect 400, FK violation)
 PATCH {{baseUrl}}/admin/{{adminUserId}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
   "roleId": "00000000-0000-0000-0000-000000000000"
+}
+
+### Change your own role (expect 403). Replace with your own user id — admins can't change their own role or status.
+PATCH {{baseUrl}}/admin/PASTE_YOUR_OWN_USER_ID
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "suspended"
 }
 
 ### Get a nonexistent admin (expect 404)

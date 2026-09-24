@@ -1,19 +1,18 @@
 @baseUrl = http://localhost:3000
 
-# POST /roles is admin-only now - see users.http for how to get an admin token.
+# Role endpoints need the roles permission — a super-admin token has every permission.
+# Get one via POST /auth/login (see auth.http).
 @token = PASTE_ADMIN_ACCESS_TOKEN_HERE
 
 ### No token at all (expect 401)
-POST {{baseUrl}}/roles
-Content-Type: application/json
+GET {{baseUrl}}/roles
 
-{
-  "slug": "support-admin",
-  "name": "Support Admin",
-  "description": "Handles support tickets"
-}
+### List roles with permissions and assigned admin counts
+# @name listRoles
+GET {{baseUrl}}/roles
+Authorization: Bearer {{token}}
 
-### Create role
+### Create a role with its permissions (actions left out default to false)
 # @name createRole
 POST {{baseUrl}}/roles
 Authorization: Bearer {{token}}
@@ -22,7 +21,11 @@ Content-Type: application/json
 {
   "slug": "support-admin",
   "name": "Support Admin",
-  "description": "Handles support tickets"
+  "description": "Views and edits rider and driver accounts",
+  "permissions": {
+    "users": { "read": true, "update": true },
+    "settings": { "read": true }
+  }
 }
 
 @roleId = {{createRole.response.body.id}}
@@ -38,17 +41,40 @@ Content-Type: application/json
   "description": "x"
 }
 
+### Unknown module (expect 400)
+POST {{baseUrl}}/roles
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "slug": "bad-role",
+  "name": "Bad Role",
+  "description": "x",
+  "permissions": { "not-a-module": { "read": true } }
+}
+
 ### Get role
 GET {{baseUrl}}/roles/{{roleId}}
 Authorization: Bearer {{token}}
 
-### Update role description
+### Update description only (permissions untouched)
 PATCH {{baseUrl}}/roles/{{roleId}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-  "description": "Updated description"
+  "description": "Rider and driver support"
+}
+
+### Replace the whole permission set (users becomes read-only, settings removed)
+PATCH {{baseUrl}}/roles/{{roleId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "permissions": {
+    "users": { "read": true }
+  }
 }
 
 ### Update with empty body (expect 400)
@@ -58,6 +84,19 @@ Content-Type: application/json
 
 {}
 
+### Try to edit super-admin (expect 403 — system role). Replace the id with super-admin's from the list above.
+PATCH {{baseUrl}}/roles/PASTE_SUPER_ADMIN_ROLE_ID
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "description": "Should be refused"
+}
+
 ### Get a nonexistent role (expect 404)
 GET {{baseUrl}}/roles/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}
+
+### Delete the role (expect 204; 409 if any admin is still assigned to it)
+DELETE {{baseUrl}}/roles/{{roleId}}
 Authorization: Bearer {{token}}

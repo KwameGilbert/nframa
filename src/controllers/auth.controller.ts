@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
 import { userModel, type User } from "../models/user.model.js";
 import { adminUserModel } from "../models/adminUser.model.js";
+import { roleModel } from "../models/role.model.js";
+import { rolePermissionModel } from "../models/rolePermission.model.js";
 import { driverProfileModel } from "../models/driverProfile.model.js";
 import { riderProfileModel } from "../models/riderProfile.model.js";
 import { otpCodeModel, OTP_EXPIRY_MINUTES, OTP_MAX_ATTEMPTS } from "../models/otpCode.model.js";
@@ -162,14 +164,54 @@ async function issueTokens(userId: string, userType: "user" | "admin", role: str
   return { accessToken, refreshToken };
 }
 
-async function completeLogin(account: User, req: Request, res: Response) {
-  const userType = account.role === "admin" ? "admin" : "user";
-  const [tokens, profile] = await Promise.all([
-    issueTokens(account.id, userType, account.role, req),
-    fetchProfile(account),
+// The admin's role and what it lets them do, so the admin app can show/hide screens without another request.
+async function fetchAdminAccess(account: User) {
+  if (account.role !== "admin") {
+    return { adminRole: null, permissions: {} };
+  }
+
+  const adminUser = await adminUserModel.findById(account.id);
+  const [role, permissions] = await Promise.all([
+    adminUser ? roleModel.findById(adminUser.roleId) : undefined,
+    rolePermissionModel.findForActiveAdmin(account.id),
   ]);
 
-  sendSuccess(res, { ...tokens, user: { ...account, profile } });
+  return {
+    adminRole: role
+      ? { id: role.id, slug: role.slug, name: role.name, isSystem: role.isSystem }
+      : null,
+    permissions,
+  };
+}
+
+// The account as login and GET /auth/me return it.
+async function buildAccount(account: User) {
+  const [profile, access] = await Promise.all([fetchProfile(account), fetchAdminAccess(account)]);
+  return { ...account, profile, ...access };
+}
+
+async function completeLogin(account: User, req: Request, res: Response) {
+  const userType = account.role === "admin" ? "admin" : "user";
+  const [tokens, user] = await Promise.all([
+    issueTokens(account.id, userType, account.role, req),
+    buildAccount(account),
+  ]);
+
+  sendSuccess(res, { ...tokens, user });
+}
+
+export async function getMe(req: Request, res: Response) {
+  if (!req.auth) {
+    throw AppError.unauthorized();
+  }
+
+  const account = await userModel.findById(req.auth.id);
+  if (!account) {
+    throw AppError.unauthorized("User no longer exists");
+  }
+  await assertAccountActive(account);
+
+  sendSuccess(res, await buildAccount(account));
 }
 
 export async function login(req: Request, res: Response) {

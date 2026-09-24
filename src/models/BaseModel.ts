@@ -20,7 +20,8 @@ export abstract class BaseModel<T extends object> {
     return clone as T;
   }
 
-  private handleDbError(err: unknown): never {
+  // Protected so subclasses writing their own queries (e.g. inside a transaction) map errors the same way.
+  protected handleDbError(err: unknown): never {
     const code = (err as { code?: string }).code;
 
     if (code === "23505") {

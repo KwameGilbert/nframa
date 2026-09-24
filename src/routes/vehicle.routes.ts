@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { validate } from "../middlewares/validate.js";
 import { authenticate } from "../middlewares/authenticate.js";
-import { requireSelfOrAdmin } from "../middlewares/authorize.js";
+import { requireSelfOrPermission } from "../middlewares/authorize.js";
 import { idParamsSchema } from "../schemas/common.schema.js";
 import {
   createVehicleSchema,
@@ -16,7 +16,11 @@ vehicleRouter.post(
   "/vehicles",
   authenticate,
   validate({ body: createVehicleSchema }),
-  requireSelfOrAdmin((req) => (req.validated.body as CreateVehicleInput).carOwnerUserId),
+  requireSelfOrPermission(
+    (req) => (req.validated.body as CreateVehicleInput).carOwnerUserId,
+    "users",
+    "create",
+  ),
   createVehicle,
 );
 

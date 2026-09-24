@@ -10,9 +10,9 @@ registry.registerPath({
   method: "post",
   path: "/users",
   tags: ["Users"],
-  summary: "Create a user (admin only)",
+  summary: "Create a user",
   description:
-    "Rider/driver signup normally happens via /auth/login/otp + /auth/login/verify, not this endpoint. This exists for admins provisioning other accounts (most commonly other admins). Emails are stored lowercased.",
+    "Rider/driver signup normally happens via /auth/login/otp + /auth/login/verify, not this endpoint. This exists for admins provisioning other accounts (most commonly other admins). Needs users: create, or roles: create for an admin account. Emails are stored lowercased.",
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -26,7 +26,7 @@ registry.registerPath({
     },
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("Caller is not an admin"),
+    403: errorResponse("Caller lacks users: create (roles: create for an admin account)"),
     409: errorResponse("A user with this email or phone number already exists"),
   },
 });
@@ -35,7 +35,7 @@ registry.registerPath({
   method: "get",
   path: "/users/{id}",
   tags: ["Users"],
-  summary: "Get a user by id (the user themselves, or an admin)",
+  summary: "Get a user by id (the user themselves, or an admin with users: read)",
   security: [{ bearerAuth: [] }],
   request: {
     params: userIdParamsSchema,
@@ -47,7 +47,9 @@ registry.registerPath({
     },
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("Caller is neither this user nor an admin"),
+    403: errorResponse(
+      "Caller isn't this user and lacks users: read (roles: read for an admin account)",
+    ),
     404: errorResponse("User not found"),
   },
 });
@@ -56,9 +58,9 @@ registry.registerPath({
   method: "patch",
   path: "/users/{id}",
   tags: ["Users"],
-  summary: "Update a user (the user themselves, or an admin)",
+  summary: "Update a user (the user themselves, or an admin with users: update)",
   description:
-    "Send only the fields to change (at least one). Only admins can change email, phoneCountryCode, or phoneNumber — they're login identifiers. Emails are stored lowercased.",
+    "Send only the fields to change (at least one). Changing email, phoneCountryCode, or phoneNumber needs users: update even on your own account — they're login identifiers. Admin accounts need roles instead of users. Emails are stored lowercased.",
   security: [{ bearerAuth: [] }],
   request: {
     params: userIdParamsSchema,
@@ -74,7 +76,7 @@ registry.registerPath({
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse(
-      "Caller is neither this user nor an admin, or a non-admin tried to change email/phone",
+      "Caller isn't this user and lacks users: update, or tried to change email/phone without it (roles for admin accounts)",
     ),
     404: errorResponse("User not found"),
     409: errorResponse("Another user already has this email or phone number"),

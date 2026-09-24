@@ -9,8 +9,8 @@ registry.registerPath({
   method: "post",
   path: "/rider",
   tags: ["Rider Profiles"],
-  summary: "Create a rider profile (for yourself, or any user as an admin)",
-  description: "userId must be the caller's own id unless the caller is an admin.",
+  summary: "Create a rider profile (for yourself, or anyone with users: create)",
+  description: "userId must be the caller's own id unless the caller has users: create.",
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -24,7 +24,7 @@ registry.registerPath({
     },
     400: errorResponse("Validation error, or userId doesn't match an existing user"),
     401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("userId isn't the caller and the caller isn't an admin"),
+    403: errorResponse("userId isn't the caller and the caller lacks users: create"),
     409: errorResponse("Rider profile already exists for this user"),
   },
 });
@@ -33,7 +33,7 @@ registry.registerPath({
   method: "get",
   path: "/rider/{userId}",
   tags: ["Rider Profiles"],
-  summary: "Get a rider profile by user id (the rider themselves, or an admin)",
+  summary: "Get a rider profile by user id (the rider themselves, or an admin with users: read)",
   security: [{ bearerAuth: [] }],
   request: {
     params: riderProfileParamsSchema,
@@ -45,7 +45,7 @@ registry.registerPath({
     },
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("Caller is neither this rider nor an admin"),
+    403: errorResponse("Caller isn't this rider and lacks users: read"),
     404: errorResponse("Rider profile not found"),
   },
 });
