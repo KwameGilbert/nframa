@@ -1,13 +1,13 @@
 import type { Request, Response } from "express";
+import { sendSuccess } from "../utils/response.js";
 
 export function getHealth(_req: Request, res: Response) {
-  res.json({ status: "ok" });
+  sendSuccess(res, "Service is healthy", { status: "ok" });
 }
 
 export function getRoot(_req: Request, res: Response) {
-  res.json({
+  sendSuccess(res, "Welcome to the Nframa API", {
     status: "ok",
-    message: "Welcome to the Nframa API",
     env: process.env.NODE_ENV,
     timestamp: new Date().toISOString(),
   });

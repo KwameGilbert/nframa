@@ -24,7 +24,7 @@ export function successResponse(message: string, data: z.ZodType = z.null()) {
   return { description: message, content: { "application/json": { schema } } };
 }
 
-// Every non-2xx response is { success: false, message } — use this so each one documents that body.
+// Every non-2xx response is { success: false, error } — use this so each one documents that body.
 export function errorResponse(description: string) {
   return { description, content: { "application/json": { schema: errorResponseSchema } } };
 }

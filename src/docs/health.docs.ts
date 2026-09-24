@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { registry } from "./registry.js";
+import { registry, successResponse } from "./registry.js";
 
 registry.registerPath({
   method: "get",
@@ -7,10 +7,7 @@ registry.registerPath({
   tags: ["Health"],
   summary: "Health check",
   responses: {
-    200: {
-      description: "Service is up",
-      content: { "application/json": { schema: z.object({ status: z.literal("ok") }) } },
-    },
+    200: successResponse("Service is healthy", z.object({ status: z.literal("ok") })),
   },
 });
 
@@ -20,18 +17,13 @@ registry.registerPath({
   tags: ["Health"],
   summary: "API welcome message",
   responses: {
-    200: {
-      description: "Welcome payload",
-      content: {
-        "application/json": {
-          schema: z.object({
-            status: z.literal("ok"),
-            message: z.string(),
-            env: z.string().optional(),
-            timestamp: z.iso.datetime(),
-          }),
-        },
-      },
-    },
+    200: successResponse(
+      "Welcome to the Nframa API",
+      z.object({
+        status: z.literal("ok"),
+        env: z.string().optional().meta({ example: "development" }),
+        timestamp: z.iso.datetime(),
+      }),
+    ),
   },
 });
