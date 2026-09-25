@@ -33,7 +33,10 @@ export function validate(schemas: ValidationSchemas) {
     } catch (err) {
       if (err instanceof ZodError) {
         const message = err.issues
-          .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+          // Refinements over the whole body (e.g. "at least one field") have no path, so no "field: " prefix.
+          .map((issue) =>
+            issue.path.length > 0 ? `${issue.path.join(".")}: ${issue.message}` : issue.message,
+          )
           .join("; ");
         next(new AppError(message, 400));
         return;
