@@ -22,12 +22,17 @@ pnpm migrate:make <name>
 pnpm seed
 pnpm seed:make <name>
 ```
+Don't execute prompts/plans yourself, break it into parts, planner, executor and reviewer for every task.
+
+Spawn one agent to plan if there already isnt a plan yet, one to execute the plan and another to review what has been done and compare to the plan that was initially done, if there is anything wrong about the execution take it back to the executor to work on or fix.
 
 There is no real test suite yet (`pnpm test` is a stub that just echoes, so the pre-commit hook doesn't fail on every commit). `lint-staged` is installed but not wired into `.husky/pre-commit` yet — the hook currently just runs `pnpm test`.
 
 **Never run `pnpm migrate` / `pnpm migrate:rollback` automatically.** Write and edit migration files as needed, but leave running them to the user — they run migrations themselves.
 
 The app does **not** migrate on boot — a new migration's table doesn't exist until the user runs `pnpm migrate`, so routes that need it 500 until then. If a migration file's **content** changes after Knex already recorded it as applied (tracked by filename, not content), `migrate:latest` won't pick up the change — that still needs an explicit `migrate:rollback` + `migrate` from the user.
+
+Never edit an already migrated migration script.
 
 Postgres must be reachable at the host/port/credentials in `.env.development` for the app to boot or for migrations to run (`db/knex` connects on startup-adjacent calls, not lazily in a way that tolerates a missing DB for most routes). `docker-compose.yml` provides a Postgres 17 container (`nframa`/`nframa`/`nframa` on port 5432), but note the dev machine this was built on already had a **native** Postgres bound to 5432, so the compose file and `.env.development` may not agree with each other — check both before assuming the DB connection works.
 
