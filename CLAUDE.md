@@ -27,7 +27,7 @@ There is no real test suite yet (`pnpm test` is a stub that just echoes, so the 
 
 **Never run `pnpm migrate` / `pnpm migrate:rollback` automatically.** Write and edit migration files as needed, but leave running them to the user — they run migrations themselves.
 
-Note this is distinct from the app's own runtime behavior: `src/index.ts` calls `runMigrations()` (from `src/database/knex.ts`, wraps `db.migrate.latest()`) on every boot, in every environment, before the HTTP server starts listening — so `pnpm dev` and `pnpm start` both auto-apply any pending migrations. This is intentional (asked for explicitly), but means restarting the dev server (including tsx watch's auto-restart on file changes) re-checks migrations every time. If a migration file's **content** changes after Knex already recorded it as applied (tracked by filename, not content), `migrate:latest` won't pick up the change — that still needs an explicit `migrate:rollback` + `migrate` from the user.
+The app does **not** migrate on boot — a new migration's table doesn't exist until the user runs `pnpm migrate`, so routes that need it 500 until then. If a migration file's **content** changes after Knex already recorded it as applied (tracked by filename, not content), `migrate:latest` won't pick up the change — that still needs an explicit `migrate:rollback` + `migrate` from the user.
 
 Postgres must be reachable at the host/port/credentials in `.env.development` for the app to boot or for migrations to run (`db/knex` connects on startup-adjacent calls, not lazily in a way that tolerates a missing DB for most routes). `docker-compose.yml` provides a Postgres 17 container (`nframa`/`nframa`/`nframa` on port 5432), but note the dev machine this was built on already had a **native** Postgres bound to 5432, so the compose file and `.env.development` may not agree with each other — check both before assuming the DB connection works.
 
@@ -75,6 +75,12 @@ Examples/descriptions live on the zod schemas themselves via zod's native `.meta
 Knex, not an ORM — query builder only, models hand-write queries. `knexfile.ts` at the repo root is a thin re-export of `src/database/knexConfig.ts` (the real config), split that way because Knex's CLI expects a root-level `knexfile.ts`, but `tsconfig.json`'s `rootDir: "src"` won't let application code import anything outside `src/`. Connection is built from discrete `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASSWORD`/`DB_NAME` env vars (not a `DATABASE_URL` string). Migrations live in `src/database/migrations/`; `db-schema.sql` there is a reference/documentation dump from an earlier NestJS iteration of this project, not something Knex runs — treat it as a schema reference when writing new migrations, not as ground truth (it has at least one syntax error: MySQL-style inline `ENUM(...)`, which isn't valid Postgres).
 
 `src/database/knex.ts` overrides pg's `DATE` parser to return the raw `YYYY-MM-DD` string instead of a JS `Date` (which would serialize with a time and can shift the day across timezones).
+
+Write `jsonb` columns with `JSON.stringify(value)` (see `settingModel`): pg sends a JS string as raw text and a JS array as a Postgres array literal, neither of which is valid JSON. Reads come back already parsed.
+
+### Settings
+
+`/settings` is an admin-managed key/value store (`settings` table, guarded by the `settings` module's permissions). Each row has a dotted camelCase `key` (`fares.baseFare`), a `type` (`string`/`number`/`boolean`/`json`, where json means an object or array) and a jsonb `value` that every create and update is checked against the type. The key and type can't change after creation — delete and recreate instead. `updatedBy` records the admin who last wrote it.
 
 ### Environment
 
