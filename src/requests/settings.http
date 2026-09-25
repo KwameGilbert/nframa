@@ -1,0 +1,108 @@
+@baseUrl = http://localhost:3000
+
+# Settings endpoints need the settings permission — a super-admin token has every permission.
+# Get one via POST /auth/login (see auth.http).
+@token = PASTE_ADMIN_ACCESS_TOKEN_HERE
+
+### No token at all (expect 401)
+GET {{baseUrl}}/settings
+
+### List settings
+GET {{baseUrl}}/settings
+Authorization: Bearer {{token}}
+
+### Create a number setting
+POST {{baseUrl}}/settings
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "key": "fares.baseFare",
+  "type": "number",
+  "value": 5,
+  "description": "Flat fee charged at the start of every trip, in GHS"
+}
+
+### Create a boolean setting
+POST {{baseUrl}}/settings
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "key": "platform.maintenanceMode",
+  "type": "boolean",
+  "value": false,
+  "description": "Blocks new trip bookings while on"
+}
+
+### Create a json setting (objects and arrays)
+POST {{baseUrl}}/settings
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "key": "notifications.channels",
+  "type": "json",
+  "value": { "sms": true, "email": true, "push": false }
+}
+
+### Value doesn't match type (expect 400)
+POST {{baseUrl}}/settings
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "key": "fares.perKmRate",
+  "type": "number",
+  "value": "2.5"
+}
+
+### Duplicate key (expect 409)
+POST {{baseUrl}}/settings
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "key": "fares.baseFare",
+  "type": "number",
+  "value": 6
+}
+
+### Get one setting
+GET {{baseUrl}}/settings/fares.baseFare
+Authorization: Bearer {{token}}
+
+### Update the value (must still be a number)
+PATCH {{baseUrl}}/settings/fares.baseFare
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "value": 6.5
+}
+
+### Wrong type on update (expect 400)
+PATCH {{baseUrl}}/settings/fares.baseFare
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "value": true
+}
+
+### Clear the description
+PATCH {{baseUrl}}/settings/fares.baseFare
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "description": null
+}
+
+### Delete a setting
+DELETE {{baseUrl}}/settings/platform.maintenanceMode
+Authorization: Bearer {{token}}
+
+### Unknown key (expect 404)
+GET {{baseUrl}}/settings/does.notExist
+Authorization: Bearer {{token}}
