@@ -13,7 +13,7 @@ import {
 } from "../schemas/auth.schema.js";
 
 const loginResponseDescription =
-  "Returns the token pair along with the account, including its role-specific profile at user.profile (driver/rider/admin extension record). user.profile is null if the account hasn't completed that step yet (e.g. a brand-new signup with no driver profile created yet). For admins, user.adminRole and user.permissions say what they can access.";
+  "Returns the token pair along with the account, including its role-specific profile at user.profile (driver/rider/admin extension record). user.profile is null if the account hasn't completed that step yet (e.g. a brand-new signup with no driver profile created yet). For admins, user.adminRole and user.permissions say what they can access. isNewUser is true only when this call just created the account (phone OTP signup); it's always false for password login and email-OTP login.";
 
 const accountBlocked = errorResponse(
   "Account is suspended or deleted, or the admin account is not active",

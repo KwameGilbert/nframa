@@ -1,15 +1,15 @@
 import { OpenApiGeneratorV3 } from "@asteasolutions/zod-to-openapi";
 import { registry } from "./registry.js";
 import "./health.docs.js";
+import "./auth.docs.js";
 import "./user.docs.js";
+import "./adminUser.docs.js";
+import "./role.docs.js";
+import "./rolePermission.docs.js";
 import "./driverProfile.docs.js";
 import "./riderProfile.docs.js";
 import "./vehicle.docs.js";
-import "./role.docs.js";
-import "./rolePermission.docs.js";
-import "./adminUser.docs.js";
 import "./setting.docs.js";
-import "./auth.docs.js";
 
 const generator = new OpenApiGeneratorV3(registry.definitions);
 

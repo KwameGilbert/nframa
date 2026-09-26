@@ -117,4 +117,8 @@ export const accountResponseSchema = userResponseSchema.extend({
 
 export const loginResponseSchema = authTokensResponseSchema.extend({
   user: accountResponseSchema,
+  isNewUser: z.boolean().meta({
+    description:
+      "True only when this call just created the account (phone OTP signup). Always false for password login and email-OTP login.",
+  }),
 });

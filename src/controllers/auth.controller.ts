@@ -190,14 +190,14 @@ async function buildAccount(account: User) {
   return { ...account, profile, ...access };
 }
 
-async function completeLogin(account: User, req: Request, res: Response) {
+async function completeLogin(account: User, req: Request, res: Response, isNewUser = false) {
   const userType = account.role === "admin" ? "admin" : "user";
   const [tokens, user] = await Promise.all([
     issueTokens(account.id, userType, account.role, req),
     buildAccount(account),
   ]);
 
-  sendSuccess(res, "Login successful", { ...tokens, user });
+  sendSuccess(res, "Login successful", { ...tokens, user, isNewUser });
 }
 
 export async function getMe(req: Request, res: Response) {
@@ -249,6 +249,7 @@ export async function requestLoginOtp(req: Request, res: Response) {
 export async function verifyLoginOtp(req: Request, res: Response) {
   const input = req.validated.body as VerifyOtpInput;
   const { user, identifier, role } = await resolveOtpTarget(input);
+  const isNewUser = !user; // true only when no account existed yet for this identifier
 
   await consumeOtp(identifier, toPurpose(role), input.code);
 
@@ -264,7 +265,7 @@ export async function verifyLoginOtp(req: Request, res: Response) {
     throw AppError.notFound("No account found for this identifier");
   }
 
-  await completeLogin(account, req, res);
+  await completeLogin(account, req, res, isNewUser);
 }
 
 export async function refreshSession(req: Request, res: Response) {

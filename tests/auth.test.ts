@@ -35,9 +35,10 @@ describe("POST /auth/login", () => {
 
     expectStatus(res, 200);
     expect(res.body.message).toBe("Login successful");
-    const { accessToken, refreshToken, user } = res.body.data;
+    const { accessToken, refreshToken, user, isNewUser } = res.body.data;
     expect(accessToken).toEqual(expect.any(String));
     expect(refreshToken).toEqual(expect.any(String));
+    expect(isNewUser).toBe(false);
     expect(user).toMatchObject({
       id: admin.userId,
       email: admin.email,
@@ -154,6 +155,7 @@ describe("OTP login by phone", () => {
     const res = await api.post("/auth/login/verify").send({ ...phone, role: "rider", code });
 
     expectStatus(res, 200);
+    expect(res.body.data.isNewUser).toBe(true);
     expect(res.body.data.user).toMatchObject({
       role: "rider",
       phoneCountryCode: phone.phoneCountryCode,
@@ -242,6 +244,7 @@ describe("OTP login by phone", () => {
     const res = await api.post("/auth/login/verify").send({ ...phone, code });
 
     expectStatus(res, 200);
+    expect(res.body.data.isNewUser).toBe(false);
     expect(res.body.data.user).toMatchObject({
       id: rider.userId,
       role: "rider",
