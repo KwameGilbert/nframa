@@ -19,7 +19,6 @@ vi.mock("../src/services/storage.service.js", () => ({
       storageKey,
     };
   }),
-  deleteFile: vi.fn(async () => undefined),
 }));
 
 afterAll(async () => {
