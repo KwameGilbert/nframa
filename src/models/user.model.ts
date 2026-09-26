@@ -23,16 +23,24 @@ export interface User {
   deletedAt: Date | null;
 }
 
+type VerifiedFlags = Partial<Pick<User, "isPhoneVerified" | "isEmailVerified">>;
+
 class UserModel extends BaseModel<User> {
   protected readonly tableName = "users";
   protected readonly excludedColumns = ["passwordHash", "passwordSalt"];
 
-  createUser(input: CreateUserInput) {
+  // The verified flags are set by the server only (never from a request body): a phone that signed in with an
+  // OTP is created verified, and changing an identifier resets its flag.
+  createUser(input: CreateUserInput & VerifiedFlags) {
     return this.insert(input as unknown as Partial<User>);
   }
 
-  updateUser(id: string, input: UpdateUserInput) {
+  updateUser(id: string, input: UpdateUserInput & VerifiedFlags) {
     return this.updateById(id, { ...input, updatedAt: new Date() } as unknown as Partial<User>);
+  }
+
+  markVerified(id: string, flags: VerifiedFlags) {
+    return this.updateById(id, { ...flags, updatedAt: new Date() });
   }
 
   // Unlike findOne, keeps passwordHash — only for verifying a password, never for responses.

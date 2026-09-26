@@ -44,7 +44,9 @@ export async function assertSelfOrPermission(
   module: Module,
   action: Action,
 ) {
-  if (req.auth?.id === ownerId) {
+  // The auth check comes first so a missing ownerId (undefined === undefined) can never count as "self".
+  // Ids are compared case-insensitively: z.uuid() accepts uppercase, the JWT subject is always lowercase.
+  if (req.auth && req.auth.id.toLowerCase() === ownerId?.toLowerCase()) {
     return;
   }
   await assertPermission(req, module, action);

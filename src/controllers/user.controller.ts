@@ -75,23 +75,23 @@ export async function getUser(req: Request, res: Response) {
 
 export async function updateUser(req: Request, res: Response) {
   const { id } = req.validated.params as { id: string };
-  const input = req.validated.body as UpdateUserInput;
+  const { email, phoneCountryCode, phoneNumber, ...profile } = req.validated
+    .body as UpdateUserInput;
 
   const target = await findUserOrThrow(id);
   await assertSelfOrPermission(req, target.id, moduleFor(target), "update");
 
-  // Email and phone are login identifiers, and changing one without proving you own the new one would let
-  // a stolen access token become a permanent takeover (change the email, then reset the password).
-  // Until there's a verified change flow, it takes the admin permission even on your own account.
-  const changesIdentifier =
-    input.email !== undefined ||
-    input.phoneCountryCode !== undefined ||
-    input.phoneNumber !== undefined;
-  if (changesIdentifier) {
-    await assertPermission(req, moduleFor(target), "update");
-  }
+  // A changed identifier is no longer verified. Resending the current value isn't a change.
+  const emailChanged = email !== undefined && email !== target.email;
+  const phoneChanged =
+    (phoneCountryCode !== undefined && phoneCountryCode !== target.phoneCountryCode) ||
+    (phoneNumber !== undefined && phoneNumber !== target.phoneNumber);
 
-  const user = await userModel.updateUser(id, input);
+  const user = await userModel.updateUser(id, {
+    ...profile,
+    ...(emailChanged && { email, isEmailVerified: false }),
+    ...(phoneChanged && { phoneCountryCode, phoneNumber, isPhoneVerified: false }),
+  });
 
   if (!user) {
     throw AppError.notFound(`User not found: ${id}`);

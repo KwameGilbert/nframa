@@ -59,6 +59,13 @@ async function assertAccountActive(user: User) {
   }
 }
 
+// A rider's or driver's email is self-asserted, so it can't sign anyone in (login, OTP, password reset) until it
+// is verified — otherwise anyone holding a stolen access token could set their own email and take the account.
+// Admin emails are provisioned by other admins, so they are trusted as-is.
+function canAuthenticateByEmail(user: User) {
+  return user.role === "admin" || user.isEmailVerified;
+}
+
 async function resolveOtpTarget(input: Identifier) {
   const { identifier, channel } = toDbIdentifier(input);
 
@@ -70,6 +77,9 @@ async function resolveOtpTarget(input: Identifier) {
           phoneNumber: input.phoneNumber,
         });
 
+  if (user && "email" in input && !canAuthenticateByEmail(user)) {
+    throw AppError.notFound("No account found for this identifier");
+  }
   if (user) {
     await assertAccountActive(user);
     return { user, identifier, channel, role: user.role };
@@ -218,7 +228,7 @@ export async function login(req: Request, res: Response) {
   const { email, password } = req.validated.body as LoginInput;
   const user = await userModel.findWithCredentials({ email });
 
-  if (!user?.passwordHash) {
+  if (!user?.passwordHash || !canAuthenticateByEmail(user)) {
     // Hash anyway so an unknown email takes as long to reject as a wrong password.
     await hashPassword(password);
     throw AppError.unauthorized("Invalid email or password");
@@ -253,13 +263,17 @@ export async function verifyLoginOtp(req: Request, res: Response) {
 
   await consumeOtp(identifier, toPurpose(role), input.code);
 
+  // Passing the OTP proves the person owns this phone, so it counts as verified from here on.
   let account = user;
   if (!account && !("email" in input)) {
     account = await userModel.createUser({
       phoneCountryCode: input.phoneCountryCode,
       phoneNumber: input.phoneNumber,
       role: role as "rider" | "driver",
+      isPhoneVerified: true,
     });
+  } else if (account && !("email" in input) && !account.isPhoneVerified) {
+    account = (await userModel.markVerified(account.id, { isPhoneVerified: true })) ?? account;
   }
   if (!account) {
     throw AppError.notFound("No account found for this identifier");
@@ -308,7 +322,7 @@ export async function forgotPassword(req: Request, res: Response) {
   // Same response either way, so this endpoint can't be used to discover which emails have accounts.
   // Not awaited for the same reason: waiting would make real accounts respond slower, and a delivery
   // failure would turn into a 500 only for emails that exist.
-  if (user && !user.deletedAt) {
+  if (user && !user.deletedAt && canAuthenticateByEmail(user)) {
     sendOtp(email, "email", PASSWORD_RESET_PURPOSE, "password reset code").catch((err: unknown) => {
       req.log.child({ type: "error" }).error({ err }, "Failed to send password reset code");
     });
@@ -323,7 +337,7 @@ export async function resetPassword(req: Request, res: Response) {
   await consumeOtp(email, PASSWORD_RESET_PURPOSE, code);
 
   const user = await userModel.findOne({ email });
-  if (!user) {
+  if (!user || !canAuthenticateByEmail(user)) {
     throw AppError.notFound("No account found for this email");
   }
 

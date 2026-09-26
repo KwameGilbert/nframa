@@ -4,7 +4,7 @@ import { createSignedInAdmin, loginAsSuperAdmin, signUpByPhone } from "./helpers
 import { trackForCleanup } from "./helpers/cleanup.js";
 
 let superAdmin: Awaited<ReturnType<typeof loginAsSuperAdmin>>;
-let reviewer: Awaited<ReturnType<typeof createSignedInAdmin>>; // users: read + update
+let reviewer: Awaited<ReturnType<typeof createSignedInAdmin>>; // verification: read + update
 let documentTypes: { id: number; code: string; name: string; hasExpiry: boolean }[];
 
 function typeIdFor(code: string): number {
@@ -34,7 +34,7 @@ async function driverWithDocument(code = "NATIONAL_ID") {
 beforeAll(async () => {
   superAdmin = await loginAsSuperAdmin();
   [reviewer, documentTypes] = await Promise.all([
-    createSignedInAdmin(superAdmin.token, { users: { read: true, update: true } }),
+    createSignedInAdmin(superAdmin.token, { verification: { read: true, update: true } }),
     api
       .get("/document-types")
       .set(auth(superAdmin.token))
@@ -254,10 +254,10 @@ describe("PATCH /admin/verification/:documentId", () => {
     expect(profile.body.data.verificationStatus).toBe("rejected");
   });
 
-  it("needs users: update", async () => {
+  it("needs verification: update", async () => {
     const [{ document }, viewer] = await Promise.all([
       driverWithDocument("ROADWORTHINESS"),
-      createSignedInAdmin(superAdmin.token, { users: { read: true } }),
+      createSignedInAdmin(superAdmin.token, { verification: { read: true } }),
     ]);
 
     const res = await api
@@ -266,7 +266,7 @@ describe("PATCH /admin/verification/:documentId", () => {
       .send({ status: "VERIFIED" });
 
     expectStatus(res, 403);
-    expect(res.body.error).toBe("Missing permission: update on users");
+    expect(res.body.error).toBe("Missing permission: update on verification");
   });
 
   it("returns 404 for an unknown document", async () => {
@@ -313,13 +313,13 @@ describe("GET /admin/verification/pending", () => {
     expect(res.body.data.some((d: { id: string }) => d.id === document.id)).toBe(false);
   });
 
-  it("needs users: read", async () => {
+  it("needs verification: read", async () => {
     const viewer = await signUpByPhone("driver");
 
     const res = await api.get("/admin/verification/pending").set(auth(viewer.token));
 
     expectStatus(res, 403);
-    expect(res.body.error).toBe("Missing permission: read on users");
+    expect(res.body.error).toBe("Missing permission: read on verification");
   });
 });
 
@@ -350,10 +350,10 @@ describe("GET /verification/:documentId/history", () => {
     const res = await api.get(`/verification/${document.id}/history`).set(auth(otherDriver.token));
 
     expectStatus(res, 403);
-    expect(res.body.error).toBe("Missing permission: read on users");
+    expect(res.body.error).toBe("Missing permission: read on verification");
   });
 
-  it("lets an admin with users: read see any driver's history", async () => {
+  it("lets an admin with verification: read see any driver's history", async () => {
     const { document } = await driverWithDocument("INSURANCE");
 
     const res = await api.get(`/verification/${document.id}/history`).set(auth(reviewer.token));

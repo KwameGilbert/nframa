@@ -12,6 +12,7 @@ import {
 import * as data from "./helpers/data.js";
 import { newEmail, newPhone } from "./helpers/unique.js";
 import { trackForCleanup } from "./helpers/cleanup.js";
+import db from "../src/database/knex.js";
 
 type SignedInAdmin = Awaited<ReturnType<typeof createSignedInAdmin>>;
 
@@ -234,16 +235,66 @@ describe("PATCH /users/:id", () => {
     expect(res.body.data).toMatchObject({ fullName, dateOfBirth: "1994-03-06" });
   });
 
-  it("needs users: update to change a phone number, even your own", async () => {
+  it("lets a rider change their phone number, which then needs verifying again", async () => {
     const self = await signUpByPhone("rider");
+    const { phoneNumber } = await newPhone();
 
     const res = await api
       .patch(`/users/${self.userId}`)
       .set(auth(self.token))
-      .send({ phoneNumber: data.ghanaPhoneNumber() });
+      .send({ phoneNumber });
 
-    expectStatus(res, 403);
-    expect(res.body.error).toBe("Missing permission: update on users");
+    expectStatus(res, 200);
+    expect(res.body.data).toMatchObject({ phoneNumber, isPhoneVerified: false });
+  });
+
+  it("lets a rider add and change their email, which starts unverified", async () => {
+    const self = await signUpByPhone("rider");
+
+    const first = await api
+      .patch(`/users/${self.userId}`)
+      .set(auth(self.token))
+      .send({ email: await newEmail(data.person()) });
+    const email = await newEmail(data.person());
+    const second = await api.patch(`/users/${self.userId}`).set(auth(self.token)).send({ email });
+
+    expectStatus(first, 200);
+    expect(first.body.data.isEmailVerified).toBe(false);
+    expectStatus(second, 200);
+    expect(second.body.data).toMatchObject({ email, isEmailVerified: false });
+  });
+
+  it("treats resending the current phone number and email as no change", async () => {
+    const self = await signUpByPhone("rider");
+    const email = await newEmail(data.person());
+    await db("users").where({ id: self.userId }).update({ email, isEmailVerified: true });
+    const { fullName } = data.person();
+
+    const res = await api.patch(`/users/${self.userId}`).set(auth(self.token)).send({
+      fullName,
+      email,
+      phoneCountryCode: self.phoneCountryCode,
+      phoneNumber: self.phoneNumber,
+    });
+
+    expectStatus(res, 200);
+    expect(res.body.data).toMatchObject({
+      fullName,
+      email,
+      isEmailVerified: true,
+      isPhoneVerified: true,
+    });
+  });
+
+  it("finds your own account whatever the case of the id in the path", async () => {
+    const self = await signUpByPhone("rider");
+
+    const res = await api
+      .patch(`/users/${self.userId.toUpperCase()}`)
+      .set(auth(self.token))
+      .send({ fullName: data.person().fullName });
+
+    expectStatus(res, 200);
   });
 
   it("lets an admin with users: update change a rider's phone number", async () => {
@@ -256,7 +307,7 @@ describe("PATCH /users/:id", () => {
       .send({ phoneNumber });
 
     expectStatus(res, 200);
-    expect(res.body.data.phoneNumber).toBe(phoneNumber);
+    expect(res.body.data).toMatchObject({ phoneNumber, isPhoneVerified: false });
   });
 
   it("won't give an account a phone number that's already taken", async () => {

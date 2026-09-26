@@ -12,6 +12,7 @@ import {
 import * as data from "./helpers/data.js";
 import { newEmail, newPhone } from "./helpers/unique.js";
 import { trackForCleanup } from "./helpers/cleanup.js";
+import db from "../src/database/knex.js";
 
 let superAdmin: Awaited<ReturnType<typeof loginAsSuperAdmin>>;
 let roleId: string;
@@ -100,6 +101,7 @@ describe("POST /auth/login", () => {
       settings: everything,
       roles: everything,
       users: everything,
+      verification: everything,
     });
   });
 
@@ -165,6 +167,8 @@ describe("OTP login by phone", () => {
       phoneCountryCode: phone.phoneCountryCode,
       phoneNumber: phone.phoneNumber,
       status: "active",
+      isPhoneVerified: true,
+      isEmailVerified: false,
       profile: null,
       adminRole: null,
       permissions: {},
@@ -239,6 +243,33 @@ describe("OTP login by phone", () => {
 
     expectStatus(res, 400);
     expect(res.body.error).toBe("No pending verification code for this identifier");
+  });
+
+  it("verifies the number of an existing account that signs in with a code", async () => {
+    const rider = await signUpByPhone("rider");
+    await db("users").where({ id: rider.userId }).update({ isPhoneVerified: false });
+    const phone = { phoneCountryCode: rider.phoneCountryCode, phoneNumber: rider.phoneNumber };
+
+    const code = await captureCode(fullPhone(phone), () => api.post("/auth/login/otp").send(phone));
+    const res = await api.post("/auth/login/verify").send({ ...phone, code });
+
+    expectStatus(res, 200);
+    expect(res.body.data.user.isPhoneVerified).toBe(true);
+  });
+
+  it("won't sign in, or send a code, for an email a rider added but hasn't verified", async () => {
+    const rider = await signUpByPhone("rider");
+    const email = await newEmail(data.person());
+    const set = await api.patch(`/users/${rider.userId}`).set(auth(rider.token)).send({ email });
+    expectStatus(set, 200);
+
+    const otp = await api.post("/auth/login/otp").send({ email });
+    const forgot = await api.post("/auth/password/forgot").send({ email });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expectStatus(otp, 404);
+    expectStatus(forgot, 200);
+    expect(messageCountTo(email)).toBe(0);
   });
 
   it("signs an existing number into its account instead of creating a second one", async () => {
