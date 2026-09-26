@@ -22,6 +22,15 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
+// Only when STORAGE_DRIVER=local: serves files storage.service.ts wrote to disk, at the path in
+// LOCAL_STORAGE_BASE_URL (e.g. base url ".../uploads" serves from LOCAL_STORAGE_DIR at "/uploads"). Files
+// here are unauthenticated static content — fine for local/dev use, not for verification documents in
+// production, where STORAGE_DRIVER should be "cloudinary" instead.
+if ((process.env.STORAGE_DRIVER ?? "local") === "local" && process.env.LOCAL_STORAGE_BASE_URL) {
+  const mountPath = new URL(process.env.LOCAL_STORAGE_BASE_URL).pathname;
+  app.use(mountPath, express.static(process.env.LOCAL_STORAGE_DIR ?? "uploads"));
+}
+
 app.use(router);
 
 app.use(notFoundHandler);

@@ -10,6 +10,7 @@
 ## Overview
 
 This document specifies all authentication endpoints, request payloads, and response structures for the Nframa Mobility Admin System. It covers:
+
 1. **Password Login**
 2. **OTP Login (Email 2FA / Security Code)**
 3. **Forgot Password Flow (3-Step Recovery)**
@@ -25,10 +26,11 @@ This document specifies all authentication endpoints, request payloads, and resp
 
 Authenticates an admin user using their email address and password.
 
-* **Endpoint:** `POST /api/v1/auth/login/password`
-* **Auth Required:** No
+- **Endpoint:** `POST /api/v1/auth/login/password`
+- **Auth Required:** No
 
 ### Request Body
+
 ```json
 {
   "email": "a.buabeng@nframa.com",
@@ -38,6 +40,7 @@ Authenticates an admin user using their email address and password.
 ```
 
 ### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -74,20 +77,23 @@ Authenticates an admin user using their email address and password.
 ```
 
 ### Errors
-* **401 Unauthorized:** Invalid email or password.
-* **423 Locked:** Account suspended or locked due to too many failed attempts.
+
+- **401 Unauthorized:** Invalid email or password.
+- **423 Locked:** Account suspended or locked due to too many failed attempts.
 
 ---
 
 ## 2. OTP Code Request & Login (2FA)
 
 ### 2.1 Request OTP Code
+
 Generates and sends a 6-digit security verification code to the specified email address.
 
-* **Endpoint:** `POST /api/v1/auth/otp/request`
-* **Auth Required:** No
+- **Endpoint:** `POST /api/v1/auth/otp/request`
+- **Auth Required:** No
 
 #### Request Body
+
 ```json
 {
   "email": "a.buabeng@nframa.com"
@@ -95,6 +101,7 @@ Generates and sends a 6-digit security verification code to the specified email 
 ```
 
 #### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -109,12 +116,14 @@ Generates and sends a 6-digit security verification code to the specified email 
 ---
 
 ### 2.2 Verify OTP & Login
+
 Authenticates an admin user using the 6-digit OTP code sent to their email.
 
-* **Endpoint:** `POST /api/v1/auth/login/otp`
-* **Auth Required:** No
+- **Endpoint:** `POST /api/v1/auth/login/otp`
+- **Auth Required:** No
 
 #### Request Body
+
 ```json
 {
   "email": "a.buabeng@nframa.com",
@@ -123,6 +132,7 @@ Authenticates an admin user using the 6-digit OTP code sent to their email.
 ```
 
 #### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -147,20 +157,23 @@ Authenticates an admin user using the 6-digit OTP code sent to their email.
 ```
 
 ### Errors
-* **400 Bad Request:** OTP code must be 6 digits.
-* **401 Unauthorized:** Invalid or expired OTP code.
+
+- **400 Bad Request:** OTP code must be 6 digits.
+- **401 Unauthorized:** Invalid or expired OTP code.
 
 ---
 
 ## 3. Forgot Password Recovery Flow (3 Steps)
 
 ### Step 1: Request Password Reset Code
+
 Sends a 6-digit security code to the admin's email for password recovery.
 
-* **Endpoint:** `POST /api/v1/auth/password/forgot`
-* **Auth Required:** No
+- **Endpoint:** `POST /api/v1/auth/password/forgot`
+- **Auth Required:** No
 
 #### Request Body
+
 ```json
 {
   "email": "a.buabeng@nframa.com"
@@ -168,6 +181,7 @@ Sends a 6-digit security code to the admin's email for password recovery.
 ```
 
 #### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -182,12 +196,14 @@ Sends a 6-digit security code to the admin's email for password recovery.
 ---
 
 ### Step 2: Verify Reset Code
+
 Validates the 6-digit code and issues a temporary `resetToken`.
 
-* **Endpoint:** `POST /api/v1/auth/password/verify-code`
-* **Auth Required:** No
+- **Endpoint:** `POST /api/v1/auth/password/verify-code`
+- **Auth Required:** No
 
 #### Request Body
+
 ```json
 {
   "email": "a.buabeng@nframa.com",
@@ -196,6 +212,7 @@ Validates the 6-digit code and issues a temporary `resetToken`.
 ```
 
 #### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -209,12 +226,14 @@ Validates the 6-digit code and issues a temporary `resetToken`.
 ---
 
 ### Step 3: Reset Password
+
 Sets a new password using the `resetToken`.
 
-* **Endpoint:** `POST /api/v1/auth/password/reset`
-* **Auth Required:** No
+- **Endpoint:** `POST /api/v1/auth/password/reset`
+- **Auth Required:** No
 
 #### Request Body
+
 ```json
 {
   "resetToken": "rst_99887766554433221100",
@@ -224,6 +243,7 @@ Sets a new password using the `resetToken`.
 ```
 
 #### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -237,10 +257,11 @@ Sets a new password using the `resetToken`.
 
 Exchanges a valid refresh token for a new access token.
 
-* **Endpoint:** `POST /api/v1/auth/refresh-token`
-* **Auth Required:** No
+- **Endpoint:** `POST /api/v1/auth/refresh-token`
+- **Auth Required:** No
 
 ### Request Body
+
 ```json
 {
   "refreshToken": "d9f8e7c6-b5a4-3210-9876-fedcba543210"
@@ -248,6 +269,7 @@ Exchanges a valid refresh token for a new access token.
 ```
 
 ### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -265,15 +287,17 @@ Exchanges a valid refresh token for a new access token.
 
 Fetches authenticated user information, role details, and assigned module permissions.
 
-* **Endpoint:** `GET /api/v1/auth/me`
-* **Auth Required:** Yes (`Bearer <access_token>`)
+- **Endpoint:** `GET /api/v1/auth/me`
+- **Auth Required:** Yes (`Bearer <access_token>`)
 
 ### Request Headers
+
 ```http
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 ### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -314,10 +338,11 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 Allows an authenticated admin to change their password while logged in.
 
-* **Endpoint:** `POST /api/v1/auth/change-password`
-* **Auth Required:** Yes (`Bearer <access_token>`)
+- **Endpoint:** `POST /api/v1/auth/change-password`
+- **Auth Required:** Yes (`Bearer <access_token>`)
 
 ### Request Body
+
 ```json
 {
   "currentPassword": "OldPassword123!",
@@ -327,6 +352,7 @@ Allows an authenticated admin to change their password while logged in.
 ```
 
 ### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -340,10 +366,11 @@ Allows an authenticated admin to change their password while logged in.
 
 Revokes active tokens and invalidates the session server-side.
 
-* **Endpoint:** `POST /api/v1/auth/logout`
-* **Auth Required:** Yes (`Bearer <access_token>`)
+- **Endpoint:** `POST /api/v1/auth/logout`
+- **Auth Required:** Yes (`Bearer <access_token>`)
 
 ### Request Body
+
 ```json
 {
   "refreshToken": "d9f8e7c6-b5a4-3210-9876-fedcba543210"
@@ -351,6 +378,7 @@ Revokes active tokens and invalidates the session server-side.
 ```
 
 ### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -377,13 +405,14 @@ All error responses return a standardized JSON structure:
 ```
 
 ### Common HTTP Status Codes
-| Code | Status | Description |
-| :--- | :--- | :--- |
-| `200` | OK | Request succeeded. |
-| `400` | Bad Request | Validation failure (e.g. missing fields, short password). |
-| `401` | Unauthorized | Missing/invalid authentication token or invalid credentials. |
-| `403` | Forbidden | Account disabled or insufficient role permissions. |
-| `404` | Not Found | Target account/token not found. |
-| `422` | Unprocessable Entity | Logic error (e.g. new password matches old password). |
-| `429` | Too Many Requests | Rate limit exceeded (e.g. OTP resend throttling). |
-| `500` | Internal Server Error | Unexpected backend error. |
+
+| Code  | Status                | Description                                                  |
+| :---- | :-------------------- | :----------------------------------------------------------- |
+| `200` | OK                    | Request succeeded.                                           |
+| `400` | Bad Request           | Validation failure (e.g. missing fields, short password).    |
+| `401` | Unauthorized          | Missing/invalid authentication token or invalid credentials. |
+| `403` | Forbidden             | Account disabled or insufficient role permissions.           |
+| `404` | Not Found             | Target account/token not found.                              |
+| `422` | Unprocessable Entity  | Logic error (e.g. new password matches old password).        |
+| `429` | Too Many Requests     | Rate limit exceeded (e.g. OTP resend throttling).            |
+| `500` | Internal Server Error | Unexpected backend error.                                    |

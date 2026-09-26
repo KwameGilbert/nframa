@@ -3,19 +3,26 @@ import { verificationDocumentModel } from "../models/verificationDocument.model.
 import { verificationDocumentHistoryModel } from "../models/verificationDocumentHistory.model.js";
 import { documentTypeModel } from "../models/documentType.model.js";
 import { driverProfileModel } from "../models/driverProfile.model.js";
+import { uploadFile } from "../services/storage.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendSuccess, sendCreated } from "../utils/response.js";
 import type { UpdateDocumentStatusInput } from "../schemas/verification.schema.js";
 
-// TODO: Replace with actual S3 upload when file storage is set up.
-// For now, mock S3 path generation for testing.
-function generateMockS3Url(userId: string, documentTypeId: number, fileName: string): string {
-  return `s3://nframa-verification/${userId}/${documentTypeId}/${Date.now()}-${fileName}`;
+// Reference data (id, code, name, description, hasExpiry) for building an upload UI — no auth-specific
+// filtering, so every signed-in user sees the same list.
+export async function listDocumentTypes(_req: Request, res: Response) {
+  const types = await documentTypeModel.getAllTypes();
+  sendSuccess(res, "Document types retrieved successfully", types);
 }
 
 export async function uploadVerificationDocument(req: Request, res: Response) {
   if (!req.auth?.id) {
     throw AppError.unauthorized();
+  }
+  if (!req.file) {
+    throw AppError.badRequest(
+      "No file uploaded. Send it as multipart/form-data under the 'file' field",
+    );
   }
 
   const userId = req.auth.id as string;
@@ -35,17 +42,22 @@ export async function uploadVerificationDocument(req: Request, res: Response) {
     );
   }
 
-  // TODO: Handle actual file upload from req.file (multipart/form-data)
-  // For now, accept fileUrl in request body for testing
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fileUrl = (req.validated.body as any).fileUrl || generateMockS3Url(userId, typeId, "document");
+  const uploaded = await uploadFile(
+    req.file.buffer,
+    `verification/${userId}`,
+    req.file.originalname,
+  );
 
-  const expiresAt = docType.hasExpiry ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() : undefined;
+  const expiresAt = docType.hasExpiry
+    ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+    : undefined;
 
   const document = await verificationDocumentModel.uploadDocument(
     userId,
     typeId,
-    fileUrl,
+    uploaded.fileUrl,
+    uploaded.storageKey,
+    uploaded.storageDriver,
     expiresAt,
   );
 
@@ -116,7 +128,7 @@ export async function getDocumentHistory(req: Request, res: Response) {
   sendSuccess(res, "Document history retrieved successfully", history);
 }
 
-export async function listPendingDocuments(req: Request, res: Response) {
+export async function listPendingDocuments(_req: Request, res: Response) {
   const pending = await verificationDocumentModel.getPendingDocumentsWithDetails();
   sendSuccess(res, "Pending documents retrieved", pending);
 }

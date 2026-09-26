@@ -7,6 +7,7 @@ This document outlines the API endpoints required by the mobile client for authe
 ## 1. Authentication Endpoints
 
 ### 1.1. Request OTP
+
 Initiates the login or registration flow by sending a One-Time Password (OTP) to the driver's phone number.
 
 - **Endpoint:** `POST /api/auth/send-otp`
@@ -26,6 +27,7 @@ Initiates the login or registration flow by sending a One-Time Password (OTP) to
   ```
 
 ### 1.2. Verify OTP
+
 Verifies the OTP and returns the authentication token and driver profile.
 
 - **Endpoint:** `POST /api/auth/verify-otp`
@@ -34,7 +36,7 @@ Verifies the OTP and returns the authentication token and driver profile.
   ```json
   {
     "phoneNumber": "+233500000000", // string, required
-    "code": "123456"              // string, required
+    "code": "123456" // string, required
   }
   ```
 - **Success Response (200 OK):**
@@ -50,6 +52,7 @@ Verifies the OTP and returns the authentication token and driver profile.
   ```
 
 ### 1.3. Social Login (OAuth)
+
 Handles login via third-party providers (Google, Apple, Facebook).
 
 - **Endpoint:** `POST /api/auth/social`
@@ -78,16 +81,18 @@ Handles login via third-party providers (Google, Apple, Facebook).
 ## 2. Driver Verification Logic & Endpoints
 
 ### Verification Workflow Logic:
+
 1. **Unverified State:** When a new driver registers, their status defaults to `unverified`.
 2. **Submission:** The driver uploads identity documents, vehicle documents, and photos via the mobile app.
 3. **Pending State:** Once submitted to the backend via the `/api/driver/verification` endpoint, the driver's `verificationStatus` is updated to `pending`. At this point, the driver cannot accept rides until approved by an admin.
-4. **Admin Action (Backend):** An admin reviews the documents. 
+4. **Admin Action (Backend):** An admin reviews the documents.
    - If **Approved**, the status becomes `approved`.
    - If **Rejected**, the status becomes `rejected` and a `rejectionReason` is provided so the driver knows what to fix.
 
 ### 2.1. Submit Verification Documents
-Submits the comprehensive set of required documents and vehicle information for administrator approval. 
-*(Note: Commute details are explicitly excluded here and should be handled by the Commute endpoint after or during verification).*
+
+Submits the comprehensive set of required documents and vehicle information for administrator approval.
+_(Note: Commute details are explicitly excluded here and should be handled by the Commute endpoint after or during verification)._
 
 - **Endpoint:** `POST /api/driver/verification`
 - **Headers:** `Authorization: Bearer <token>`
@@ -137,6 +142,7 @@ Submits the comprehensive set of required documents and vehicle information for 
 ## 3. Profile & Commute Endpoints
 
 ### 3.1. Get Driver Profile
+
 Retrieves the full profile of the authenticated driver, including verification status, performance stats, and settings.
 
 - **Endpoint:** `GET /api/driver/profile`
@@ -152,6 +158,7 @@ Retrieves the full profile of the authenticated driver, including verification s
   ```
 
 ### 3.2. Update Driver Profile
+
 Updates basic information and preferences for the authenticated driver. Covers fields from both the Edit Profile and Profile Details screens.
 
 - **Endpoint:** `PUT /api/driver/profile`
@@ -180,6 +187,7 @@ Updates basic information and preferences for the authenticated driver. Covers f
   ```
 
 ### 3.3. Create / Update Default Commute
+
 Creates or updates the default commuting route and schedule for the driver.
 
 - **Endpoint:** `PUT /api/driver/commute`
@@ -217,24 +225,25 @@ Creates or updates the default commuting route and schedule for the driver.
 ## 4. Data Schemas
 
 ### Driver Profile Schema
+
 This is the unified driver object returned upon successful authentication or profile fetching.
 
 ```ts
 {
   "id": "string", // Unique UUID for the driver
-  "fullName": "string", 
+  "fullName": "string",
   "phoneNumber": "string", // Unique, serves as main identifier
   "email": "string", // Optional
   "address": "string", // Optional, Residential Address
   "dateOfBirth": "string", // Optional, Format: YYYY-MM-DD
   "language": "string", // Default: "English"
   "avatarUrl": "string", // Optional URL to profile photo
-  
+
   // Operational Status
   "verificationStatus": "string", // Enum: "unverified" | "pending" | "approved" | "rejected"
   "isOnline": "boolean", // Default false
   "activeVehicleId": "string", // Optional
-  
+
   // Performance Metrics
   "rating": 5.0, // number, Default: 5.0
   "totalTrips": 0, // number, Default: 0
@@ -245,6 +254,6 @@ This is the unified driver object returned upon successful authentication or pro
     // Plus system fields:
     "status": "string", // Enum: "unverified" | "pending" | "approved" | "rejected"
     "rejectionReason": "string" // Optional, populated by admin if rejected
-  } 
+  }
 }
 ```

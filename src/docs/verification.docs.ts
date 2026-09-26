@@ -1,6 +1,7 @@
 import { errorResponse, successResponse, registry } from "./registry.js";
 import { z } from "zod";
 import {
+  documentTypeSchema,
   verificationDocumentResponseSchema,
   verificationDocumentWithHistorySchema,
   uploadParamsSchema,
@@ -10,18 +11,44 @@ import {
 import { idParamsSchema } from "../schemas/common.schema.js";
 
 registry.registerPath({
+  method: "get",
+  path: "/document-types",
+  tags: ["Driver Verification"],
+  summary: "List document types",
+  description:
+    "Reference data for building the upload UI: every document type a driver can be asked to submit, with whether it expires.",
+  responses: {
+    200: successResponse("Document types retrieved successfully", z.array(documentTypeSchema)),
+    401: errorResponse("Missing or invalid access token"),
+  },
+});
+
+registry.registerPath({
   method: "post",
   path: "/driver/verification/{documentTypeId}",
   tags: ["Driver Verification"],
   summary: "Upload a verification document",
   description:
-    "Driver submits a verification document (ID, license, insurance, etc). Returns 409 if already submitted.",
+    "Driver submits a verification document (ID, license, insurance, etc) as multipart/form-data. Accepts JPEG, PNG, WEBP or PDF, up to 10MB. Returns 409 if already submitted.",
   request: {
     params: uploadParamsSchema,
+    body: {
+      content: {
+        "multipart/form-data": {
+          schema: {
+            type: "object",
+            properties: {
+              file: { type: "string", format: "binary", description: "The document file" },
+            },
+            required: ["file"],
+          },
+        },
+      },
+    },
   },
   responses: {
     201: successResponse("Document uploaded successfully", verificationDocumentResponseSchema),
-    400: errorResponse("Invalid document type or validation error"),
+    400: errorResponse("Invalid document type, missing/unsupported file, or file too large"),
     401: errorResponse("Missing or invalid access token"),
     409: errorResponse("Document of this type already submitted"),
   },
@@ -56,7 +83,10 @@ registry.registerPath({
     },
   },
   responses: {
-    200: successResponse("Document status updated successfully", verificationDocumentResponseSchema),
+    200: successResponse(
+      "Document status updated successfully",
+      verificationDocumentResponseSchema,
+    ),
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Missing permission: update on roles"),

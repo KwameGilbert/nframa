@@ -12,6 +12,7 @@
 This specification details all backend REST API endpoints, request payloads, query parameters, response structures, and domain constraints for the **Administration** module of the Nframa Mobility Admin System.
 
 It covers three core domains:
+
 1. **Admin Users Management** (`/api/v1/admin/users`) — Accounts, invitations, credential provisioning, profile updates, account suspensions, and deletions.
 2. **Roles & Permissions (RBAC)** (`/api/v1/admin/roles`) — Dynamic role creation, granular module-level CRUD permissions, role assignment, and foreign-key deletion guards.
 3. **Activity & Audit Logs** (`/api/v1/admin/activity-logs`) — Immutable audit trail of administrative actions, actor tracking, IP addresses, targets, and execution results.
@@ -22,20 +23,21 @@ It covers three core domains:
 
 All role permissions are mapped against the platform's core system modules:
 
-| Module Identifier (`moduleId`) | Module Display Name | Description |
-| :--- | :--- | :--- |
-| `overview` | Operational Overview | Top-level KPI metrics, live fleet stats, corridor health. |
-| `users` | User Management | Rider and Car Owner profiles, tiers, compliance status. |
-| `trip-operations` | Trip Operations | Live tracking, scheduled trips, disputes, misconduct. |
-| `verification` | Driver Verification | Ghana Card (NIA), DVLA license, insurance review. |
-| `route-management` | Route Management | Intercity corridors, waypoints, geofences, base fares. |
-| `finance` | Finance & Wallets | Rider/Owner wallets, payout queues, refunds, audit. |
-| `safety` | Safety (SOS) | Emergency panic triggers, incident dispatch, alerts. |
-| `support` | Support & Tickets | Help tickets, user chat threads, broadcast studio. |
-| `administration` | Administration | Administrator accounts, custom roles, activity logs. |
-| `settings` | Settings | Platform controls, fare algorithms, notification configs. |
+| Module Identifier (`moduleId`) | Module Display Name  | Description                                               |
+| :----------------------------- | :------------------- | :-------------------------------------------------------- |
+| `overview`                     | Operational Overview | Top-level KPI metrics, live fleet stats, corridor health. |
+| `users`                        | User Management      | Rider and Car Owner profiles, tiers, compliance status.   |
+| `trip-operations`              | Trip Operations      | Live tracking, scheduled trips, disputes, misconduct.     |
+| `verification`                 | Driver Verification  | Ghana Card (NIA), DVLA license, insurance review.         |
+| `route-management`             | Route Management     | Intercity corridors, waypoints, geofences, base fares.    |
+| `finance`                      | Finance & Wallets    | Rider/Owner wallets, payout queues, refunds, audit.       |
+| `safety`                       | Safety (SOS)         | Emergency panic triggers, incident dispatch, alerts.      |
+| `support`                      | Support & Tickets    | Help tickets, user chat threads, broadcast studio.        |
+| `administration`               | Administration       | Administrator accounts, custom roles, activity logs.      |
+| `settings`                     | Settings             | Platform controls, fare algorithms, notification configs. |
 
 Each module supports four granular boolean operations:
+
 ```json
 {
   "create": boolean,
@@ -50,21 +52,24 @@ Each module supports four granular boolean operations:
 ## 2. Admin Users Management
 
 ### 2.1 List Admin Users
+
 Retrieves a paginated list of administrator accounts with optional search and filtering.
 
-* **Endpoint:** `GET /api/v1/admin/users`
-* **Auth Required:** Yes (`Bearer <token>`)
+- **Endpoint:** `GET /api/v1/admin/users`
+- **Auth Required:** Yes (`Bearer <token>`)
 
 #### Query Parameters
-| Parameter | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| `search` | `string` | No | Search query matching admin `name` or `email`. |
-| `role` | `string` | No | Filter by assigned role (e.g., `Super Admin`, `Finance Admin`). |
-| `status` | `string` | No | Filter by status: `Active`, `Invited`, or `Suspended`. |
-| `page` | `integer`| No | Current page number (Default: `1`). |
-| `limit` | `integer`| No | Items per page (Default: `10`). |
+
+| Parameter | Type      | Required | Description                                                     |
+| :-------- | :-------- | :------- | :-------------------------------------------------------------- |
+| `search`  | `string`  | No       | Search query matching admin `name` or `email`.                  |
+| `role`    | `string`  | No       | Filter by assigned role (e.g., `Super Admin`, `Finance Admin`). |
+| `status`  | `string`  | No       | Filter by status: `Active`, `Invited`, or `Suspended`.          |
+| `page`    | `integer` | No       | Current page number (Default: `1`).                             |
+| `limit`   | `integer` | No       | Items per page (Default: `10`).                                 |
 
 #### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -117,12 +122,14 @@ Retrieves a paginated list of administrator accounts with optional search and fi
 ---
 
 ### 2.2 Create / Invite Admin User
+
 Provisions a new administrator account and sends an invitation / initial setup email.
 
-* **Endpoint:** `POST /api/v1/admin/users`
-* **Auth Required:** Yes (`Bearer <token>`)
+- **Endpoint:** `POST /api/v1/admin/users`
+- **Auth Required:** Yes (`Bearer <token>`)
 
 #### Request Body
+
 ```json
 {
   "name": "Kojo Darko",
@@ -134,12 +141,14 @@ Provisions a new administrator account and sends an invitation / initial setup e
 ```
 
 #### Validation Rules
-* `name`: Required, non-empty string.
-* `email`: Required, valid email format, must be unique across the platform.
-* `role`: Required, must match an existing role name in the system.
-* `password`: Minimum 8 characters. Must match `confirmPassword`.
+
+- `name`: Required, non-empty string.
+- `email`: Required, valid email format, must be unique across the platform.
+- `role`: Required, must match an existing role name in the system.
+- `password`: Minimum 8 characters. Must match `confirmPassword`.
 
 #### Response (201 Created)
+
 ```json
 {
   "success": true,
@@ -157,21 +166,25 @@ Provisions a new administrator account and sends an invitation / initial setup e
 ```
 
 #### Errors
-* **400 Bad Request:** Validation failed (e.g. passwords do not match or email is malformed).
-* **409 Conflict:** An administrator with this email address already exists.
+
+- **400 Bad Request:** Validation failed (e.g. passwords do not match or email is malformed).
+- **409 Conflict:** An administrator with this email address already exists.
 
 ---
 
 ### 2.3 Get Single Admin User
+
 Retrieves full details for a specific administrator account.
 
-* **Endpoint:** `GET /api/v1/admin/users/{id}`
-* **Auth Required:** Yes (`Bearer <token>`)
+- **Endpoint:** `GET /api/v1/admin/users/{id}`
+- **Auth Required:** Yes (`Bearer <token>`)
 
 #### Path Parameters
-* `id` (`string`): The unique admin ID (e.g., `ADM-1002`).
+
+- `id` (`string`): The unique admin ID (e.g., `ADM-1002`).
 
 #### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -190,12 +203,14 @@ Retrieves full details for a specific administrator account.
 ---
 
 ### 2.4 Update Admin User
+
 Updates mutable profile fields for an administrator. Password is optional; if omitted or blank, the current password remains unchanged.
 
-* **Endpoint:** `PUT /api/v1/admin/users/{id}`
-* **Auth Required:** Yes (`Bearer <token>`)
+- **Endpoint:** `PUT /api/v1/admin/users/{id}`
+- **Auth Required:** Yes (`Bearer <token>`)
 
 #### Request Body
+
 ```json
 {
   "name": "Kwame K. Appiah",
@@ -205,9 +220,11 @@ Updates mutable profile fields for an administrator. Password is optional; if om
   "confirmPassword": "NewSecurePassword2026!"
 }
 ```
-*(Omit `password` and `confirmPassword` if not updating password).*
+
+_(Omit `password` and `confirmPassword` if not updating password)._
 
 #### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -227,20 +244,24 @@ Updates mutable profile fields for an administrator. Password is optional; if om
 ---
 
 ### 2.5 Change Admin User Status (Suspend / Reinstate)
+
 Toggles the administrative access status of an account. Suspended accounts are immediately invalidated and cannot authenticate.
 
-* **Endpoint:** `PATCH /api/v1/admin/users/{id}/status`
-* **Auth Required:** Yes (`Bearer <token>`)
+- **Endpoint:** `PATCH /api/v1/admin/users/{id}/status`
+- **Auth Required:** Yes (`Bearer <token>`)
 
 #### Request Body
+
 ```json
 {
   "status": "Suspended"
 }
 ```
-*(Valid values: `"Active"` or `"Suspended"`).*
+
+_(Valid values: `"Active"` or `"Suspended"`)._
 
 #### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -253,18 +274,21 @@ Toggles the administrative access status of an account. Suspended accounts are i
 ```
 
 #### Errors
-* **400 Bad Request:** Invalid status value provided.
-* **403 Forbidden:** Cannot suspend your own account or the primary Super Admin.
+
+- **400 Bad Request:** Invalid status value provided.
+- **403 Forbidden:** Cannot suspend your own account or the primary Super Admin.
 
 ---
 
 ### 2.6 Delete Admin User
+
 Permanently deletes an administrator account.
 
-* **Endpoint:** `DELETE /api/v1/admin/users/{id}`
-* **Auth Required:** Yes (`Bearer <token>`)
+- **Endpoint:** `DELETE /api/v1/admin/users/{id}`
+- **Auth Required:** Yes (`Bearer <token>`)
 
 #### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -273,19 +297,22 @@ Permanently deletes an administrator account.
 ```
 
 #### Errors
-* **403 Forbidden:** Primary Super Admin accounts cannot be deleted.
+
+- **403 Forbidden:** Primary Super Admin accounts cannot be deleted.
 
 ---
 
 ## 3. Roles & Permissions (RBAC)
 
 ### 3.1 List All Roles
+
 Retrieves all defined roles, their module access lists, granular CRUD permissions, and the count of administrators currently assigned to each.
 
-* **Endpoint:** `GET /api/v1/admin/roles`
-* **Auth Required:** Yes (`Bearer <token>`)
+- **Endpoint:** `GET /api/v1/admin/roles`
+- **Auth Required:** Yes (`Bearer <token>`)
 
 #### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -325,10 +352,7 @@ Retrieves all defined roles, their module access lists, granular CRUD permission
         "id": "finance-admin",
         "name": "Finance Admin",
         "description": "Wallets, payouts, reconciliation, adjustments and financial audit logs.",
-        "permittedModules": [
-          "overview",
-          "finance"
-        ],
+        "permittedModules": ["overview", "finance"],
         "modulePermissions": {
           "overview": { "create": false, "read": true, "update": false, "delete": false },
           "finance": { "create": true, "read": true, "update": true, "delete": true }
@@ -344,21 +368,19 @@ Retrieves all defined roles, their module access lists, granular CRUD permission
 ---
 
 ### 3.2 Create Custom Role
+
 Defines a new administrative role with scoped module access and CRUD permissions.
 
-* **Endpoint:** `POST /api/v1/admin/roles`
-* **Auth Required:** Yes (`Bearer <token>`)
+- **Endpoint:** `POST /api/v1/admin/roles`
+- **Auth Required:** Yes (`Bearer <token>`)
 
 #### Request Body
+
 ```json
 {
   "name": "Compliance Officer",
   "description": "Reviews driver documents and monitors user compliance records.",
-  "permittedModules": [
-    "overview",
-    "verification",
-    "users"
-  ],
+  "permittedModules": ["overview", "verification", "users"],
   "modulePermissions": {
     "overview": { "create": false, "read": true, "update": false, "delete": false },
     "verification": { "create": true, "read": true, "update": true, "delete": false },
@@ -368,12 +390,14 @@ Defines a new administrative role with scoped module access and CRUD permissions
 ```
 
 #### Validation Rules
-* `name`: Required, unique string.
-* `description`: Required, non-empty description.
-* `permittedModules`: Array of valid module IDs.
-* `modulePermissions`: Optional map of CRUD booleans per module. If omitted, default to full CRUD for permitted modules.
+
+- `name`: Required, unique string.
+- `description`: Required, non-empty description.
+- `permittedModules`: Array of valid module IDs.
+- `modulePermissions`: Optional map of CRUD booleans per module. If omitted, default to full CRUD for permitted modules.
 
 #### Response (201 Created)
+
 ```json
 {
   "success": true,
@@ -382,11 +406,7 @@ Defines a new administrative role with scoped module access and CRUD permissions
     "id": "compliance-officer",
     "name": "Compliance Officer",
     "description": "Reviews driver documents and monitors user compliance records.",
-    "permittedModules": [
-      "overview",
-      "verification",
-      "users"
-    ],
+    "permittedModules": ["overview", "verification", "users"],
     "permissionsCount": 6,
     "assignedAdminsCount": 0
   }
@@ -396,21 +416,19 @@ Defines a new administrative role with scoped module access and CRUD permissions
 ---
 
 ### 3.3 Update Role
+
 Updates an existing role's name, description, and module permissions.
 
-* **Endpoint:** `PUT /api/v1/admin/roles/{id}`
-* **Auth Required:** Yes (`Bearer <token>`)
+- **Endpoint:** `PUT /api/v1/admin/roles/{id}`
+- **Auth Required:** Yes (`Bearer <token>`)
 
 #### Request Body
+
 ```json
 {
   "name": "Senior Compliance Officer",
   "description": "Full compliance approvals, user sanctions, and document reviews.",
-  "permittedModules": [
-    "overview",
-    "verification",
-    "users"
-  ],
+  "permittedModules": ["overview", "verification", "users"],
   "modulePermissions": {
     "overview": { "create": false, "read": true, "update": false, "delete": false },
     "verification": { "create": true, "read": true, "update": true, "delete": true },
@@ -420,6 +438,7 @@ Updates an existing role's name, description, and module permissions.
 ```
 
 #### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -430,15 +449,18 @@ Updates an existing role's name, description, and module permissions.
 ---
 
 ### 3.4 Assign Admin to Role
+
 Reassigns an administrator user to a specific role.
 
-* **Endpoint:** `POST /api/v1/admin/roles/{id}/assign`
-* **Auth Required:** Yes (`Bearer <token>`)
+- **Endpoint:** `POST /api/v1/admin/roles/{id}/assign`
+- **Auth Required:** Yes (`Bearer <token>`)
 
 #### Path Parameters
-* `id` (`string`): The role ID or role name slug (e.g. `finance-admin`).
+
+- `id` (`string`): The role ID or role name slug (e.g. `finance-admin`).
 
 #### Request Body
+
 ```json
 {
   "adminId": "ADM-1004"
@@ -446,6 +468,7 @@ Reassigns an administrator user to a specific role.
 ```
 
 #### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -460,15 +483,18 @@ Reassigns an administrator user to a specific role.
 ---
 
 ### 3.5 Delete Role
+
 Deletes a custom role.
 
-* **Endpoint:** `DELETE /api/v1/admin/roles/{id}`
-* **Auth Required:** Yes (`Bearer <token>`)
+- **Endpoint:** `DELETE /api/v1/admin/roles/{id}`
+- **Auth Required:** Yes (`Bearer <token>`)
 
 #### Constraint & Foreign Key Guard
+
 A role that is **currently assigned to one or more admin users cannot be deleted**. Administrators must be reassigned first.
 
 #### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -477,6 +503,7 @@ A role that is **currently assigned to one or more admin users cannot be deleted
 ```
 
 #### Error (409 Conflict)
+
 ```json
 {
   "success": false,
@@ -492,25 +519,28 @@ A role that is **currently assigned to one or more admin users cannot be deleted
 ## 4. Activity Logs (Audit Trail)
 
 ### 4.1 List Activity Logs
+
 Retrieves the centralized audit trail of administrative actions across all system modules.
 
-* **Endpoint:** `GET /api/v1/admin/activity-logs`
-* **Auth Required:** Yes (`Bearer <token>`)
+- **Endpoint:** `GET /api/v1/admin/activity-logs`
+- **Auth Required:** Yes (`Bearer <token>`)
 
 #### Query Parameters
-| Parameter | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| `search` | `string` | No | Search query across `actor`, `action`, or `target` ID. |
-| `actor` | `string` | No | Filter by administrator name (e.g., `Akosua Buabeng`). |
-| `module` | `string` | No | Filter by module name (e.g., `Finance`, `Verification`, `Users`). |
-| `result` | `string` | No | Filter by outcome: `Success` or `Failed`. |
-| `target` | `string` | No | Filter by target entity ID (e.g., `WDR-9540`, `ADM-1002`). |
-| `startDate`| `string` | No | ISO 8601 start timestamp filter. |
-| `endDate` | `string` | No | ISO 8601 end timestamp filter. |
-| `page` | `integer`| No | Current page number (Default: `1`). |
-| `limit` | `integer`| No | Items per page (Default: `10`). |
+
+| Parameter   | Type      | Required | Description                                                       |
+| :---------- | :-------- | :------- | :---------------------------------------------------------------- |
+| `search`    | `string`  | No       | Search query across `actor`, `action`, or `target` ID.            |
+| `actor`     | `string`  | No       | Filter by administrator name (e.g., `Akosua Buabeng`).            |
+| `module`    | `string`  | No       | Filter by module name (e.g., `Finance`, `Verification`, `Users`). |
+| `result`    | `string`  | No       | Filter by outcome: `Success` or `Failed`.                         |
+| `target`    | `string`  | No       | Filter by target entity ID (e.g., `WDR-9540`, `ADM-1002`).        |
+| `startDate` | `string`  | No       | ISO 8601 start timestamp filter.                                  |
+| `endDate`   | `string`  | No       | ISO 8601 end timestamp filter.                                    |
+| `page`      | `integer` | No       | Current page number (Default: `1`).                               |
+| `limit`     | `integer` | No       | Items per page (Default: `10`).                                   |
 
 #### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -569,15 +599,18 @@ Retrieves the centralized audit trail of administrative actions across all syste
 ---
 
 ### 4.2 Get Single Activity Log Detail
+
 Fetches detailed audit record metadata for deep inspection.
 
-* **Endpoint:** `GET /api/v1/admin/activity-logs/{id}`
-* **Auth Required:** Yes (`Bearer <token>`)
+- **Endpoint:** `GET /api/v1/admin/activity-logs/{id}`
+- **Auth Required:** Yes (`Bearer <token>`)
 
 #### Path Parameters
-* `id` (`string`): The activity log ID (e.g., `ACT-6210`).
+
+- `id` (`string`): The activity log ID (e.g., `ACT-6210`).
 
 #### Response (200 OK)
+
 ```json
 {
   "success": true,
@@ -595,7 +628,7 @@ Fetches detailed audit record metadata for deep inspection.
     "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     "result": "Success",
     "metadata": {
-      "amount": 450.00,
+      "amount": 450.0,
       "currency": "GHS",
       "payoutMethod": "MTN Mobile Money"
     }
@@ -622,12 +655,13 @@ Errors follow the uniform Nframa API error format:
 ```
 
 ### Common HTTP Status Codes
-| Status Code | Code Constant | When Triggered |
-| :--- | :--- | :--- |
-| `400 Bad Request` | `VALIDATION_ERROR` | Required fields missing, passwords don't match, or bad input. |
-| `401 Unauthorized`| `UNAUTHORIZED` | Missing or expired Bearer token. |
-| `403 Forbidden` | `INSUFFICIENT_PERMISSIONS` | Authenticated user lacks `administration` write privileges. |
-| `404 Not Found` | `RESOURCE_NOT_FOUND` | Admin ID, Role ID, or Activity Log ID does not exist. |
-| `409 Conflict` | `ROLE_IN_USE` | Attempted to delete a role currently assigned to admin users. |
-| `409 Conflict` | `EMAIL_ALREADY_EXISTS` | Attempted to invite an admin with an email already registered. |
-| `500 Internal Error`| `SERVER_ERROR` | Unexpected backend or database exception. |
+
+| Status Code          | Code Constant              | When Triggered                                                 |
+| :------------------- | :------------------------- | :------------------------------------------------------------- |
+| `400 Bad Request`    | `VALIDATION_ERROR`         | Required fields missing, passwords don't match, or bad input.  |
+| `401 Unauthorized`   | `UNAUTHORIZED`             | Missing or expired Bearer token.                               |
+| `403 Forbidden`      | `INSUFFICIENT_PERMISSIONS` | Authenticated user lacks `administration` write privileges.    |
+| `404 Not Found`      | `RESOURCE_NOT_FOUND`       | Admin ID, Role ID, or Activity Log ID does not exist.          |
+| `409 Conflict`       | `ROLE_IN_USE`              | Attempted to delete a role currently assigned to admin users.  |
+| `409 Conflict`       | `EMAIL_ALREADY_EXISTS`     | Attempted to invite an admin with an email already registered. |
+| `500 Internal Error` | `SERVER_ERROR`             | Unexpected backend or database exception.                      |

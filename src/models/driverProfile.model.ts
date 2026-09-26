@@ -46,7 +46,9 @@ class DriverProfileModel extends BaseModel<DriverProfile> {
     userId: string,
     status: "unverified" | "pending" | "approved" | "rejected" | "expiring",
   ) {
-    return this.updateById(userId, { verificationStatus: status } as unknown as Partial<DriverProfile>);
+    return this.updateById(userId, {
+      verificationStatus: status,
+    } as unknown as Partial<DriverProfile>);
   }
 }
 

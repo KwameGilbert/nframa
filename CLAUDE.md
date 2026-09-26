@@ -27,7 +27,8 @@ pnpm test settings    # only test files whose path contains "settings" — e.g. 
 pnpm test tests/users.test.ts   # exactly one file ("users" alone also matches adminUsers)
 pnpm test:watch
 ```
-Don't execute prompts/plans just like that, break it into parts. As much as possible, always rewrite prompt and optimized to use as minimum tokens as possible while doing the best work  possible. Between all available models and its version From Fable, Opus, Haiku, to Sonnet switch between models and version depending on the difficulty, complexity, and demand of the work for the best results while optmizing to save usage while giving the best results without compromising quality of work.
+
+Don't execute prompts/plans just like that, break it into parts. As much as possible, always rewrite prompt and optimized to use as minimum tokens as possible while doing the best work possible. Between all available models and its version From Fable, Opus, Haiku, to Sonnet switch between models and version depending on the difficulty, complexity, and demand of the work for the best results while optmizing to save usage while giving the best results without compromising quality of work.
 
 Spawn one agent to plan if there already isnt a plan yet, one to execute the plan and another to review what has been done and compare to the plan that was initially done, if there is anything wrong about the execution take it back to the executor to work on or fix.
 
@@ -92,6 +93,17 @@ Write `jsonb` columns with `JSON.stringify(value)` (see `settingModel`): pg send
 
 `/settings` is an admin-managed key/value store (`settings` table, guarded by the `settings` module's permissions). Each row has a dotted camelCase `key` (`fares.baseFare`), a `type` (`string`/`number`/`boolean`/`json`, where json means an object or array) and a jsonb `value` that every create and update is checked against the type. The key and type can't change after creation — delete and recreate instead. `updatedBy` records the admin who last wrote it.
 
+### File storage
+
+Uploaded files (currently: driver verification documents) go through `src/services/storage.service.ts`, which switches between two drivers on `STORAGE_DRIVER` (`local` | `cloudinary`, default `local`) — nothing else in the app should read Cloudinary/filesystem APIs directly. `uploadFile(buffer, folder, originalFilename)` returns `{ fileUrl, storageKey, storageDriver }`; `storageKey` (a relative path for local, a `public_id` for Cloudinary) and `storageDriver` are stored alongside `fileUrl` so a file can be deleted later regardless of which driver holds it — they're internal-only, kept off every response the same way `UserModel` excludes `passwordHash` (see `VerificationDocumentModel.excludedColumns`, and its `PUBLIC_COLUMNS` for the custom queries that bypass `sanitize()`).
+
+- **local**: writes to `LOCAL_STORAGE_DIR` (default `uploads/`, gitignored) and is served back unauthenticated via `express.static` in `app.ts`, mounted at the path portion of `LOCAL_STORAGE_BASE_URL`. Fine for local dev; not a substitute for real access control on documents containing ID/license numbers — use `cloudinary` once this needs to be production-safe.
+- **cloudinary**: needs `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET`. Uploads via `upload_stream` with `resource_type: "auto"` so both images and PDFs work.
+
+Uploads arrive as `multipart/form-data`, not JSON — `src/middlewares/upload.ts` wraps `multer` (memory storage, 10MB limit, JPEG/PNG/WEBP/PDF only) and converts its errors to `AppError` so they reach `errorHandler` like any other 400, instead of an unhandled 500. It runs before `validate()` on routes that accept a file, since `express.json()` skips multipart bodies entirely — multer is what parses them.
+
+Tests never hit disk or Cloudinary: `tests/setup.ts` mocks `storage.service.js` the same way it mocks SMS/email, returning a fake-but-real-shaped URL built from the actual inputs.
+
 ### Environment
 
 `.env.${NODE_ENV}` is loaded explicitly (via `dotenv`'s `config({ path: ... })`), not a bare `.env` — `NODE_ENV` itself is set by the `dev`/`start` npm scripts via `cross-env` (needed for Windows compatibility). `.env.example` is intentionally the only `.env*` file not gitignored.
@@ -103,7 +115,7 @@ Vitest + supertest, one file per module (`auth`, `users`, `adminUsers`, `roles`,
 Rules every test follows — keep them when adding tests:
 
 - **Never clear data.** No truncating, no rollbacks, no deleting records a test didn't create. Records tests create are left in place (soft deletes and API deletes of the test's own records are the only exceptions — they're what's being tested).
-- **Never change a pre-existing record, even in a test that expects a refusal.** If the guard broke, the change would land on real data. Target a record the test created (e.g. an *invited* admin on the super admin role), or send a no-op body (the current description, the permissions it already has).
+- **Never change a pre-existing record, even in a test that expects a refusal.** If the guard broke, the change would land on real data. Target a record the test created (e.g. an _invited_ admin on the super admin role), or send a no-op body (the current description, the permissions it already has).
 - **Realistic data** from `tests/helpers/data.ts` — Ghanaian names and phone numbers, Accra/Kumasi addresses, Ghana plates, `@example.com` emails (reserved, so never deliverable). Phone numbers, emails, plates, role names and setting keys come from `tests/helpers/unique.ts`, which reads the DB to pick values nothing uses yet — a reused phone number or email would sign a test into someone else's account.
 - **No real SMS or email.** `tests/setup.ts` mocks both services for every file; `tests/helpers/outbox.ts` reads the OTP/reset codes from the mocks.
 - **Tests in a file run concurrently** (`sequence.concurrent`, 5 at a time — the DB is remote, ~200ms a query), so each test creates what it changes and never depends on another test. `clearMocks` is off for the same reason: clearing before each test would wipe codes other in-flight tests were just sent.
