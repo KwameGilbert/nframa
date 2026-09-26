@@ -100,6 +100,7 @@ describe("POST /auth/login", () => {
       settings: everything,
       roles: everything,
       users: everything,
+      verification: everything,
     });
   });
 

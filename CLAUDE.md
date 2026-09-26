@@ -68,7 +68,7 @@ Socket.IO is attached to the raw `http.Server`, not to the Express `app` — `ap
 
 ### API docs (`src/docs/`)
 
-OpenAPI spec generated via `@asteasolutions/zod-to-openapi`, reusing the same zod schemas used for validation (no separate/duplicate schema definitions). One `*.docs.ts` file per resource registers its paths against a shared `registry` (`src/docs/registry.ts`); `src/docs/openapi.ts` imports all of them and generates the final document. Served at `GET /docs` (Swagger UI) and `GET /openapi.json` (raw spec) via `src/routes/docs.routes.ts`.
+OpenAPI spec generated via `@asteasolutions/zod-to-openapi`, reusing the same zod schemas used for validation (no separate/duplicate schema definitions). One `*.docs.ts` file per resource registers its paths against a shared `registry` (`src/docs/registry.ts`); `src/docs/openapi.ts` imports all of them and generates the final document. Served at `GET /docs` (Swagger UI) and `GET /openapi.json` (raw spec) via `src/routes/docs.routes.ts`. Always sort the docs groups in alphabetical order with the exception of health which can stay as is
 
 Examples/descriptions live on the zod schemas themselves via zod's native `.meta({ description, example })` (zod-to-openapi reads it; no import-order dependency on `extendZodWithOpenApi`). Document every 2xx response with `successResponse(message, dataSchema?)` and every non-2xx with `errorResponse(description)` from `registry.ts`, so each carries the shared envelope. Response schemas are docs-only — responses aren't validated at runtime, so keep them in sync with the table columns by hand.
 

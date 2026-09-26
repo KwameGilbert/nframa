@@ -123,7 +123,7 @@ export async function getDocumentHistory(req: Request, res: Response) {
   if (!document) {
     throw AppError.notFound(`Document not found: ${documentId}`);
   }
-  await assertSelfOrPermission(req, document.userId, "users", "read");
+  await assertSelfOrPermission(req, document.userId, "verification", "read");
 
   const history = await verificationDocumentHistoryModel.getDocumentHistory(documentId);
 

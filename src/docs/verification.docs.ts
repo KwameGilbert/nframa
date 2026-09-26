@@ -78,7 +78,8 @@ registry.registerPath({
   path: "/admin/verification/{documentId}",
   tags: ["Admin - Verification"],
   summary: "Update document verification status (admin)",
-  description: "Admin approves, rejects, or leaves notes on a verification document.",
+  description:
+    "Admin approves, rejects, or leaves notes on a verification document. Needs verification: update.",
   security: [{ bearerAuth: [] }],
   request: {
     params: documentIdParamsSchema,
@@ -93,7 +94,7 @@ registry.registerPath({
     ),
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("Missing permission: update on users"),
+    403: errorResponse("Missing permission: update on verification"),
     404: errorResponse("Document not found"),
   },
 });
@@ -103,7 +104,8 @@ registry.registerPath({
   path: "/admin/verification/pending",
   tags: ["Admin - Verification"],
   summary: "List pending verification documents (admin)",
-  description: "Retrieve all documents awaiting or under review, with driver details.",
+  description:
+    "Retrieve all documents awaiting or under review, with driver details. Needs verification: read.",
   security: [{ bearerAuth: [] }],
   responses: {
     200: successResponse(
@@ -111,7 +113,7 @@ registry.registerPath({
       z.array(verificationDocumentResponseSchema),
     ),
     401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("Missing permission: read on users"),
+    403: errorResponse("Missing permission: read on verification"),
   },
 });
 
@@ -121,7 +123,7 @@ registry.registerPath({
   tags: ["Driver Verification"],
   summary: "Get document status change history",
   description:
-    "Retrieve the full audit history of a verification document, showing all status changes, who made them, and why. The document's own driver can see it; anyone else needs users: read.",
+    "Retrieve the full audit history of a verification document, showing all status changes, who made them, and why. The document's own driver can see it; anyone else needs verification: read.",
   security: [{ bearerAuth: [] }],
   request: {
     params: documentIdParamsSchema,
@@ -132,7 +134,7 @@ registry.registerPath({
       z.array(verificationDocumentHistoryResponseSchema),
     ),
     401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("Missing permission: read on users"),
+    403: errorResponse("Missing permission: read on verification"),
     404: errorResponse("Document not found"),
   },
 });
