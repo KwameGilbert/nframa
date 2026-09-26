@@ -21,7 +21,9 @@ registry.registerPath({
   },
   responses: {
     201: successResponse("Admin user created successfully", adminUserResponseSchema),
-    400: errorResponse("Validation error, or userId/roleId doesn't match an existing record"),
+    400: errorResponse(
+      "Validation error, userId isn't an existing (non-deleted) user with role admin, or roleId doesn't match a role",
+    ),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller lacks roles: create"),
     409: errorResponse("This user already has an admin record"),

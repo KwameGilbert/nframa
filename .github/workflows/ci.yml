@@ -16,7 +16,7 @@ jobs:
         env:
           POSTGRES_USER: nframa
           POSTGRES_PASSWORD: nframa
-          POSTGRES_DB: nframa
+          POSTGRES_DB: nframa_test
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -25,20 +25,24 @@ jobs:
         ports:
           - 5432:5432
 
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
+    # A throwaway database that only exists for this run. No SMS or email is sent: the tests mock both services.
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: nframa
+      DB_PASSWORD: nframa
+      DB_NAME: nframa_test
+      JWT_ACCESS_SECRET: ci-only-jwt-secret-not-used-anywhere-else
+      BOOTSTRAP_ADMIN_EMAIL: admin@nframa.com
+      BOOTSTRAP_ADMIN_PASSWORD: Ci-Sankofa-Accra-2026!
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      # package.json declares pnpm through devEngines, not a packageManager field, so name the version here.
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: "pnpm"
@@ -46,9 +50,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm test
       - run: pnpm build
-      - run: pnpm test:e2e
-        env:
-          DATABASE_URL: postgres://nframa:nframa@localhost:5432/nframa
-          REDIS_URL: redis://localhost:6379
+      - run: pnpm migrate
+      - run: pnpm seed
+      - run: pnpm test

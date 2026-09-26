@@ -21,12 +21,17 @@ pnpm migrate:rollback
 pnpm migrate:make <name>
 pnpm seed
 pnpm seed:make <name>
+
+pnpm test             # every test file (vitest run)
+pnpm test settings    # only test files whose path contains "settings" — e.g. auth, roles, vehicles
+pnpm test tests/users.test.ts   # exactly one file ("users" alone also matches adminUsers)
+pnpm test:watch
 ```
-Don't execute prompts/plans yourself, break it into parts, planner, executor and reviewer for every task.
+Don't execute prompts/plans just like that, break it into parts. As much as possible, always rewrite prompt and optimized to use as minimum tokens as possible while doing the best work  possible
 
 Spawn one agent to plan if there already isnt a plan yet, one to execute the plan and another to review what has been done and compare to the plan that was initially done, if there is anything wrong about the execution take it back to the executor to work on or fix.
 
-There is no real test suite yet (`pnpm test` is a stub that just echoes, so the pre-commit hook doesn't fail on every commit). `lint-staged` is installed but not wired into `.husky/pre-commit` yet — the hook currently just runs `pnpm test`.
+`.husky/pre-commit` runs `pnpm test`, which is now the real suite (see Tests below): every commit takes ~40s, needs the database, and adds test records to it. `lint-staged` is installed but not wired into the hook.
 
 **Never run `pnpm migrate` / `pnpm migrate:rollback` automatically.** Write and edit migration files as needed, but leave running them to the user — they run migrations themselves.
 
@@ -40,9 +45,9 @@ Postgres must be reachable at the host/port/credentials in `.env.development` fo
 
 Express 5 + TypeScript (strict, ESM/`NodeNext`) + Knex/Postgres + Zod, with `"type": "module"` — all relative imports need explicit `.js` extensions even though source files are `.ts`.
 
-### Request pipeline (`src/index.ts`)
+### Request pipeline (`src/app.ts`)
 
-Middleware order matters and is easy to break: `captureResponseBody` → `httpLogger` → `helmet` → `cors` → `express.json()` → `router` (all app routes) → `notFoundHandler` → `errorHandler`. `notFoundHandler`/`errorHandler` **must** stay after every route registration — if a router gets mounted after them, every request 404s before reaching its handler (this has happened before in this codebase).
+`src/app.ts` builds the Express app and exports it without listening; `src/index.ts` loads env, sets process handlers, and serves it (plus Socket.IO). Tests import `app` directly. Middleware order matters and is easy to break: `captureResponseBody` → `httpLogger` → `helmet` → `cors` → `express.json()` → `router` (all app routes) → `notFoundHandler` → `errorHandler`. `notFoundHandler`/`errorHandler` **must** stay after every route registration — if a router gets mounted after them, every request 404s before reaching its handler (this has happened before in this codebase).
 
 Socket.IO is attached to the raw `http.Server`, not to the Express `app` — `app.listen` won't work once Socket.IO is involved; it's `httpServer.listen`.
 
@@ -91,7 +96,21 @@ Write `jsonb` columns with `JSON.stringify(value)` (see `settingModel`): pg send
 
 `.env.${NODE_ENV}` is loaded explicitly (via `dotenv`'s `config({ path: ... })`), not a bare `.env` — `NODE_ENV` itself is set by the `dev`/`start` npm scripts via `cross-env` (needed for Windows compatibility). `.env.example` is intentionally the only `.env*` file not gitignored.
 
+### Tests (`tests/`)
+
+Vitest + supertest, one file per module (`auth`, `users`, `adminUsers`, `roles`, `rolePermissions`, `driverProfiles`, `riderProfiles`, `vehicles`, `settings`, `health`). They call the app in-process (`tests/helpers/api.ts`) — no server needed — against a **real database**: the one in `.env.test` if that file exists, otherwise `.env.development` (`vitest.config.ts`). They sign in as the seeded super admin, so `BOOTSTRAP_ADMIN_PASSWORD` must be set and the DB migrated and seeded.
+
+Rules every test follows — keep them when adding tests:
+
+- **Never clear data.** No truncating, no rollbacks, no deleting records a test didn't create. Records tests create are left in place (soft deletes and API deletes of the test's own records are the only exceptions — they're what's being tested).
+- **Never change a pre-existing record, even in a test that expects a refusal.** If the guard broke, the change would land on real data. Target a record the test created (e.g. an *invited* admin on the super admin role), or send a no-op body (the current description, the permissions it already has).
+- **Realistic data** from `tests/helpers/data.ts` — Ghanaian names and phone numbers, Accra/Kumasi addresses, Ghana plates, `@example.com` emails (reserved, so never deliverable). Phone numbers, emails, plates, role names and setting keys come from `tests/helpers/unique.ts`, which reads the DB to pick values nothing uses yet — a reused phone number or email would sign a test into someone else's account.
+- **No real SMS or email.** `tests/setup.ts` mocks both services for every file; `tests/helpers/outbox.ts` reads the OTP/reset codes from the mocks.
+- **Tests in a file run concurrently** (`sequence.concurrent`, 5 at a time — the DB is remote, ~200ms a query), so each test creates what it changes and never depends on another test. `clearMocks` is off for the same reason: clearing before each test would wipe codes other in-flight tests were just sent.
+- Build accounts with `tests/helpers/actors.ts` (`signUpByPhone`, `createSignedInAdmin(token, { settings: { read: true } })`, ...), which go through the API like a real client. Super admin sessions opened by a test file are logged out when it finishes.
+- CI (`.github/workflows/ci.yml`) runs lint, typecheck, build, then `pnpm migrate` + `pnpm seed` + `pnpm test` against a fresh Postgres 17 service container, with every env var set in the workflow (CI-only values). A new required env var needs adding there too.
+- Rate limiters are in-memory per test file, so a file can make ~100 calls to the credential endpoints (`authIpLimit`) before its own requests start getting 429s.
+
 ### Known gaps / stale pieces
 
-- `.github/workflows/ci.yml` predates this Express rewrite — it still runs `pnpm test:e2e` (no such script exists) and spins up a Redis service that nothing in the app currently uses.
 - `typescript` is pinned to `^6.x`, not the newer `7.x` line, because `typescript-eslint` doesn't yet support TypeScript 7's new architecture.

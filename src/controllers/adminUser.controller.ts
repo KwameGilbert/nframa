@@ -10,6 +10,18 @@ import type { CreateAdminUserInput, UpdateAdminUserInput } from "../schemas/admi
 export async function createAdminUser(req: Request, res: Response) {
   const { password, ...input } = req.validated.body as CreateAdminUserInput;
 
+  // Only a live admin account can get an admin record — otherwise a rider or driver could be handed admin
+  // permissions (and a password) through their existing phone login.
+  const user = await userModel.findById(input.userId);
+  if (!user || user.deletedAt) {
+    throw AppError.badRequest(`User not found: ${input.userId}`);
+  }
+  if (user.role !== "admin") {
+    throw AppError.badRequest(
+      `User ${input.userId} is a ${user.role}; only accounts with role admin can have an admin record`,
+    );
+  }
+
   const adminUser = await adminUserModel.createAdminUser(input);
 
   // The password lives on the users row, not the admin extension record.
