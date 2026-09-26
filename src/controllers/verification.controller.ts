@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { verificationDocumentModel } from "../models/verificationDocument.model.js";
+import { verificationDocumentHistoryModel } from "../models/verificationDocumentHistory.model.js";
 import { documentTypeModel } from "../models/documentType.model.js";
 import { driverProfileModel } from "../models/driverProfile.model.js";
 import { AppError } from "../utils/AppError.js";
@@ -59,7 +60,15 @@ export async function getDriverDocuments(req: Request, res: Response) {
   const userId = req.auth.id as string;
   const documents = await verificationDocumentModel.getDocumentsByUserId(userId);
 
-  sendSuccess(res, "Documents retrieved successfully", documents);
+  // Fetch history for each document and nest it
+  const documentsWithHistory = await Promise.all(
+    documents.map(async (doc) => ({
+      ...doc,
+      history: await verificationDocumentHistoryModel.getDocumentHistory(doc.id),
+    })),
+  );
+
+  sendSuccess(res, "Documents retrieved successfully", documentsWithHistory);
 }
 
 export async function updateDocumentStatus(req: Request, res: Response) {
@@ -79,10 +88,32 @@ export async function updateDocumentStatus(req: Request, res: Response) {
     input.notes,
   );
 
+  // Log the status change to history
+  await verificationDocumentHistoryModel.logStatusChange(
+    documentId,
+    document.status, // previous status
+    input.status, // new status
+    verifiedBy || null,
+    input.notes, // reason for the change
+  );
+
   // Recalculate driver verification status
   await recalculateDriverVerificationStatus(document.userId);
 
   sendSuccess(res, "Document status updated successfully", updated);
+}
+
+export async function getDocumentHistory(req: Request, res: Response) {
+  const { documentId } = req.validated.params as { documentId: string };
+
+  const document = await verificationDocumentModel.findById(documentId);
+  if (!document) {
+    throw AppError.notFound(`Document not found: ${documentId}`);
+  }
+
+  const history = await verificationDocumentHistoryModel.getDocumentHistory(documentId);
+
+  sendSuccess(res, "Document history retrieved successfully", history);
 }
 
 export async function listPendingDocuments(req: Request, res: Response) {

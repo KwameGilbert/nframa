@@ -27,7 +27,7 @@ pnpm test settings    # only test files whose path contains "settings" — e.g. 
 pnpm test tests/users.test.ts   # exactly one file ("users" alone also matches adminUsers)
 pnpm test:watch
 ```
-Don't execute prompts/plans just like that, break it into parts. As much as possible, always rewrite prompt and optimized to use as minimum tokens as possible while doing the best work  possible
+Don't execute prompts/plans just like that, break it into parts. As much as possible, always rewrite prompt and optimized to use as minimum tokens as possible while doing the best work  possible. Between all available models and its version From Fable, Opus, Haiku, to Sonnet switch between models and version depending on the difficulty, complexity, and demand of the work for the best results while optmizing to save usage while giving the best results without compromising quality of work.
 
 Spawn one agent to plan if there already isnt a plan yet, one to execute the plan and another to review what has been done and compare to the plan that was initially done, if there is anything wrong about the execution take it back to the executor to work on or fix.
 

@@ -42,6 +42,27 @@ export const verificationDocumentResponseSchema = z.object({
 
 export type VerificationDocument = z.infer<typeof verificationDocumentResponseSchema>;
 
+export const verificationDocumentHistoryResponseSchema = z.object({
+  id: z.uuid(),
+  documentId: z.uuid(),
+  previousStatus: z.string().nullable().meta({ description: "Status before this change, null if this was the initial submission" }),
+  newStatus: z.string().meta({ description: "Status after this change" }),
+  changedBy: z.uuid().nullable().meta({ description: "Admin who made the change, null if system-generated" }),
+  reason: z.string().nullable().meta({ description: "Why the change was made: rejection reason, notes added, etc." }),
+  changedAt: z.iso.datetime(),
+  createdAt: z.iso.datetime(),
+});
+
+export type VerificationDocumentHistoryResponse = z.infer<typeof verificationDocumentHistoryResponseSchema>;
+
+export const verificationDocumentWithHistorySchema = verificationDocumentResponseSchema.extend({
+  history: z.array(verificationDocumentHistoryResponseSchema).meta({
+    description: "Complete status change history for this document, newest-first",
+  }),
+});
+
+export type VerificationDocumentWithHistory = z.infer<typeof verificationDocumentWithHistorySchema>;
+
 export const uploadVerificationDocumentSchema = z.object({
   documentTypeId: z.number().int().meta({ description: "ID of the document type being submitted" }),
 });

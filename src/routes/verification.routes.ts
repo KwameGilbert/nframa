@@ -6,6 +6,7 @@ import {
   uploadVerificationDocument,
   getDriverDocuments,
   updateDocumentStatus,
+  getDocumentHistory,
   listPendingDocuments,
 } from "../controllers/verification.controller.js";
 import {
@@ -42,4 +43,12 @@ verificationRouter.get(
   authenticate,
   requirePermission("roles", "read"),
   listPendingDocuments,
+);
+
+// Get full status history for a document (driver or admin)
+verificationRouter.get(
+  "/verification/:documentId/history",
+  authenticate,
+  validate({ params: idParamsSchema }),
+  getDocumentHistory,
 );

@@ -2,8 +2,10 @@ import { errorResponse, successResponse, registry } from "./registry.js";
 import { z } from "zod";
 import {
   verificationDocumentResponseSchema,
+  verificationDocumentWithHistorySchema,
   uploadParamsSchema,
   updateDocumentStatusSchema,
+  verificationDocumentHistoryResponseSchema,
 } from "../schemas/verification.schema.js";
 import { idParamsSchema } from "../schemas/common.schema.js";
 
@@ -30,11 +32,12 @@ registry.registerPath({
   path: "/driver/verification",
   tags: ["Driver Verification"],
   summary: "Get driver's verification documents",
-  description: "Retrieve all verification documents submitted by the authenticated driver.",
+  description:
+    "Retrieve all verification documents submitted by the authenticated driver, each with its complete status change history.",
   responses: {
     200: successResponse(
       "Documents retrieved successfully",
-      z.array(verificationDocumentResponseSchema),
+      z.array(verificationDocumentWithHistorySchema),
     ),
     401: errorResponse("Missing or invalid access token"),
   },
@@ -74,5 +77,25 @@ registry.registerPath({
     ),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Missing permission: read on roles"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/verification/{documentId}/history",
+  tags: ["Driver Verification"],
+  summary: "Get document status change history",
+  description:
+    "Retrieve the full audit history of a verification document, showing all status changes, who made them, and why.",
+  request: {
+    params: idParamsSchema,
+  },
+  responses: {
+    200: successResponse(
+      "Document history retrieved successfully",
+      z.array(verificationDocumentHistoryResponseSchema),
+    ),
+    401: errorResponse("Missing or invalid access token"),
+    404: errorResponse("Document not found"),
   },
 });
