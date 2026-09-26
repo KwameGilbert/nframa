@@ -3,7 +3,11 @@ import { passwordSchema } from "./common.schema.js";
 
 const adminStatusSchema = z
   .enum(["active", "suspended", "invited"])
-  .meta({ description: "Only active admins can log in. New admins start as invited." });
+  .meta({
+    description:
+      "active: can log in and access assigned permissions; suspended: locked out; invited: awaiting first login setup. Only active admins can log in. New admins start as invited.",
+    example: "active",
+  });
 
 const departmentSchema = z.string().min(1).meta({ example: "Operations" });
 

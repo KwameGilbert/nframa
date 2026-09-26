@@ -26,7 +26,8 @@ const phoneIdentifier = z.object({
     .meta({ description: "Phone number without the country code", example: "541436414" }),
   role: z.enum(["rider", "driver"]).optional().meta({
     description:
-      "Required only when signing up a phone number that has no account yet; ignored for existing accounts",
+      "Required only when signing up a phone number that has no account yet; ignored for existing accounts. Valid values: rider (customer), driver (service provider)",
+    example: "rider",
   }),
 });
 

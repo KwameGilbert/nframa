@@ -32,7 +32,11 @@ export const driverProfileParamsSchema = z.object({
 export const driverProfileResponseSchema = z.object({
   userId: z.uuid(),
   code: z.string().meta({ description: "Generated on creation", example: "DR-7KQ2MX" }),
-  verificationStatus: z.enum(["unverified", "pending", "approved", "rejected", "expiring"]),
+  verificationStatus: z.enum(["unverified", "pending", "approved", "rejected", "expiring"]).meta({
+    description:
+      "unverified: no docs submitted yet; pending: docs under review; approved: verified and active; rejected: docs not accepted; expiring: was approved but verification expires soon",
+    example: "approved",
+  }),
   ghanaCardNumber: z.string().nullable().meta({ example: "GHA-123456789-0" }),
   address: z.string().nullable().meta({ example: "12 Oxford St, Osu, Accra" }),
   isOnline: z.boolean(),

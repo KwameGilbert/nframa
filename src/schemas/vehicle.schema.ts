@@ -44,7 +44,10 @@ export const vehicleResponseSchema = z.object({
   color: z.string().meta({ example: "Silver" }),
   plate: z.string().meta({ example: "GR 1234-21" }),
   seats: z.number().int().meta({ example: 4 }),
-  status: z.enum(["active", "retired"]),
+  status: z.enum(["active", "retired"]).meta({
+    description: "active: vehicle is in use; retired: vehicle is no longer registered for service",
+    example: "active",
+  }),
   isVerified: z.boolean(),
   verificationDate: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),

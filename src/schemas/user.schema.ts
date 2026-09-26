@@ -52,10 +52,19 @@ export const userResponseSchema = z.object({
   phoneCountryCode: z.string().nullable().meta({ example: "+233" }),
   phoneNumber: z.string().nullable().meta({ example: "541436414" }),
   dateOfBirth: z.iso.date().nullable().meta({ example: "1995-04-12" }),
-  status: z.enum(["active", "suspended"]),
+  status: z.enum(["active", "suspended"]).meta({
+    description: "active: account is usable; suspended: account is locked out",
+    example: "active",
+  }),
   profilePicture: z.string().nullable().meta({ example: "https://cdn.nframa.com/avatars/ama.jpg" }),
-  oauthProvider: z.enum(["google", "facebook", "apple"]).nullable(),
-  role: z.enum(["rider", "driver", "admin"]),
+  oauthProvider: z.enum(["google", "facebook", "apple"]).nullable().meta({
+    description: "OAuth provider if the account was created via social login",
+    example: "google",
+  }),
+  role: z.enum(["rider", "driver", "admin"]).meta({
+    description: "rider: customer; driver: service provider; admin: platform staff",
+    example: "rider",
+  }),
   isPhoneVerified: z.boolean(),
   isEmailVerified: z.boolean(),
   isProfileComplete: z.boolean(),

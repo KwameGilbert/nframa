@@ -1,7 +1,11 @@
 import { z } from "zod";
 import { MODULES } from "../config/permissions.js";
 
-export const moduleSchema = z.enum(MODULES);
+export const moduleSchema = z.enum(MODULES).meta({
+  description:
+    "A feature area that can have permissions: settings (global platform settings), roles (admin access control), users (riders, drivers, and their vehicles)",
+  example: "users",
+});
 
 // Actions left out default to false, so { "read": true } means read-only.
 export const moduleActionsInputSchema = z.object({
