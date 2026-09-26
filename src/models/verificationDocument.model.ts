@@ -1,12 +1,11 @@
 import { BaseModel } from "./BaseModel.js";
 import type { VerificationDocument } from "../schemas/verification.schema.js";
-import type { StorageDriver } from "../services/storage.service.js";
 
-// storageKey/storageDriver exist on the row but are never part of the public response shape (see
-// excludedColumns below) — they're only needed internally, to delete the underlying file later.
+// storageKey exists on the row but is never part of the public response shape (see
+// excludedColumns below) — it's only needed internally, to delete the underlying file later.
 export type VerificationDocumentRow = VerificationDocument & {
   storageKey: string;
-  storageDriver: StorageDriver;
+  storageDriver: "cloudinary";
 };
 
 // Columns safe to return to clients. Custom queries below use `this.table` directly, which — unlike
@@ -36,7 +35,6 @@ export class VerificationDocumentModel extends BaseModel<VerificationDocumentRow
     documentTypeId: number,
     fileUrl: string,
     storageKey: string,
-    storageDriver: StorageDriver,
     expiresAt?: string,
   ): Promise<VerificationDocumentRow> {
     return this.insert({
@@ -44,7 +42,7 @@ export class VerificationDocumentModel extends BaseModel<VerificationDocumentRow
       documentTypeId,
       fileUrl,
       storageKey,
-      storageDriver,
+      storageDriver: "cloudinary",
       expiresAt,
       status: "PENDING",
     } as unknown as Partial<VerificationDocumentRow>);

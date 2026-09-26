@@ -58,7 +58,6 @@ export async function uploadVerificationDocument(req: Request, res: Response) {
     typeId,
     uploaded.fileUrl,
     uploaded.storageKey,
-    uploaded.storageDriver,
     expiresAt,
   );
 
