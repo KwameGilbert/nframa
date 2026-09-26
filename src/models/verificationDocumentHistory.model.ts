@@ -6,7 +6,7 @@ export interface VerificationDocumentHistory {
   previousStatus: string | null;
   newStatus: string;
   changedBy: string | null;
-  reason: string | null;
+  notes: string | null;
   changedAt: Date;
   createdAt: Date;
 }
@@ -21,14 +21,14 @@ export class VerificationDocumentHistoryModel extends BaseModel<VerificationDocu
     previousStatus: string | null,
     newStatus: string,
     changedBy: string | null,
-    reason?: string,
+    notes?: string,
   ): Promise<VerificationDocumentHistoryRow> {
     return this.insert({
       documentId,
       previousStatus,
       newStatus,
       changedBy,
-      reason,
+      notes,
     } as unknown as Partial<VerificationDocumentHistoryRow>);
   }
 

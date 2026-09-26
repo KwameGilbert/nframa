@@ -128,9 +128,12 @@ export class VerificationDocumentModel extends BaseModel<VerificationDocumentRow
   async getPendingDocumentsWithDetails() {
     return (
       this.table
+        // Table-qualified: unqualified "status" is ambiguous once joined with users, which has its own.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .where((qb: any) => {
-          qb.where({ status: "PENDING" }).orWhere({ status: "UNDER_REVIEW" });
+          qb.where({ "verificationDocuments.status": "PENDING" }).orWhere({
+            "verificationDocuments.status": "UNDER_REVIEW",
+          });
         })
         .join("users", "verificationDocuments.userId", "users.id")
         .join("documentTypes", "verificationDocuments.documentTypeId", "documentTypes.id")

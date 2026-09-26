@@ -5,10 +5,10 @@ import {
   verificationDocumentResponseSchema,
   verificationDocumentWithHistorySchema,
   uploadParamsSchema,
+  documentIdParamsSchema,
   updateDocumentStatusSchema,
   verificationDocumentHistoryResponseSchema,
 } from "../schemas/verification.schema.js";
-import { idParamsSchema } from "../schemas/common.schema.js";
 
 registry.registerPath({
   method: "get",
@@ -77,7 +77,7 @@ registry.registerPath({
   summary: "Update document verification status (admin)",
   description: "Admin approves, rejects, or leaves notes on a verification document.",
   request: {
-    params: idParamsSchema,
+    params: documentIdParamsSchema,
     body: {
       content: { "application/json": { schema: updateDocumentStatusSchema } },
     },
@@ -118,7 +118,7 @@ registry.registerPath({
   description:
     "Retrieve the full audit history of a verification document, showing all status changes, who made them, and why.",
   request: {
-    params: idParamsSchema,
+    params: documentIdParamsSchema,
   },
   responses: {
     200: successResponse(

@@ -11,8 +11,11 @@ import {
   getDocumentHistory,
   listPendingDocuments,
 } from "../controllers/verification.controller.js";
-import { uploadParamsSchema, updateDocumentStatusSchema } from "../schemas/verification.schema.js";
-import { idParamsSchema } from "../schemas/common.schema.js";
+import {
+  uploadParamsSchema,
+  documentIdParamsSchema,
+  updateDocumentStatusSchema,
+} from "../schemas/verification.schema.js";
 
 export const verificationRouter = Router();
 
@@ -38,7 +41,7 @@ verificationRouter.patch(
   "/admin/verification/:documentId",
   authenticate,
   requirePermission("roles", "update"),
-  validate({ params: idParamsSchema, body: updateDocumentStatusSchema }),
+  validate({ params: documentIdParamsSchema, body: updateDocumentStatusSchema }),
   updateDocumentStatus,
 );
 
@@ -54,6 +57,6 @@ verificationRouter.get(
 verificationRouter.get(
   "/verification/:documentId/history",
   authenticate,
-  validate({ params: idParamsSchema }),
+  validate({ params: documentIdParamsSchema }),
   getDocumentHistory,
 );

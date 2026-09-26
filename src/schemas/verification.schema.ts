@@ -16,6 +16,13 @@ export const uploadParamsSchema = z.object({
 
 export type UploadParamsInput = z.infer<typeof uploadParamsSchema>;
 
+// The route segment is :documentId, not :id — common.schema.ts's idParamsSchema wouldn't match it.
+export const documentIdParamsSchema = z.object({
+  documentId: z.uuid(),
+});
+
+export type DocumentIdParamsInput = z.infer<typeof documentIdParamsSchema>;
+
 export const documentTypeSchema = z.object({
   id: z.number().int(),
   code: z.string().meta({
@@ -71,7 +78,7 @@ export const verificationDocumentHistoryResponseSchema = z.object({
     .uuid()
     .nullable()
     .meta({ description: "Admin who made the change, null if system-generated" }),
-  reason: z
+  notes: z
     .string()
     .nullable()
     .meta({ description: "Why the change was made: rejection reason, notes added, etc." }),

@@ -16,6 +16,9 @@ export const router = Router();
 
 router.use(healthRouter);
 router.use(userRouter);
+// Before driverProfileRouter: GET/POST /driver/:userId would otherwise match "/driver/verification..."
+// first (same segment count, registered-order wins), 400ing every verification-document request.
+router.use(verificationRouter);
 router.use(driverProfileRouter);
 router.use(riderProfileRouter);
 router.use(vehicleRouter);
@@ -24,5 +27,4 @@ router.use(rolePermissionRouter);
 router.use(adminUserRouter);
 router.use(settingRouter);
 router.use(authRouter);
-router.use(verificationRouter);
 router.use(docsRouter);
