@@ -10,6 +10,7 @@ import "./driverProfile.docs.js";
 import "./riderProfile.docs.js";
 import "./vehicle.docs.js";
 import "./setting.docs.js";
+import "./verification.docs.js";
 
 const generator = new OpenApiGeneratorV3(registry.definitions);
 

@@ -9,6 +9,7 @@ import { rolePermissionRouter } from "./rolePermission.routes.js";
 import { adminUserRouter } from "./adminUser.routes.js";
 import { settingRouter } from "./setting.routes.js";
 import { authRouter } from "./auth.routes.js";
+import { verificationRouter } from "./verification.routes.js";
 import { docsRouter } from "./docs.routes.js";
 
 export const router = Router();
@@ -23,4 +24,5 @@ router.use(rolePermissionRouter);
 router.use(adminUserRouter);
 router.use(settingRouter);
 router.use(authRouter);
+router.use(verificationRouter);
 router.use(docsRouter);
