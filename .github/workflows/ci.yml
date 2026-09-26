@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  lint-typecheck-and-test:
     runs-on: ubuntu-latest
 
     services:
