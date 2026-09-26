@@ -7,6 +7,7 @@ import {
   signUpByPhone,
 } from "./helpers/actors.js";
 import * as data from "./helpers/data.js";
+import { trackForCleanup } from "./helpers/cleanup.js";
 
 let superAdmin: Awaited<ReturnType<typeof loginAsSuperAdmin>>;
 let supportAgent: Awaited<ReturnType<typeof createSignedInAdmin>>; // users: read
@@ -21,6 +22,7 @@ async function driverWithProfile() {
     address: data.address(),
   });
   expectStatus(res, 201);
+  trackForCleanup("carOwnerProfiles", { userId: driver.userId });
   return driver;
 }
 
@@ -44,6 +46,7 @@ describe("POST /driver", () => {
       .send({ userId: driver.userId, ghanaCardNumber, address });
 
     expectStatus(res, 201);
+    trackForCleanup("carOwnerProfiles", { userId: driver.userId });
     expect(res.body.message).toBe("Driver profile created successfully");
     expect(res.body.data).toMatchObject({
       userId: driver.userId,
@@ -73,6 +76,7 @@ describe("POST /driver", () => {
       .send({ userId: driver.id, address: data.address() });
 
     expectStatus(res, 201);
+    trackForCleanup("carOwnerProfiles", { userId: driver.id });
   });
 
   it("doesn't let a rider create a profile for someone else", async () => {

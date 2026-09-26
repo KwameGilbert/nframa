@@ -11,6 +11,7 @@ import {
 } from "./helpers/actors.js";
 import * as data from "./helpers/data.js";
 import { newEmail, newPhone } from "./helpers/unique.js";
+import { trackForCleanup } from "./helpers/cleanup.js";
 
 let superAdmin: Awaited<ReturnType<typeof loginAsSuperAdmin>>;
 let roleId: string;
@@ -155,6 +156,9 @@ describe("OTP login by phone", () => {
     const res = await api.post("/auth/login/verify").send({ ...phone, role: "rider", code });
 
     expectStatus(res, 200);
+    trackForCleanup("users", { id: res.body.data.user.id });
+    trackForCleanup("authSessions", { userId: res.body.data.user.id });
+    trackForCleanup("otpCodes", { identifier: fullPhone(phone) });
     expect(res.body.data.isNewUser).toBe(true);
     expect(res.body.data.user).toMatchObject({
       role: "rider",
@@ -225,7 +229,11 @@ describe("OTP login by phone", () => {
       api.post("/auth/login/otp").send({ ...phone, role: "rider" }),
     );
     const verify = () => api.post("/auth/login/verify").send({ ...phone, role: "rider", code });
-    expectStatus(await verify(), 200);
+    const first = await verify();
+    expectStatus(first, 200);
+    trackForCleanup("users", { id: first.body.data.user.id });
+    trackForCleanup("authSessions", { userId: first.body.data.user.id });
+    trackForCleanup("otpCodes", { identifier: fullPhone(phone) });
 
     const res = await verify();
 

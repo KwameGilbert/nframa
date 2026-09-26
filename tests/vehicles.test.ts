@@ -3,6 +3,7 @@ import { api, auth, expectStatus } from "./helpers/api.js";
 import { createSignedInAdmin, loginAsSuperAdmin, signUpByPhone } from "./helpers/actors.js";
 import * as data from "./helpers/data.js";
 import { newVehicle } from "./helpers/unique.js";
+import { trackForCleanup } from "./helpers/cleanup.js";
 
 let superAdmin: Awaited<ReturnType<typeof loginAsSuperAdmin>>;
 let supportAgent: Awaited<ReturnType<typeof createSignedInAdmin>>; // users: read
@@ -16,6 +17,7 @@ async function driverWithVehicle() {
     .set(auth(driver.token))
     .send(await newVehicle(driver.userId));
   expectStatus(res, 201);
+  trackForCleanup("vehicles", { id: res.body.data.id });
   return { driver, vehicle: res.body.data };
 }
 
@@ -35,6 +37,7 @@ describe("POST /vehicles", () => {
     const res = await api.post("/vehicles").set(auth(driver.token)).send(vehicle);
 
     expectStatus(res, 201);
+    trackForCleanup("vehicles", { id: res.body.data.id });
     expect(res.body.message).toBe("Vehicle created successfully");
     expect(res.body.data).toMatchObject({
       ...vehicle,
@@ -76,6 +79,7 @@ describe("POST /vehicles", () => {
       .send(await newVehicle(driver.userId));
 
     expectStatus(res, 201);
+    trackForCleanup("vehicles", { id: res.body.data.id });
   });
 
   it("needs at least one seat", async () => {

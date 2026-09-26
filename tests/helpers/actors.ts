@@ -2,6 +2,7 @@ import { api, auth, expectStatus } from "./api.js";
 import { captureCode } from "./outbox.js";
 import * as data from "./data.js";
 import { newEmail, newPhone, newRole } from "./unique.js";
+import { trackForCleanup } from "./cleanup.js";
 import type { Module, ModuleActions } from "../../src/config/permissions.js";
 
 // The accounts tests act as. Everything here goes through the API, like a real client would.
@@ -70,6 +71,9 @@ export async function signUpByPhone(role: "rider" | "driver") {
     token: res.body.data.accessToken,
     refreshToken: res.body.data.refreshToken,
   };
+  trackForCleanup("users", { id: session.userId });
+  trackForCleanup("authSessions", { userId: session.userId });
+  trackForCleanup("otpCodes", { identifier: fullPhone(phone) });
 
   const named = await api
     .patch(`/users/${session.userId}`)
@@ -87,6 +91,7 @@ export async function createPhoneAccount(adminToken: string, role: "rider" | "dr
     .set(auth(adminToken))
     .send({ fullName: data.person().fullName, ...(await newPhone()), role });
   expectStatus(res, 201);
+  trackForCleanup("users", { id: res.body.data.id });
   return res.body.data as { id: string; fullName: string; phoneNumber: string };
 }
 
@@ -96,6 +101,7 @@ export async function createRole(adminToken: string, permissions: Grants = {}) {
     .set(auth(adminToken))
     .send({ ...(await newRole()), permissions });
   expectStatus(res, 201);
+  trackForCleanup("roles", { id: res.body.data.id });
   return res.body.data as { id: string; slug: string; name: string; description: string };
 }
 
@@ -120,12 +126,15 @@ export async function createAdminAccount(
     .send({ fullName: person.fullName, email, role: "admin" });
   expectStatus(user, 201);
   const userId: string = user.body.data.id;
+  trackForCleanup("users", { id: userId });
+  trackForCleanup("authSessions", { userId }); // covers any later login() as this admin
 
   const admin = await api
     .post("/admin")
     .set(auth(adminToken))
     .send({ userId, roleId, department: data.department(), password });
   expectStatus(admin, 201);
+  trackForCleanup("adminUsers", { userId });
 
   if (status !== "invited") {
     const updated = await api.patch(`/admin/${userId}`).set(auth(adminToken)).send({ status });

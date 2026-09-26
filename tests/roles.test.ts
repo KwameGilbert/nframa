@@ -10,6 +10,7 @@ import {
 } from "./helpers/actors.js";
 import * as data from "./helpers/data.js";
 import { newRole } from "./helpers/unique.js";
+import { trackForCleanup } from "./helpers/cleanup.js";
 
 const everything = { create: true, read: true, update: true, delete: true };
 
@@ -71,6 +72,7 @@ describe("POST /roles", () => {
       });
 
     expectStatus(res, 201);
+    trackForCleanup("roles", { id: res.body.data.id });
     expect(res.body.message).toBe("Role created successfully");
     expect(res.body.data).toMatchObject({
       ...role,
@@ -90,6 +92,7 @@ describe("POST /roles", () => {
       .send(await newRole());
 
     expectStatus(res, 201);
+    trackForCleanup("roles", { id: res.body.data.id });
     expect(res.body.data.permissions).toEqual({});
   });
 

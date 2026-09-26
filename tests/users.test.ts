@@ -11,6 +11,7 @@ import {
 } from "./helpers/actors.js";
 import * as data from "./helpers/data.js";
 import { newEmail, newPhone } from "./helpers/unique.js";
+import { trackForCleanup } from "./helpers/cleanup.js";
 
 type SignedInAdmin = Awaited<ReturnType<typeof createSignedInAdmin>>;
 
@@ -43,6 +44,7 @@ describe("POST /users", () => {
       .send({ fullName: person.fullName, ...phone, role: "rider" });
 
     expectStatus(res, 201);
+    trackForCleanup("users", { id: res.body.data.id });
     expect(res.body.message).toBe("User created successfully");
     expect(res.body.data).toMatchObject({
       fullName: person.fullName,
@@ -62,6 +64,7 @@ describe("POST /users", () => {
       .send({ fullName: data.person().fullName, ...(await newPhone()), role: "driver" });
 
     expectStatus(res, 201);
+    trackForCleanup("users", { id: res.body.data.id });
     expect(res.body.data.role).toBe("driver");
   });
 
@@ -75,6 +78,7 @@ describe("POST /users", () => {
       .send({ fullName: person.fullName, email: email.toUpperCase(), role: "admin" });
 
     expectStatus(res, 201);
+    trackForCleanup("users", { id: res.body.data.id });
     expect(res.body.data).toMatchObject({ email, role: "admin" });
   });
 
@@ -121,7 +125,9 @@ describe("POST /users", () => {
         .post("/users")
         .set(auth(superAdmin.token))
         .send({ fullName: person.fullName, email: address, role: "admin" });
-    expectStatus(await create(email), 201);
+    const created = await create(email);
+    expectStatus(created, 201);
+    trackForCleanup("users", { id: created.body.data.id });
 
     const res = await create(email.toUpperCase());
 

@@ -6,6 +6,7 @@ import {
   loginAsSuperAdmin,
   signUpByPhone,
 } from "./helpers/actors.js";
+import { trackForCleanup } from "./helpers/cleanup.js";
 
 let superAdmin: Awaited<ReturnType<typeof loginAsSuperAdmin>>;
 let supportAgent: Awaited<ReturnType<typeof createSignedInAdmin>>; // users: read
@@ -14,6 +15,7 @@ let supportAgent: Awaited<ReturnType<typeof createSignedInAdmin>>; // users: rea
 async function riderWithProfile() {
   const rider = await signUpByPhone("rider");
   expectStatus(await api.post("/rider").set(auth(rider.token)).send({ userId: rider.userId }), 201);
+  trackForCleanup("riderProfiles", { userId: rider.userId });
   return rider;
 }
 
@@ -29,6 +31,7 @@ describe("POST /rider", () => {
     const res = await api.post("/rider").set(auth(rider.token)).send({ userId: rider.userId });
 
     expectStatus(res, 201);
+    trackForCleanup("riderProfiles", { userId: rider.userId });
     expect(res.body.message).toBe("Rider profile created successfully");
     expect(res.body.data.userId).toBe(rider.userId);
     expect(Date.parse(res.body.data.createdAt)).not.toBeNaN();
@@ -48,6 +51,7 @@ describe("POST /rider", () => {
     const res = await api.post("/rider").set(auth(superAdmin.token)).send({ userId: rider.id });
 
     expectStatus(res, 201);
+    trackForCleanup("riderProfiles", { userId: rider.id });
   });
 
   it("doesn't let a rider create a profile for someone else", async () => {

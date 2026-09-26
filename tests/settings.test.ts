@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { api, auth, expectStatus } from "./helpers/api.js";
 import { createSignedInAdmin, loginAsSuperAdmin, signUpByPhone } from "./helpers/actors.js";
 import { newPromotion } from "./helpers/unique.js";
+import { trackForCleanup } from "./helpers/cleanup.js";
 
 let superAdmin: Awaited<ReturnType<typeof loginAsSuperAdmin>>;
 let financeViewer: Awaited<ReturnType<typeof createSignedInAdmin>>; // settings: read
@@ -15,6 +16,7 @@ async function createSetting(setting: {
 }) {
   const res = await api.post("/settings").set(auth(superAdmin.token)).send(setting);
   expectStatus(res, 201);
+  trackForCleanup("settings", { key: res.body.data.key });
   return res.body.data;
 }
 
@@ -53,6 +55,7 @@ describe("POST /settings", () => {
       const res = await api.post("/settings").set(auth(superAdmin.token)).send(setting);
 
       expectStatus(res, 201);
+      trackForCleanup("settings", { key: res.body.data.key });
       expect(res.body.message).toBe("Setting created successfully");
       expect(res.body.data).toMatchObject({
         description: null,
@@ -75,6 +78,7 @@ describe("POST /settings", () => {
       });
 
     expectStatus(res, 201);
+    trackForCleanup("settings", { key: res.body.data.key });
     expect(res.body.data.value).toEqual({
       startsOn: "2026-12-01",
       endsOn: "2026-12-31",

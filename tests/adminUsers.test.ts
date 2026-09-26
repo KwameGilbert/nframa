@@ -10,6 +10,7 @@ import {
 } from "./helpers/actors.js";
 import * as data from "./helpers/data.js";
 import { newEmail } from "./helpers/unique.js";
+import { trackForCleanup } from "./helpers/cleanup.js";
 
 let superAdmin: Awaited<ReturnType<typeof loginAsSuperAdmin>>;
 let roleId: string;
@@ -22,6 +23,7 @@ async function newAdminUser() {
     .set(auth(superAdmin.token))
     .send({ fullName: person.fullName, email: await newEmail(person), role: "admin" });
   expectStatus(res, 201);
+  trackForCleanup("users", { id: res.body.data.id });
   return res.body.data as { id: string; email: string };
 }
 
@@ -41,6 +43,7 @@ describe("POST /admin", () => {
       .send({ userId: user.id, roleId, department, password: data.password() });
 
     expectStatus(res, 201);
+    trackForCleanup("adminUsers", { userId: user.id });
     expect(res.body.message).toBe("Admin user created successfully");
     expect(res.body.data).toMatchObject({ userId: user.id, roleId, department, status: "invited" });
   });
