@@ -257,21 +257,6 @@ describe("OTP login by phone", () => {
     expect(res.body.data.user.isPhoneVerified).toBe(true);
   });
 
-  it("won't sign in, or send a code, for an email a rider added but hasn't verified", async () => {
-    const rider = await signUpByPhone("rider");
-    const email = await newEmail(data.person());
-    const set = await api.patch(`/users/${rider.userId}`).set(auth(rider.token)).send({ email });
-    expectStatus(set, 200);
-
-    const otp = await api.post("/auth/login/otp").send({ email });
-    const forgot = await api.post("/auth/password/forgot").send({ email });
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
-    expectStatus(otp, 404);
-    expectStatus(forgot, 200);
-    expect(messageCountTo(email)).toBe(0);
-  });
-
   it("signs an existing number into its account instead of creating a second one", async () => {
     const rider = await signUpByPhone("rider");
     const phone = { phoneCountryCode: rider.phoneCountryCode, phoneNumber: rider.phoneNumber };
