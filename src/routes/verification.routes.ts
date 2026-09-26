@@ -36,11 +36,12 @@ verificationRouter.post(
 // Driver retrieves their verification documents
 verificationRouter.get("/driver/verification", authenticate, getDriverDocuments);
 
-// Admin updates document verification status
+// Admin updates document verification status. users, not roles: this manages driver data (like
+// vehicles/driver profiles), not admin accounts — the /admin/* prefix here is just REST namespacing.
 verificationRouter.patch(
   "/admin/verification/:documentId",
   authenticate,
-  requirePermission("roles", "update"),
+  requirePermission("users", "update"),
   validate({ params: documentIdParamsSchema, body: updateDocumentStatusSchema }),
   updateDocumentStatus,
 );
@@ -49,11 +50,13 @@ verificationRouter.patch(
 verificationRouter.get(
   "/admin/verification/pending",
   authenticate,
-  requirePermission("roles", "read"),
+  requirePermission("users", "read"),
   listPendingDocuments,
 );
 
-// Get full status history for a document (driver or admin)
+// The document's own driver can see its history, or an admin with users: read — same as
+// vehicles/driver profiles. Ownership is only known once the document is loaded, so this is checked in
+// the controller rather than route middleware.
 verificationRouter.get(
   "/verification/:documentId/history",
   authenticate,

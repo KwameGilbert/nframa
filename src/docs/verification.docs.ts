@@ -17,6 +17,7 @@ registry.registerPath({
   summary: "List document types",
   description:
     "Reference data for building the upload UI: every document type a driver can be asked to submit, with whether it expires.",
+  security: [{ bearerAuth: [] }],
   responses: {
     200: successResponse("Document types retrieved successfully", z.array(documentTypeSchema)),
     401: errorResponse("Missing or invalid access token"),
@@ -30,6 +31,7 @@ registry.registerPath({
   summary: "Upload a verification document",
   description:
     "Driver submits a verification document (ID, license, insurance, etc) as multipart/form-data. Accepts JPEG, PNG, WEBP or PDF, up to 10MB. Returns 409 if already submitted.",
+  security: [{ bearerAuth: [] }],
   request: {
     params: uploadParamsSchema,
     body: {
@@ -61,6 +63,7 @@ registry.registerPath({
   summary: "Get driver's verification documents",
   description:
     "Retrieve all verification documents submitted by the authenticated driver, each with its complete status change history.",
+  security: [{ bearerAuth: [] }],
   responses: {
     200: successResponse(
       "Documents retrieved successfully",
@@ -76,6 +79,7 @@ registry.registerPath({
   tags: ["Admin - Verification"],
   summary: "Update document verification status (admin)",
   description: "Admin approves, rejects, or leaves notes on a verification document.",
+  security: [{ bearerAuth: [] }],
   request: {
     params: documentIdParamsSchema,
     body: {
@@ -89,7 +93,7 @@ registry.registerPath({
     ),
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("Missing permission: update on roles"),
+    403: errorResponse("Missing permission: update on users"),
     404: errorResponse("Document not found"),
   },
 });
@@ -100,13 +104,14 @@ registry.registerPath({
   tags: ["Admin - Verification"],
   summary: "List pending verification documents (admin)",
   description: "Retrieve all documents awaiting or under review, with driver details.",
+  security: [{ bearerAuth: [] }],
   responses: {
     200: successResponse(
       "Pending documents retrieved",
       z.array(verificationDocumentResponseSchema),
     ),
     401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("Missing permission: read on roles"),
+    403: errorResponse("Missing permission: read on users"),
   },
 });
 
@@ -116,7 +121,8 @@ registry.registerPath({
   tags: ["Driver Verification"],
   summary: "Get document status change history",
   description:
-    "Retrieve the full audit history of a verification document, showing all status changes, who made them, and why.",
+    "Retrieve the full audit history of a verification document, showing all status changes, who made them, and why. The document's own driver can see it; anyone else needs users: read.",
+  security: [{ bearerAuth: [] }],
   request: {
     params: documentIdParamsSchema,
   },
@@ -126,6 +132,7 @@ registry.registerPath({
       z.array(verificationDocumentHistoryResponseSchema),
     ),
     401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Missing permission: read on users"),
     404: errorResponse("Document not found"),
   },
 });

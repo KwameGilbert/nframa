@@ -4,6 +4,7 @@ import { verificationDocumentHistoryModel } from "../models/verificationDocument
 import { documentTypeModel } from "../models/documentType.model.js";
 import { driverProfileModel } from "../models/driverProfile.model.js";
 import { uploadFile } from "../services/storage.service.js";
+import { assertSelfOrPermission } from "../middlewares/authorize.js";
 import { AppError } from "../utils/AppError.js";
 import { sendSuccess, sendCreated } from "../utils/response.js";
 import type { UpdateDocumentStatusInput } from "../schemas/verification.schema.js";
@@ -122,6 +123,7 @@ export async function getDocumentHistory(req: Request, res: Response) {
   if (!document) {
     throw AppError.notFound(`Document not found: ${documentId}`);
   }
+  await assertSelfOrPermission(req, document.userId, "users", "read");
 
   const history = await verificationDocumentHistoryModel.getDocumentHistory(documentId);
 
