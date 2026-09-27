@@ -8,7 +8,10 @@ import {
   documentIdParamsSchema,
   updateDocumentStatusSchema,
   verificationDocumentHistoryResponseSchema,
+  updateDriverVerificationStatusSchema,
 } from "../schemas/verification.schema.js";
+import { driverProfileParamsSchema } from "../schemas/driverProfile.schema.js";
+import { driverWithRelationsResponseSchema } from "../schemas/driverProfile.schema.js";
 
 registry.registerPath({
   method: "get",
@@ -136,5 +139,31 @@ registry.registerPath({
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Missing permission: read on verification"),
     404: errorResponse("Document not found"),
+  },
+});
+
+registry.registerPath({
+  method: "patch",
+  path: "/admin/driver/{userId}/verification",
+  tags: ["Admin - Verification"],
+  summary: "Update driver verification status (admin)",
+  description:
+    "Admin sets a driver's overall verification status (unverified, pending, approved, rejected, or expiring) independently from individual document reviews. Needs verification: update. Returns the full driver profile with relations.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: driverProfileParamsSchema,
+    body: {
+      content: { "application/json": { schema: updateDriverVerificationStatusSchema } },
+    },
+  },
+  responses: {
+    200: successResponse(
+      "Driver verification status updated successfully",
+      driverWithRelationsResponseSchema,
+    ),
+    400: errorResponse("Validation error"),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Missing permission: update on verification"),
+    404: errorResponse("Driver profile not found"),
   },
 });

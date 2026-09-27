@@ -109,3 +109,25 @@ export const updateDocumentStatusSchema = z
   .meta({ description: "Update a document's verification status (admin only)" });
 
 export type UpdateDocumentStatusInput = z.infer<typeof updateDocumentStatusSchema>;
+
+export const driverVerificationStatusSchema = z
+  .enum(["unverified", "pending", "approved", "rejected", "expiring"])
+  .meta({
+    description:
+      "unverified: no documents submitted; pending: documents under review or awaiting review; approved: all required documents verified; rejected: one or more documents rejected; expiring: approved but expiration date approaching",
+    example: "approved",
+  });
+
+export const updateDriverVerificationStatusSchema = z
+  .object({
+    verificationStatus: driverVerificationStatusSchema,
+    notes: z
+      .string()
+      .optional()
+      .meta({ description: "Admin notes: reason for status change or other context" }),
+  })
+  .meta({ description: "Update a driver's overall verification status (admin only)" });
+
+export type UpdateDriverVerificationStatusInput = z.infer<
+  typeof updateDriverVerificationStatusSchema
+>;

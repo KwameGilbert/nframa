@@ -7,7 +7,10 @@ import { uploadFile } from "../services/storage.service.js";
 import { assertSelfOrPermission } from "../middlewares/authorize.js";
 import { AppError } from "../utils/AppError.js";
 import { sendSuccess, sendCreated } from "../utils/response.js";
-import type { UpdateDocumentStatusInput } from "../schemas/verification.schema.js";
+import type {
+  UpdateDocumentStatusInput,
+  UpdateDriverVerificationStatusInput,
+} from "../schemas/verification.schema.js";
 
 // Reference data (id, code, name, description, hasExpiry) for building an upload UI — no auth-specific
 // filtering, so every signed-in user sees the same list.
@@ -132,6 +135,28 @@ export async function getDocumentHistory(req: Request, res: Response) {
 export async function listPendingDocuments(_req: Request, res: Response) {
   const pending = await verificationDocumentModel.getPendingDocumentsWithDetails();
   sendSuccess(res, "Pending documents retrieved", pending);
+}
+
+export async function updateDriverVerificationStatus(req: Request, res: Response) {
+  const { userId } = req.validated.params as { userId: string };
+  const input = req.validated.body as UpdateDriverVerificationStatusInput;
+
+  const driverProfile = await driverProfileModel.findById(userId);
+  if (!driverProfile) {
+    throw AppError.notFound(`Driver profile not found for user: ${userId}`);
+  }
+
+  // Update driver's verification status
+  await driverProfileModel.updateVerificationStatus(userId, input.verificationStatus);
+
+  // Fetch full driver profile with relations
+  const result = await driverProfileModel.findByIdWithRelations(userId);
+
+  if (!result) {
+    throw AppError.notFound(`Driver profile not found for user: ${userId}`);
+  }
+
+  sendSuccess(res, "Driver verification status updated successfully", result);
 }
 
 // Helper: Recalculate driver verification status based on document statuses

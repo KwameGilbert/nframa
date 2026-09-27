@@ -10,12 +10,15 @@ import {
   updateDocumentStatus,
   getDocumentHistory,
   listPendingDocuments,
+  updateDriverVerificationStatus,
 } from "../controllers/verification.controller.js";
 import {
   uploadParamsSchema,
   documentIdParamsSchema,
   updateDocumentStatusSchema,
+  updateDriverVerificationStatusSchema,
 } from "../schemas/verification.schema.js";
+import { driverProfileParamsSchema } from "../schemas/driverProfile.schema.js";
 
 export const verificationRouter = Router();
 
@@ -62,4 +65,13 @@ verificationRouter.get(
   authenticate,
   validate({ params: documentIdParamsSchema }),
   getDocumentHistory,
+);
+
+// Admin updates driver's overall verification status (distinct from individual document updates)
+verificationRouter.patch(
+  "/admin/driver/:userId/verification",
+  authenticate,
+  requirePermission("verification", "update"),
+  validate({ params: driverProfileParamsSchema, body: updateDriverVerificationStatusSchema }),
+  updateDriverVerificationStatus,
 );
