@@ -27,6 +27,10 @@ class VehicleModel extends BaseModel<Vehicle> {
   updateVehicle(id: string, input: UpdateVehicleInput) {
     return this.updateById(id, { ...input, updatedAt: new Date() } as unknown as Partial<Vehicle>);
   }
+
+  async findByUserId(userId: string) {
+    return this.table.where({ carOwnerUserId: userId }).orderBy("createdAt", "desc");
+  }
 }
 
 export const vehicleModel = new VehicleModel();

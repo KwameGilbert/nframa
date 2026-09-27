@@ -103,7 +103,7 @@ describe("GET /driver/:userId", () => {
 
     expectStatus(res, 200);
     expect(res.body.message).toBe("Driver profile retrieved successfully");
-    expect(res.body.data.userId).toBe(driver.userId);
+    expect(res.body.data.driver.userId).toBe(driver.userId);
   });
 
   it("lets an admin with users: read view any driver's profile", async () => {
@@ -142,7 +142,7 @@ describe("PATCH /driver/:userId", () => {
 
     expectStatus(res, 200);
     expect(res.body.message).toBe("Driver profile updated successfully");
-    expect(res.body.data).toMatchObject({ isOnline: true, autoAcceptBookings: true });
+    expect(res.body.data.driver).toMatchObject({ isOnline: true, autoAcceptBookings: true });
   });
 
   it("lets a driver update their address", async () => {
@@ -155,7 +155,7 @@ describe("PATCH /driver/:userId", () => {
       .send({ address });
 
     expectStatus(res, 200);
-    expect(res.body.data.address).toBe(address);
+    expect(res.body.data.driver.address).toBe(address);
   });
 
   it("needs users: update to change someone else's profile", async () => {

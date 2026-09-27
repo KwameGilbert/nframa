@@ -8,7 +8,7 @@ import type {
 } from "../schemas/driverProfile.schema.js";
 
 export async function listDrivers(_req: Request, res: Response) {
-  const drivers = await driverProfileModel.findAll();
+  const drivers = await driverProfileModel.findAllDriversWithRelations();
 
   sendSuccess(res, "Drivers retrieved successfully", drivers);
 }
@@ -24,25 +24,25 @@ export async function createDriverProfile(req: Request, res: Response) {
 export async function getDriverProfile(req: Request, res: Response) {
   const { userId } = req.validated.params as { userId: string };
 
-  const profile = await driverProfileModel.findById(userId);
+  const result = await driverProfileModel.findByIdWithRelations(userId);
 
-  if (!profile) {
+  if (!result) {
     throw AppError.notFound(`Driver profile not found for user: ${userId}`);
   }
 
-  sendSuccess(res, "Driver profile retrieved successfully", profile);
+  sendSuccess(res, "Driver profile retrieved successfully", result);
 }
 
 export async function getDriverByCode(req: Request, res: Response) {
   const { code } = req.validated.params as { code: string };
 
-  const profile = await driverProfileModel.findByCode(code);
+  const result = await driverProfileModel.findByCode(code);
 
-  if (!profile) {
+  if (!result) {
     throw AppError.notFound(`Driver not found with code: ${code}`);
   }
 
-  sendSuccess(res, "Driver profile retrieved successfully", profile);
+  sendSuccess(res, "Driver profile retrieved successfully", result);
 }
 
 export async function getDriverByPhone(req: Request, res: Response) {
@@ -51,24 +51,26 @@ export async function getDriverByPhone(req: Request, res: Response) {
     phoneNumber: string;
   };
 
-  const profile = await driverProfileModel.findByPhone(phoneCountryCode, phoneNumber);
+  const result = await driverProfileModel.findByPhone(phoneCountryCode, phoneNumber);
 
-  if (!profile) {
+  if (!result) {
     throw AppError.notFound(`Driver not found with phone: ${phoneCountryCode}${phoneNumber}`);
   }
 
-  sendSuccess(res, "Driver profile retrieved successfully", profile);
+  sendSuccess(res, "Driver profile retrieved successfully", result);
 }
 
 export async function updateDriverProfile(req: Request, res: Response) {
   const { userId } = req.validated.params as { userId: string };
   const input = req.validated.body as UpdateDriverProfileInput;
 
-  const profile = await driverProfileModel.updateProfile(userId, input);
+  await driverProfileModel.updateProfile(userId, input);
 
-  if (!profile) {
+  const result = await driverProfileModel.findByIdWithRelations(userId);
+
+  if (!result) {
     throw AppError.notFound(`Driver profile not found for user: ${userId}`);
   }
 
-  sendSuccess(res, "Driver profile updated successfully", profile);
+  sendSuccess(res, "Driver profile updated successfully", result);
 }

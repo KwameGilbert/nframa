@@ -30,6 +30,10 @@ pnpm test:watch
 
 Don't execute prompts/plans just like that, break it into parts. As much as possible, always rewrite prompt and optimized to use as minimum tokens as possible while doing the best work possible. Between all available models and its version From Fable, Opus, Haiku, to Sonnet switch between models and version depending on the difficulty, complexity, and demand of the work for the best results while optmizing to save usage while giving the best results without compromising quality of work.
 
+**KISS (Keep It Simple, Stupid)**: Avoid over-engineering. A simple solution that works is better than a complex one. When adding features, make sure they are necessary and don't add unnecessary layers of abstraction.
+
+**DRY (Don't Repeat Yourself)**: Avoid code duplication. Extract common logic into reusable methods, functions, or services. If the same code exists in two places, refactor it into one place. For example, if multiple query methods need the same data joins or transformations, have them call a shared method rather than duplicating the logic.
+
 Spawn one agent to plan if there already isnt a plan yet, one to execute the plan and another to review what has been done and compare to the plan that was initially done, if there is anything wrong about the execution take it back to the executor to work on or fix.
 
 `.husky/pre-commit` runs `pnpm test`, which is now the real suite (see Tests below): every commit takes ~40s, needs the database, and adds test records to it. `lint-staged` is installed but not wired into the hook.

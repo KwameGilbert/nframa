@@ -251,7 +251,7 @@ describe("PATCH /admin/verification/:documentId", () => {
       notes: "Photo is too blurry to read",
     });
     const profile = await api.get(`/driver/${driver.userId}`).set(auth(superAdmin.token));
-    expect(profile.body.data.verificationStatus).toBe("rejected");
+    expect(profile.body.data.driver.verificationStatus).toBe("rejected");
   });
 
   it("needs verification: update", async () => {

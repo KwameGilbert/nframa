@@ -4,6 +4,9 @@ import type {
   CreateDriverProfileInput,
   UpdateDriverProfileInput,
 } from "../schemas/driverProfile.schema.js";
+import { userModel } from "./user.model.js";
+import { vehicleModel } from "./vehicle.model.js";
+import { verificationDocumentModel } from "./verificationDocument.model.js";
 
 export interface DriverProfile {
   userId: string;
@@ -51,20 +54,43 @@ class DriverProfileModel extends BaseModel<DriverProfile> {
     } as unknown as Partial<DriverProfile>);
   }
 
-  async findAll() {
-    return this.table.orderBy("carOwnerProfiles.userId", "desc");
+  // Every "get driver(s)" endpoint returns the same shape — profile, user, vehicles, documents — built here
+  // once and reused by the single-record lookups below, so none of them duplicate the joins.
+  async findAllDriversWithRelations() {
+    const drivers = await this.table.orderBy("userId", "desc");
+    return Promise.all(drivers.map((driver) => this.findByIdWithRelations(driver.userId)));
+  }
+
+  async findByIdWithRelations(userId: string) {
+    const profile = await this.findById(userId);
+    if (!profile) return null;
+
+    const [user, vehicles, documents] = await Promise.all([
+      userModel.findById(userId),
+      vehicleModel.findByUserId(userId),
+      verificationDocumentModel.getDocumentsByUserId(userId),
+    ]);
+
+    return { driver: { ...profile, user, vehicles, documents } };
   }
 
   async findByCode(code: string) {
-    return this.table.where({ code }).first();
+    const profile = await this.table.where({ code }).first();
+    if (!profile) return null;
+
+    return this.findByIdWithRelations(profile.userId);
   }
 
   async findByPhone(phoneCountryCode: string, phoneNumber: string) {
-    return this.table
+    const profile = await this.table
       .join("users", "users.id", "carOwnerProfiles.userId")
       .where({ phoneCountryCode, phoneNumber })
       .select("carOwnerProfiles.*")
       .first();
+
+    if (!profile) return null;
+
+    return this.findByIdWithRelations(profile.userId);
   }
 }
 
