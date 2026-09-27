@@ -55,7 +55,11 @@ export async function seed(knex: Knex): Promise<void> {
     // the seed can also repair a super admin that's lost its admin record.
     const existingAdminUser = await knex("adminUsers").where({ userId: existingUser.id }).first();
     if (!existingAdminUser) {
-      await knex("adminUsers").insert({ userId: existingUser.id, roleId: role.id, status: "active" });
+      await knex("adminUsers").insert({
+        userId: existingUser.id,
+        roleId: role.id,
+        status: "active",
+      });
     }
     return;
   }

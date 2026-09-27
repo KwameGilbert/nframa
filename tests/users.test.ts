@@ -34,6 +34,27 @@ beforeAll(async () => {
   ]);
 });
 
+describe("GET /users", () => {
+  it("lists riders and drivers, but not admins", async () => {
+    const driver = await createPhoneAccount(userManager.token, "driver");
+
+    const res = await api.get("/users").set(auth(userManager.token));
+
+    expectStatus(res, 200);
+    expect(res.body.message).toBe("Users retrieved successfully");
+    const found = res.body.data.find((u: { id: string }) => u.id === driver.id);
+    expect(found).toMatchObject({ id: driver.id, role: "driver" });
+    expect(res.body.data.some((u: { id: string }) => u.id === userManager.userId)).toBe(false);
+  });
+
+  it("needs users: read", async () => {
+    const res = await api.get("/users").set(auth(rider.token));
+
+    expectStatus(res, 403);
+    expect(res.body.error).toBe("Missing permission: read on users");
+  });
+});
+
 describe("POST /users", () => {
   it("adds a rider", async () => {
     const person = data.person();
