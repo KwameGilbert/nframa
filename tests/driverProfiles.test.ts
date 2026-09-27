@@ -48,15 +48,18 @@ describe("POST /driver", () => {
     expectStatus(res, 201);
     trackForCleanup("carOwnerProfiles", { userId: driver.userId });
     expect(res.body.message).toBe("Driver profile created successfully");
-    expect(res.body.data).toMatchObject({
+    expect(res.body.data.driver).toMatchObject({
       userId: driver.userId,
       ghanaCardNumber,
       address,
       verificationStatus: "unverified",
       isOnline: false,
       autoAcceptBookings: false,
+      vehicles: [],
+      documents: [],
     });
-    expect(res.body.data.code).toMatch(/^DR-[A-HJ-NP-Z2-9]{6}$/);
+    expect(res.body.data.driver.user).toMatchObject({ id: driver.userId, role: "driver" });
+    expect(res.body.data.driver.code).toMatch(/^DR-[A-HJ-NP-Z2-9]{6}$/);
   });
 
   it("allows one profile per driver", async () => {
@@ -128,6 +131,83 @@ describe("GET /driver/:userId", () => {
 
     expectStatus(res, 404);
     expect(res.body.error).toBe(`Driver profile not found for user: ${rider.userId}`);
+  });
+});
+
+describe("GET /drivers", () => {
+  it("lists every driver with their user, vehicles and documents", async () => {
+    const driver = await driverWithProfile();
+
+    const res = await api.get("/drivers").set(auth(supportAgent.token));
+
+    expectStatus(res, 200);
+    const found = res.body.data.find(
+      (d: { driver: { userId: string } }) => d.driver.userId === driver.userId,
+    );
+    expect(found.driver).toMatchObject({ userId: driver.userId, vehicles: [], documents: [] });
+    expect(found.driver.user.id).toBe(driver.userId);
+  });
+
+  it("needs users: read", async () => {
+    const res = await api.get("/drivers").set(auth(rider.token));
+
+    expectStatus(res, 403);
+    expect(res.body.error).toBe("Missing permission: read on users");
+  });
+});
+
+describe("GET /drivers/code/:code", () => {
+  it("finds a driver by their code", async () => {
+    const driver = await driverWithProfile();
+    const created = await api.get(`/driver/${driver.userId}`).set(auth(supportAgent.token));
+
+    const res = await api
+      .get(`/drivers/code/${created.body.data.driver.code}`)
+      .set(auth(supportAgent.token));
+
+    expectStatus(res, 200);
+    expect(res.body.data.driver.userId).toBe(driver.userId);
+  });
+
+  it("returns 404 for an unknown code", async () => {
+    const res = await api.get("/drivers/code/DR-000000").set(auth(supportAgent.token));
+
+    expectStatus(res, 404);
+    expect(res.body.error).toBe("Driver not found with code: DR-000000");
+  });
+
+  it("needs users: read", async () => {
+    const res = await api.get("/drivers/code/DR-000000").set(auth(rider.token));
+
+    expectStatus(res, 403);
+    expect(res.body.error).toBe("Missing permission: read on users");
+  });
+});
+
+describe("GET /drivers/phone/:phoneCountryCode/:phoneNumber", () => {
+  it("finds a driver by their phone number", async () => {
+    const driver = await driverWithProfile();
+
+    const res = await api
+      .get(`/drivers/phone/${driver.phoneCountryCode}/${driver.phoneNumber}`)
+      .set(auth(supportAgent.token));
+
+    expectStatus(res, 200);
+    expect(res.body.data.driver.userId).toBe(driver.userId);
+  });
+
+  it("returns 404 for an unknown phone number", async () => {
+    const res = await api.get("/drivers/phone/+233/000000000").set(auth(supportAgent.token));
+
+    expectStatus(res, 404);
+    expect(res.body.error).toBe("Driver not found with phone: +233000000000");
+  });
+
+  it("needs users: read", async () => {
+    const res = await api.get("/drivers/phone/+233/000000000").set(auth(rider.token));
+
+    expectStatus(res, 403);
+    expect(res.body.error).toBe("Missing permission: read on users");
   });
 });
 

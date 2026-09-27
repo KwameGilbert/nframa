@@ -34,11 +34,14 @@ class DriverProfileModel extends BaseModel<DriverProfile> {
   protected readonly tableName = "carOwnerProfiles";
   protected readonly primaryKey = "userId";
 
-  createProfile(input: CreateDriverProfileInput) {
-    return this.insert({
+  async createProfile(input: CreateDriverProfileInput) {
+    const profile = await this.insert({
       ...input,
       code: generateDriverCode(),
     } as unknown as Partial<DriverProfile>);
+    // A brand-new profile has no vehicles or documents yet, but the response still matches every other
+    // driver endpoint's shape (see findByIdWithRelations) rather than being a special case.
+    return this.findByIdWithRelations(profile.userId);
   }
 
   updateProfile(userId: string, input: UpdateDriverProfileInput) {

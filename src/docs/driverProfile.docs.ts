@@ -3,8 +3,32 @@ import {
   createDriverProfileSchema,
   updateDriverProfileSchema,
   driverProfileParamsSchema,
-  driverProfileResponseSchema,
+  driverCodeParamsSchema,
+  driverPhoneParamsSchema,
+  driverWithRelationsResponseSchema,
 } from "../schemas/driverProfile.schema.js";
+import { z } from "zod";
+
+// Every driver-returning endpoint on this page shares one response shape — { driver: { ...profile, user,
+// vehicles, documents } } — so there's a single schema (driverWithRelationsResponseSchema) below instead
+// of one per endpoint. Keep it that way if you add another driver lookup.
+
+registry.registerPath({
+  method: "get",
+  path: "/drivers",
+  tags: ["Driver Profiles"],
+  summary: "List every driver, each with their user, vehicles and documents",
+  description: "Needs users: read.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: successResponse(
+      "Drivers retrieved successfully",
+      z.array(driverWithRelationsResponseSchema),
+    ),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Missing permission: read on users"),
+  },
+});
 
 registry.registerPath({
   method: "post",
@@ -20,7 +44,7 @@ registry.registerPath({
     },
   },
   responses: {
-    201: successResponse("Driver profile created successfully", driverProfileResponseSchema),
+    201: successResponse("Driver profile created successfully", driverWithRelationsResponseSchema),
     400: errorResponse("Validation error, or userId doesn't match an existing user"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("userId isn't the caller and the caller lacks users: create"),
@@ -38,11 +62,56 @@ registry.registerPath({
     params: driverProfileParamsSchema,
   },
   responses: {
-    200: successResponse("Driver profile retrieved successfully", driverProfileResponseSchema),
+    200: successResponse(
+      "Driver profile retrieved successfully",
+      driverWithRelationsResponseSchema,
+    ),
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller isn't this driver and lacks users: read"),
     404: errorResponse("Driver profile not found"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/drivers/code/{code}",
+  tags: ["Driver Profiles"],
+  summary: "Get a driver profile by driver code",
+  description: "Needs users: read.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: driverCodeParamsSchema,
+  },
+  responses: {
+    200: successResponse(
+      "Driver profile retrieved successfully",
+      driverWithRelationsResponseSchema,
+    ),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Missing permission: read on users"),
+    404: errorResponse("No driver with this code"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/drivers/phone/{phoneCountryCode}/{phoneNumber}",
+  tags: ["Driver Profiles"],
+  summary: "Get a driver profile by phone number",
+  description: "Needs users: read.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: driverPhoneParamsSchema,
+  },
+  responses: {
+    200: successResponse(
+      "Driver profile retrieved successfully",
+      driverWithRelationsResponseSchema,
+    ),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Missing permission: read on users"),
+    404: errorResponse("No driver with this phone number"),
   },
 });
 
@@ -60,7 +129,7 @@ registry.registerPath({
     },
   },
   responses: {
-    200: successResponse("Driver profile updated successfully", driverProfileResponseSchema),
+    200: successResponse("Driver profile updated successfully", driverWithRelationsResponseSchema),
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller isn't this driver and lacks users: update"),

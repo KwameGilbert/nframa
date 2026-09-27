@@ -11,6 +11,8 @@ import {
   createDriverProfileSchema,
   updateDriverProfileSchema,
   driverProfileParamsSchema,
+  driverCodeParamsSchema,
+  driverPhoneParamsSchema,
 } from "../schemas/driverProfile.schema.js";
 import {
   listDrivers,
@@ -37,6 +39,7 @@ driverProfileRouter.get(
   "/drivers/code/:code",
   authenticate,
   requirePermission("users", "read"),
+  validate({ params: driverCodeParamsSchema }),
   getDriverByCode,
 );
 
@@ -44,6 +47,7 @@ driverProfileRouter.get(
   "/drivers/phone/:phoneCountryCode/:phoneNumber",
   authenticate,
   requirePermission("users", "read"),
+  validate({ params: driverPhoneParamsSchema }),
   getDriverByPhone,
 );
 
