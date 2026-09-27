@@ -19,7 +19,7 @@ type SignedInAdmin = Awaited<ReturnType<typeof createSignedInAdmin>>;
 let superAdmin: Awaited<ReturnType<typeof loginAsSuperAdmin>>;
 let supportAgent: SignedInAdmin; // users: read
 let userManager: SignedInAdmin; // full users access, nothing on roles
-let accessManager: SignedInAdmin; // roles: read + delete, not a system role
+let accessManager: SignedInAdmin; // admin: read + delete, not a system role
 let rider: Awaited<ReturnType<typeof signUpByPhone>>;
 
 beforeAll(async () => {
@@ -29,7 +29,7 @@ beforeAll(async () => {
     createSignedInAdmin(superAdmin.token, {
       users: { create: true, read: true, update: true, delete: true },
     }),
-    createSignedInAdmin(superAdmin.token, { roles: { read: true, delete: true } }),
+    createSignedInAdmin(superAdmin.token, { admin: { read: true, delete: true } }),
     signUpByPhone("rider"),
   ]);
 });
@@ -145,7 +145,7 @@ describe("POST /users", () => {
     expect(res.body.error).toBe("Missing permission: create on users");
   });
 
-  it("needs roles: create, not users: create, to add an admin account", async () => {
+  it("needs admin: create, not users: create, to add an admin account", async () => {
     const person = data.person();
 
     const res = await api
@@ -154,7 +154,7 @@ describe("POST /users", () => {
       .send({ fullName: person.fullName, email: data.email(person), role: "admin" });
 
     expectStatus(res, 403);
-    expect(res.body.error).toBe("Missing permission: create on roles");
+    expect(res.body.error).toBe("Missing permission: create on admin");
   });
 
   it("doesn't let a rider add accounts", async () => {
@@ -197,11 +197,11 @@ describe("GET /users/:id", () => {
     expectStatus(res, 200);
   });
 
-  it("needs roles: read to view an admin account", async () => {
+  it("needs admin: read to view an admin account", async () => {
     const res = await api.get(`/users/${userManager.userId}`).set(auth(supportAgent.token));
 
     expectStatus(res, 403);
-    expect(res.body.error).toBe("Missing permission: read on roles");
+    expect(res.body.error).toBe("Missing permission: read on admin");
   });
 
   it("returns 404 for an unknown id", async () => {
@@ -335,7 +335,7 @@ describe("PATCH /users/:id", () => {
     expectStatus(res, 403);
   });
 
-  it("needs roles: update, not users: update, to edit an admin account", async () => {
+  it("needs admin: update, not users: update, to edit an admin account", async () => {
     const role = await createRole(superAdmin.token);
     const target = await createAdminAccount(superAdmin.token, {
       roleId: role.id,
@@ -348,7 +348,7 @@ describe("PATCH /users/:id", () => {
       .send({ fullName: data.person().fullName });
 
     expectStatus(res, 403);
-    expect(res.body.error).toBe("Missing permission: update on roles");
+    expect(res.body.error).toBe("Missing permission: update on admin");
   });
 
   it("rejects an empty update", async () => {
@@ -399,19 +399,19 @@ describe("DELETE /users/:id", () => {
     expectStatus(res, 200);
   });
 
-  it("needs roles: delete, not users: delete, to delete an admin account", async () => {
+  it("needs admin: delete, not users: delete, to delete an admin account", async () => {
     const role = await createRole(superAdmin.token, { users: { read: true } });
     const target = await createAdminAccount(superAdmin.token, { roleId: role.id });
 
     const res = await api.delete(`/users/${target.userId}`).set(auth(userManager.token));
 
     expectStatus(res, 403);
-    expect(res.body.error).toBe("Missing permission: delete on roles");
+    expect(res.body.error).toBe("Missing permission: delete on admin");
   });
 
   it("doesn't let an admin delete their own account", async () => {
     const admin = await createSignedInAdmin(superAdmin.token, {
-      roles: { read: true, delete: true },
+      admin: { read: true, delete: true },
     });
 
     const res = await api.delete(`/users/${admin.userId}`).set(auth(admin.token));

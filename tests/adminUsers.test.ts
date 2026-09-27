@@ -123,7 +123,7 @@ describe("POST /admin", () => {
     expect(res.body.error).toBe(`User not found: ${user.id}`);
   });
 
-  it("needs roles: create", async () => {
+  it("needs admin: create", async () => {
     const [user, userManager] = await Promise.all([
       newAdminUser(),
       createSignedInAdmin(superAdmin.token, { users: { create: true, read: true } }),
@@ -135,7 +135,7 @@ describe("POST /admin", () => {
       .send({ userId: user.id, roleId });
 
     expectStatus(res, 403);
-    expect(res.body.error).toBe("Missing permission: create on roles");
+    expect(res.body.error).toBe("Missing permission: create on admin");
   });
 });
 
@@ -154,13 +154,13 @@ describe("GET /admin", () => {
     expect(found.adminUser.role.id).toBe(roleId);
   });
 
-  it("needs roles: read", async () => {
+  it("needs admin: read", async () => {
     const supportAgent = await createSignedInAdmin(superAdmin.token, { users: { read: true } });
 
     const res = await api.get("/admin").set(auth(supportAgent.token));
 
     expectStatus(res, 403);
-    expect(res.body.error).toBe("Missing permission: read on roles");
+    expect(res.body.error).toBe("Missing permission: read on admin");
   });
 });
 
@@ -208,13 +208,13 @@ describe("GET /admin/:userId", () => {
     expect(res.body.error).toBe(`Admin user not found for user: ${rider.id}`);
   });
 
-  it("needs roles: read", async () => {
+  it("needs admin: read", async () => {
     const supportAgent = await createSignedInAdmin(superAdmin.token, { users: { read: true } });
 
     const res = await api.get(`/admin/${supportAgent.userId}`).set(auth(supportAgent.token));
 
     expectStatus(res, 403);
-    expect(res.body.error).toBe("Missing permission: read on roles");
+    expect(res.body.error).toBe("Missing permission: read on admin");
   });
 });
 
@@ -269,7 +269,7 @@ describe("PATCH /admin/:userId", () => {
 
   it("doesn't let admins change their own role or status", async () => {
     const admin = await createSignedInAdmin(superAdmin.token, {
-      roles: { read: true, update: true },
+      admin: { read: true, update: true },
     });
 
     const status = await api
@@ -285,7 +285,7 @@ describe("PATCH /admin/:userId", () => {
 
   it("lets admins change their own department", async () => {
     const admin = await createSignedInAdmin(superAdmin.token, {
-      roles: { read: true, update: true },
+      admin: { read: true, update: true },
     });
 
     const res = await api
@@ -296,7 +296,7 @@ describe("PATCH /admin/:userId", () => {
     expectStatus(res, 200);
   });
 
-  it("needs roles: update", async () => {
+  it("needs admin: update", async () => {
     const [target, viewer] = await Promise.all([
       createAdminAccount(superAdmin.token, { roleId, status: "invited" }),
       createSignedInAdmin(superAdmin.token, { roles: { read: true } }),
@@ -308,7 +308,7 @@ describe("PATCH /admin/:userId", () => {
       .send({ department: "Finance" });
 
     expectStatus(res, 403);
-    expect(res.body.error).toBe("Missing permission: update on roles");
+    expect(res.body.error).toBe("Missing permission: update on admin");
   });
 
   it("returns 404 for a user without an admin record", async () => {
@@ -351,7 +351,7 @@ describe("DELETE /admin/:userId", () => {
 
   it("doesn't let admins delete themselves", async () => {
     const admin = await createSignedInAdmin(superAdmin.token, {
-      roles: { read: true, delete: true },
+      admin: { read: true, delete: true },
     });
 
     const res = await api.delete(`/admin/${admin.userId}`).set(auth(admin.token));
@@ -360,7 +360,7 @@ describe("DELETE /admin/:userId", () => {
     expect(res.body.error).toBe("You can't delete your own admin account");
   });
 
-  it("needs roles: delete", async () => {
+  it("needs admin: delete", async () => {
     const [target, caller] = await Promise.all([
       createAdminAccount(superAdmin.token, { roleId, status: "invited" }),
       createSignedInAdmin(superAdmin.token, { roles: { read: true, update: true } }),
@@ -369,7 +369,7 @@ describe("DELETE /admin/:userId", () => {
     const res = await api.delete(`/admin/${target.userId}`).set(auth(caller.token));
 
     expectStatus(res, 403);
-    expect(res.body.error).toBe("Missing permission: delete on roles");
+    expect(res.body.error).toBe("Missing permission: delete on admin");
   });
 
   it("returns 404 for a user without an admin record", async () => {

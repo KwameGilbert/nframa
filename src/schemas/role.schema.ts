@@ -3,7 +3,7 @@ import { MODULES } from "../config/permissions.js";
 
 export const moduleSchema = z.enum(MODULES).meta({
   description:
-    "A feature area that can have permissions: settings (global platform settings), roles (admin access control), users (riders, drivers, and their vehicles), verification (driver verification documents)",
+    "A feature area that can have permissions: settings (global platform settings), roles (role/permission definitions), users (riders, drivers, and their vehicles), verification (driver verification documents), admin (admin user accounts — creating, viewing, updating, and deleting them, distinct from roles which only covers role definitions)",
   example: "users",
 });
 

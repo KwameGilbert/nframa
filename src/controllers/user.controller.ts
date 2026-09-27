@@ -55,6 +55,14 @@ export async function softDeleteAccount(req: Request, target: User) {
   await authSessionModel.revokeAllForUser(target.id);
 }
 
+// Riders and drivers only — see findAllRidersAndDrivers. Admin accounts are listed via GET /admin instead,
+// which needs admin: read rather than users: read.
+export async function listUsers(_req: Request, res: Response) {
+  const users = await userModel.findAllRidersAndDrivers();
+
+  sendSuccess(res, "Users retrieved successfully", users);
+}
+
 export async function createUser(req: Request, res: Response) {
   const input = req.validated.body as CreateUserInput;
 

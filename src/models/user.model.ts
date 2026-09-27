@@ -59,6 +59,13 @@ class UserModel extends BaseModel<User> {
     const now = new Date();
     return this.updateById(id, { deletedAt: now, updatedAt: now });
   }
+
+  // Riders and drivers only — admin accounts are a separate concern with their own permission module (see
+  // MODULES), listed instead via GET /admin. Mirrors moduleFor() in user.controller.ts.
+  async findAllRidersAndDrivers(): Promise<User[]> {
+    const rows = await this.table.whereIn("role", ["rider", "driver"]).orderBy("createdAt", "desc");
+    return rows.map((row: User) => this.sanitize(row));
+  }
 }
 
 export const userModel = new UserModel();

@@ -50,6 +50,13 @@ export async function seed(knex: Knex): Promise<void> {
     if (ADMIN_PASSWORD && !existingUser.passwordHash) {
       await knex("users").where({ id: existingUser.id }).update(credentials);
     }
+    // The users row existing doesn't guarantee the adminUsers row does too (e.g. it was deleted, or seeding
+    // was interrupted between the two inserts below) — ensure it here rather than assuming, so re-running
+    // the seed can also repair a super admin that's lost its admin record.
+    const existingAdminUser = await knex("adminUsers").where({ userId: existingUser.id }).first();
+    if (!existingAdminUser) {
+      await knex("adminUsers").insert({ userId: existingUser.id, roleId: role.id, status: "active" });
+    }
     return;
   }
 

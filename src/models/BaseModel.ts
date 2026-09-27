@@ -10,7 +10,9 @@ export abstract class BaseModel<T extends object> {
     return db(this.tableName);
   }
 
-  private sanitize(row: T): T {
+  // Protected so subclasses writing their own queries (e.g. a whereIn a criteria object can't express)
+  // strip excludedColumns the same way findById/findOne/etc. do, instead of re-deleting fields by hand.
+  protected sanitize(row: T): T {
     if (this.excludedColumns.length === 0) return row;
 
     const clone = { ...row } as Record<string, unknown>;
