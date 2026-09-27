@@ -282,11 +282,11 @@ describe("PATCH /admin/verification/:documentId", () => {
   });
 });
 
-describe("GET /admin/verification/pending", () => {
+describe("GET /admin/driver/verification/pending", () => {
   it("lists pending documents with the driver's details", async () => {
     const { driver, document } = await driverWithDocument("NATIONAL_ID");
 
-    const res = await api.get("/admin/verification/pending").set(auth(reviewer.token));
+    const res = await api.get("/admin/driver/verification/pending").set(auth(reviewer.token));
 
     expectStatus(res, 200);
     const found = res.body.data.find((d: { id: string }) => d.id === document.id);
@@ -308,7 +308,7 @@ describe("GET /admin/verification/pending", () => {
       200,
     );
 
-    const res = await api.get("/admin/verification/pending").set(auth(reviewer.token));
+    const res = await api.get("/admin/driver/verification/pending").set(auth(reviewer.token));
 
     expect(res.body.data.some((d: { id: string }) => d.id === document.id)).toBe(false);
   });
@@ -316,7 +316,7 @@ describe("GET /admin/verification/pending", () => {
   it("needs verification: read", async () => {
     const viewer = await signUpByPhone("driver");
 
-    const res = await api.get("/admin/verification/pending").set(auth(viewer.token));
+    const res = await api.get("/admin/driver/verification/pending").set(auth(viewer.token));
 
     expectStatus(res, 403);
     expect(res.body.error).toBe("Missing permission: read on verification");

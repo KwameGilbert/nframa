@@ -7,6 +7,12 @@ import type {
   UpdateDriverProfileInput,
 } from "../schemas/driverProfile.schema.js";
 
+export async function listDrivers(_req: Request, res: Response) {
+  const drivers = await driverProfileModel.findAll();
+
+  sendSuccess(res, "Drivers retrieved successfully", drivers);
+}
+
 export async function createDriverProfile(req: Request, res: Response) {
   const input = req.validated.body as CreateDriverProfileInput;
 
@@ -22,6 +28,33 @@ export async function getDriverProfile(req: Request, res: Response) {
 
   if (!profile) {
     throw AppError.notFound(`Driver profile not found for user: ${userId}`);
+  }
+
+  sendSuccess(res, "Driver profile retrieved successfully", profile);
+}
+
+export async function getDriverByCode(req: Request, res: Response) {
+  const { code } = req.validated.params as { code: string };
+
+  const profile = await driverProfileModel.findByCode(code);
+
+  if (!profile) {
+    throw AppError.notFound(`Driver not found with code: ${code}`);
+  }
+
+  sendSuccess(res, "Driver profile retrieved successfully", profile);
+}
+
+export async function getDriverByPhone(req: Request, res: Response) {
+  const { phoneCountryCode, phoneNumber } = req.validated.params as {
+    phoneCountryCode: string;
+    phoneNumber: string;
+  };
+
+  const profile = await driverProfileModel.findByPhone(phoneCountryCode, phoneNumber);
+
+  if (!profile) {
+    throw AppError.notFound(`Driver not found with phone: ${phoneCountryCode}${phoneNumber}`);
   }
 
   sendSuccess(res, "Driver profile retrieved successfully", profile);

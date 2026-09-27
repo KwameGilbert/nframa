@@ -50,6 +50,22 @@ class DriverProfileModel extends BaseModel<DriverProfile> {
       verificationStatus: status,
     } as unknown as Partial<DriverProfile>);
   }
+
+  async findAll() {
+    return this.table.orderBy("carOwnerProfiles.userId", "desc");
+  }
+
+  async findByCode(code: string) {
+    return this.table.where({ code }).first();
+  }
+
+  async findByPhone(phoneCountryCode: string, phoneNumber: string) {
+    return this.table
+      .join("users", "users.id", "carOwnerProfiles.userId")
+      .where({ phoneCountryCode, phoneNumber })
+      .select("carOwnerProfiles.*")
+      .first();
+  }
 }
 
 export const driverProfileModel = new DriverProfileModel();

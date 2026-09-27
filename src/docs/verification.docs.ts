@@ -101,11 +101,11 @@ registry.registerPath({
 
 registry.registerPath({
   method: "get",
-  path: "/admin/verification/pending",
+  path: "/admin/driver/verification/pending",
   tags: ["Admin - Verification"],
-  summary: "List pending verification documents (admin)",
+  summary: "List pending driver verification documents",
   description:
-    "Retrieve all documents awaiting or under review, with driver details. Needs verification: read.",
+    "Retrieve all driver documents awaiting or under review, with driver details. Needs verification: read.",
   security: [{ bearerAuth: [] }],
   responses: {
     200: successResponse(

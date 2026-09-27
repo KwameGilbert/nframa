@@ -47,9 +47,9 @@ verificationRouter.patch(
   updateDocumentStatus,
 );
 
-// Admin lists pending/under-review documents
+// Admin lists pending/under-review documents for drivers
 verificationRouter.get(
-  "/admin/verification/pending",
+  "/admin/driver/verification/pending",
   authenticate,
   requirePermission("verification", "read"),
   listPendingDocuments,
