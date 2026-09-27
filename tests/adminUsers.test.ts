@@ -45,7 +45,14 @@ describe("POST /admin", () => {
     expectStatus(res, 201);
     trackForCleanup("adminUsers", { userId: user.id });
     expect(res.body.message).toBe("Admin user created successfully");
-    expect(res.body.data).toMatchObject({ userId: user.id, roleId, department, status: "invited" });
+    expect(res.body.data.adminUser).toMatchObject({
+      userId: user.id,
+      roleId,
+      department,
+      status: "invited",
+    });
+    expect(res.body.data.adminUser.user.id).toBe(user.id);
+    expect(res.body.data.adminUser.role.id).toBe(roleId);
   });
 
   it("allows one admin record per user", async () => {
@@ -132,6 +139,31 @@ describe("POST /admin", () => {
   });
 });
 
+describe("GET /admin", () => {
+  it("lists every admin, each with their user and role", async () => {
+    const admin = await createAdminAccount(superAdmin.token, { roleId, status: "invited" });
+
+    const res = await api.get("/admin").set(auth(superAdmin.token));
+
+    expectStatus(res, 200);
+    const found = res.body.data.find(
+      (a: { adminUser: { userId: string } }) => a.adminUser.userId === admin.userId,
+    );
+    expect(found.adminUser).toMatchObject({ userId: admin.userId, roleId, status: "invited" });
+    expect(found.adminUser.user.id).toBe(admin.userId);
+    expect(found.adminUser.role.id).toBe(roleId);
+  });
+
+  it("needs roles: read", async () => {
+    const supportAgent = await createSignedInAdmin(superAdmin.token, { users: { read: true } });
+
+    const res = await api.get("/admin").set(auth(supportAgent.token));
+
+    expectStatus(res, 403);
+    expect(res.body.error).toBe("Missing permission: read on roles");
+  });
+});
+
 describe("Activating an admin", () => {
   it("an invited admin can sign in once their status is set to active", async () => {
     const admin = await createAdminAccount(superAdmin.token, { roleId, status: "invited" });
@@ -145,20 +177,26 @@ describe("Activating an admin", () => {
       .send({ status: "active" });
 
     expectStatus(res, 200);
-    expect(res.body.data.status).toBe("active");
+    expect(res.body.data.adminUser.status).toBe("active");
     expectStatus(await signIn(), 200);
   });
 });
 
 describe("GET /admin/:userId", () => {
-  it("returns the admin record", async () => {
+  it("returns the admin record with its user and role", async () => {
     const admin = await createAdminAccount(superAdmin.token, { roleId, status: "invited" });
 
     const res = await api.get(`/admin/${admin.userId}`).set(auth(superAdmin.token));
 
     expectStatus(res, 200);
     expect(res.body.message).toBe("Admin user retrieved successfully");
-    expect(res.body.data).toMatchObject({ userId: admin.userId, roleId, status: "invited" });
+    expect(res.body.data.adminUser).toMatchObject({
+      userId: admin.userId,
+      roleId,
+      status: "invited",
+    });
+    expect(res.body.data.adminUser.user.id).toBe(admin.userId);
+    expect(res.body.data.adminUser.role.id).toBe(roleId);
   });
 
   it("returns 404 for a user without an admin record", async () => {
@@ -192,7 +230,7 @@ describe("PATCH /admin/:userId", () => {
     expectStatus(res, 200);
     expect(res.body).toMatchObject({
       message: "Admin user updated successfully",
-      data: { department: "Safety" },
+      data: { adminUser: { department: "Safety" } },
     });
   });
 
@@ -208,7 +246,8 @@ describe("PATCH /admin/:userId", () => {
       .send({ roleId: newRole.id });
 
     expectStatus(res, 200);
-    expect(res.body.data.roleId).toBe(newRole.id);
+    expect(res.body.data.adminUser.roleId).toBe(newRole.id);
+    expect(res.body.data.adminUser.role.id).toBe(newRole.id);
   });
 
   it("cuts off a suspended admin on their very next request", async () => {
@@ -292,7 +331,8 @@ describe("DELETE /admin/:userId", () => {
 
     expectStatus(res, 200);
     expect(res.body.message).toBe("Admin user deleted successfully");
-    expect(res.body.data).toMatchObject({ userId: admin.userId, roleId });
+    expect(res.body.data.adminUser).toMatchObject({ userId: admin.userId, roleId });
+    expect(res.body.data.adminUser.user.deletedAt).not.toBeNull();
     const signIn = await api
       .post("/auth/login")
       .send({ email: admin.email, password: admin.password });

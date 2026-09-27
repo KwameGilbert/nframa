@@ -7,6 +7,12 @@ import { sendCreated, sendSuccess } from "../utils/response.js";
 import { findUserOrThrow, softDeleteAccount } from "./user.controller.js";
 import type { CreateAdminUserInput, UpdateAdminUserInput } from "../schemas/adminUser.schema.js";
 
+export async function listAdminUsers(_req: Request, res: Response) {
+  const adminUsers = await adminUserModel.findAllWithRelations();
+
+  sendSuccess(res, "Admin users retrieved successfully", adminUsers);
+}
+
 export async function createAdminUser(req: Request, res: Response) {
   const { password, ...input } = req.validated.body as CreateAdminUserInput;
 
@@ -22,26 +28,26 @@ export async function createAdminUser(req: Request, res: Response) {
     );
   }
 
-  const adminUser = await adminUserModel.createAdminUser(input);
+  const result = await adminUserModel.createAdminUser(input);
 
   // The password lives on the users row, not the admin extension record.
   if (password) {
-    await userModel.setPassword(adminUser.userId, await hashPassword(password));
+    await userModel.setPassword(input.userId, await hashPassword(password));
   }
 
-  sendCreated(res, "Admin user created successfully", adminUser);
+  sendCreated(res, "Admin user created successfully", result);
 }
 
 export async function getAdminUser(req: Request, res: Response) {
   const { userId } = req.validated.params as { userId: string };
 
-  const adminUser = await adminUserModel.findById(userId);
+  const result = await adminUserModel.findByIdWithRelations(userId);
 
-  if (!adminUser) {
+  if (!result) {
     throw AppError.notFound(`Admin user not found for user: ${userId}`);
   }
 
-  sendSuccess(res, "Admin user retrieved successfully", adminUser);
+  sendSuccess(res, "Admin user retrieved successfully", result);
 }
 
 export async function updateAdminUser(req: Request, res: Response) {
@@ -53,13 +59,13 @@ export async function updateAdminUser(req: Request, res: Response) {
     throw AppError.forbidden("You can't change your own role or status");
   }
 
-  const adminUser = await adminUserModel.updateAdminUser(userId, input);
+  const result = await adminUserModel.updateAdminUser(userId, input);
 
-  if (!adminUser) {
+  if (!result) {
     throw AppError.notFound(`Admin user not found for user: ${userId}`);
   }
 
-  sendSuccess(res, "Admin user updated successfully", adminUser);
+  sendSuccess(res, "Admin user updated successfully", result);
 }
 
 // Soft-deletes the admin's user account (the admin record is kept for history). Same guards as
@@ -74,5 +80,8 @@ export async function deleteAdminUser(req: Request, res: Response) {
 
   await softDeleteAccount(req, await findUserOrThrow(userId));
 
-  sendSuccess(res, "Admin user deleted successfully", adminUser);
+  // Re-fetched after the delete so the returned user reflects the now-set deletedAt, same as every other
+  // admin endpoint's response shape.
+  const result = await adminUserModel.findByIdWithRelations(userId);
+  sendSuccess(res, "Admin user deleted successfully", result);
 }

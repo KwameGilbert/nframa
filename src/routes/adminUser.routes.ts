@@ -8,6 +8,7 @@ import {
   adminUserParamsSchema,
 } from "../schemas/adminUser.schema.js";
 import {
+  listAdminUsers,
   createAdminUser,
   getAdminUser,
   updateAdminUser,
@@ -16,10 +17,12 @@ import {
 
 export const adminUserRouter = Router();
 
+adminUserRouter.get("/admin", authenticate, requirePermission("admin", "read"), listAdminUsers);
+
 adminUserRouter.post(
   "/admin",
   authenticate,
-  requirePermission("roles", "create"),
+  requirePermission("admin", "create"),
   validate({ body: createAdminUserSchema }),
   createAdminUser,
 );
@@ -27,7 +30,7 @@ adminUserRouter.post(
 adminUserRouter.get(
   "/admin/:userId",
   authenticate,
-  requirePermission("roles", "read"),
+  requirePermission("admin", "read"),
   validate({ params: adminUserParamsSchema }),
   getAdminUser,
 );
@@ -35,7 +38,7 @@ adminUserRouter.get(
 adminUserRouter.patch(
   "/admin/:userId",
   authenticate,
-  requirePermission("roles", "update"),
+  requirePermission("admin", "update"),
   validate({ params: adminUserParamsSchema, body: updateAdminUserSchema }),
   updateAdminUser,
 );
@@ -43,7 +46,7 @@ adminUserRouter.patch(
 adminUserRouter.delete(
   "/admin/:userId",
   authenticate,
-  requirePermission("roles", "delete"),
+  requirePermission("admin", "delete"),
   validate({ params: adminUserParamsSchema }),
   deleteAdminUser,
 );

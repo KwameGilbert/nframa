@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { passwordSchema } from "./common.schema.js";
+import { userResponseSchema } from "./user.schema.js";
+import { roleResponseSchema } from "./role.schema.js";
 
 const adminStatusSchema = z.enum(["active", "suspended", "invited"]).meta({
   description:
@@ -47,4 +49,13 @@ export const adminUserResponseSchema = z.object({
   status: adminStatusSchema,
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
+});
+
+// Every admin-returning endpoint (create, list, get, update, delete) responds with this same shape — the
+// admin record plus its user and role (role carries that role's permissions). See adminUserModel.findByIdWithRelations.
+export const adminUserWithRelationsResponseSchema = z.object({
+  adminUser: adminUserResponseSchema.extend({
+    user: userResponseSchema,
+    role: roleResponseSchema.nullable(),
+  }),
 });

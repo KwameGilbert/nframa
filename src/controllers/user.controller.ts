@@ -7,10 +7,11 @@ import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 import type { CreateUserInput, UpdateUserInput } from "../schemas/user.schema.js";
 
-// Admin accounts are managed under "roles" (they're access control), riders/drivers under "users" — otherwise anyone with
-// users access could edit an admin's email and take the account over via password reset.
+// Admin accounts are managed under "admin" (a dedicated module — see MODULES), riders/drivers under
+// "users" — otherwise anyone with users access could edit an admin's email and take the account over via
+// password reset. "roles" stays separate again: it's role/permission definitions, not admin accounts.
 function moduleFor(user: Pick<User, "role">) {
-  return user.role === "admin" ? "roles" : "users";
+  return user.role === "admin" ? "admin" : "users";
 }
 
 export async function findUserOrThrow(id: string) {
@@ -24,7 +25,7 @@ export async function findUserOrThrow(id: string) {
 }
 
 // Admin accounts get extra guards: no deleting yourself (lockout), and only an admin in a system role
-// (superadmin) can delete another one — otherwise anyone with roles: delete could remove every superadmin.
+// (superadmin) can delete another one — otherwise anyone with admin: delete could remove every superadmin.
 async function assertCanDeleteAdmin(req: Request, target: User) {
   if (req.auth?.id === target.id) {
     throw AppError.forbidden("You can't delete your own admin account");
@@ -101,7 +102,7 @@ export async function updateUser(req: Request, res: Response) {
 }
 
 // Riders and drivers can delete their own account; deleting anyone else takes the delete permission
-// (roles: delete for an admin account). Admins can't delete themselves — see softDeleteAccount.
+// (admin: delete for an admin account). Admins can't delete themselves — see softDeleteAccount.
 export async function deleteUser(req: Request, res: Response) {
   const { id } = req.validated.params as { id: string };
 
