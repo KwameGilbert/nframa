@@ -13,6 +13,9 @@ export default defineConfig({
     env: {
       ...(envFile ? parse(readFileSync(envFile)) : {}),
       NODE_ENV: "test",
+      // Tests assert the exact error body clients get in production, so never let a dev env file turn
+      // on stack traces in responses.
+      DEBUG_ERRORS: "false",
       LOG_LEVEL: process.env.LOG_LEVEL ?? "silent",
     },
     // Every request goes through the real database and bcrypt (CPU-bound, shared by concurrent tests), so
