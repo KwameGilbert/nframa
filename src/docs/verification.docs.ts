@@ -78,9 +78,9 @@ registry.registerPath({
 
 registry.registerPath({
   method: "patch",
-  path: "/admin/verification/{documentId}",
-  tags: ["Admin - Verification"],
-  summary: "Update document verification status (admin)",
+  path: "/admin/verification/document/{documentId}",
+  tags: ["Document Verification"],
+  summary: "Update document verification status",
   description:
     "Admin approves, rejects, or leaves notes on a verification document. Needs verification: update.",
   security: [{ bearerAuth: [] }],
@@ -105,7 +105,7 @@ registry.registerPath({
 registry.registerPath({
   method: "get",
   path: "/admin/driver/verification/pending",
-  tags: ["Admin - Verification"],
+  tags: ["Document Verification"],
   summary: "List pending driver verification documents",
   description:
     "Retrieve all driver documents awaiting or under review, with driver details. Needs verification: read.",
@@ -145,10 +145,10 @@ registry.registerPath({
 registry.registerPath({
   method: "patch",
   path: "/admin/driver/{userId}/verification",
-  tags: ["Admin - Verification"],
-  summary: "Update driver verification status (admin)",
+  tags: ["Driver Verification Admin"],
+  summary: "Update driver verification status",
   description:
-    "Admin sets a driver's overall verification status (unverified, pending, approved, rejected, or expiring) independently from individual document reviews. Needs verification: update. Returns the full driver profile with relations.",
+    "Admin sets a driver's overall verification status (unverified, pending, approved, rejected, or expiring) independently from individual document reviews. To approve a driver, ALL submitted documents must be verified and not expired. Needs verification: update. Returns the full driver profile with relations.",
   security: [{ bearerAuth: [] }],
   request: {
     params: driverProfileParamsSchema,
@@ -161,7 +161,9 @@ registry.registerPath({
       "Driver verification status updated successfully",
       driverWithRelationsResponseSchema,
     ),
-    400: errorResponse("Validation error"),
+    400: errorResponse(
+      "Validation error, or cannot approve: no documents submitted, unverified documents exist, or documents have expired",
+    ),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Missing permission: update on verification"),
     404: errorResponse("Driver profile not found"),

@@ -146,6 +146,30 @@ export async function updateDriverVerificationStatus(req: Request, res: Response
     throw AppError.notFound(`Driver profile not found for user: ${userId}`);
   }
 
+  // If approving driver, validate all documents are verified and not expired
+  if (input.verificationStatus === "approved") {
+    const documents = await verificationDocumentModel.getDocumentsByUserId(userId);
+
+    if (documents.length === 0) {
+      throw AppError.badRequest("Cannot approve driver: no documents submitted");
+    }
+
+    const unverifiedDocs = documents.filter((doc) => doc.status !== "VERIFIED");
+    if (unverifiedDocs.length > 0) {
+      throw AppError.badRequest(
+        `Cannot approve driver: ${unverifiedDocs.length} document(s) not yet verified`,
+      );
+    }
+
+    const now = new Date();
+    const expiredDocs = documents.filter((doc) => doc.expiresAt && new Date(doc.expiresAt) < now);
+    if (expiredDocs.length > 0) {
+      throw AppError.badRequest(
+        `Cannot approve driver: ${expiredDocs.length} document(s) have expired`,
+      );
+    }
+  }
+
   // Update driver's verification status
   await driverProfileModel.updateVerificationStatus(userId, input.verificationStatus);
 

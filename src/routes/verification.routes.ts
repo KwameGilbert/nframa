@@ -39,11 +39,9 @@ verificationRouter.post(
 // Driver retrieves their verification documents
 verificationRouter.get("/driver/verification", authenticate, getDriverDocuments);
 
-// Admin updates document verification status. Its own module, not users or roles: verification review
-// is a distinct responsibility from general driver/rider management or admin-account management — the
-// /admin/* prefix here is just REST namespacing.
+// Admin updates document verification status
 verificationRouter.patch(
-  "/admin/verification/:documentId",
+  "/admin/verification/document/:documentId",
   authenticate,
   requirePermission("verification", "update"),
   validate({ params: documentIdParamsSchema, body: updateDocumentStatusSchema }),
