@@ -106,3 +106,60 @@ export const settingResponseSchema = z.object({
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
+
+// GET /settings/:key embeds the setting's change history, read from the activity log (one entry per
+// create/update/delete on this key) rather than a table of its own — logActivity already records before,
+// after and who acted for every settings write, so a second history table would only duplicate it.
+export const getSettingQuerySchema = z.object({
+  historyLimit: z.coerce.number().int().min(1).max(100).default(20).meta({
+    description: "How many of the most recent changes to return in history (1-100)",
+    example: 20,
+  }),
+});
+
+export type GetSettingQuery = z.infer<typeof getSettingQuerySchema>;
+
+// Trimmed compared to an activity log's actor: a setting's history is readable with settings: read alone,
+// so it names who changed it without also handing out that admin's email and phone number.
+export const settingHistoryActorSchema = z
+  .object({
+    id: z.uuid(),
+    fullName: z.string().nullable(),
+    role: z.enum(["admin", "rider", "driver"]),
+  })
+  .meta({ description: "The account that made the change, as it is now" });
+
+const snapshotSchema = z
+  .record(z.string(), z.unknown())
+  .nullable()
+  .meta({ description: "The setting as this endpoint returns it" });
+
+export const settingHistoryEntrySchema = z.object({
+  id: z.uuid().meta({ description: "Id of the activity log entry this change was read from" }),
+  action: z.string().meta({
+    description: "setting.create, setting.update, or setting.delete",
+    example: "setting.update",
+  }),
+  description: z.string().meta({ example: "Updated a setting" }),
+  actor: settingHistoryActorSchema
+    .nullable()
+    .meta({ description: "Who made the change; null if their account has since been removed" }),
+  before: snapshotSchema.meta({ description: "The setting before the change; null on creation" }),
+  after: snapshotSchema.meta({ description: "The setting after the change; null on deletion" }),
+  changedFields: z
+    .array(z.string())
+    .nullable()
+    .meta({
+      description:
+        "Fields that differ between before and after (updatedAt is left out). Null for creations and deletions, where there's nothing to compare",
+      example: ["value"],
+    }),
+  createdAt: z.iso.datetime().meta({ description: "When the change was made" }),
+});
+
+export const settingWithHistoryResponseSchema = settingResponseSchema.extend({
+  history: z.array(settingHistoryEntrySchema).meta({
+    description:
+      "This setting's most recent changes, newest first, capped by historyLimit. Only changes that went through are recorded, so a refused attempt never appears here. Empty for a setting untouched since activity logging began",
+  }),
+});

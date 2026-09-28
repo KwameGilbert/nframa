@@ -1,8 +1,10 @@
 import { errorResponse, registry, successResponse } from "./registry.js";
 import {
   createSettingSchema,
+  getSettingQuerySchema,
   settingKeyParamsSchema,
   settingResponseSchema,
+  settingWithHistoryResponseSchema,
   updateSettingSchema,
 } from "../schemas/setting.schema.js";
 
@@ -52,15 +54,17 @@ registry.registerPath({
   method: "get",
   path: "/settings/{key}",
   tags: ["Settings"],
-  summary: "Get a setting",
-  description: "Needs settings: read.",
+  summary: "Get a setting with its change history",
+  description:
+    "The setting, plus `history`: its most recent changes, newest first, each naming who made it and what the setting looked like before and after. The history is read from the audit trail, so it starts where activity logging did and covers only changes that went through — refused attempts never appear. Use historyLimit to ask for more or fewer entries. Needs settings: read.",
   security: [{ bearerAuth: [] }],
   request: {
     params: settingKeyParamsSchema,
+    query: getSettingQuerySchema,
   },
   responses: {
-    200: successResponse("Setting retrieved successfully", settingResponseSchema),
-    400: errorResponse("Validation error"),
+    200: successResponse("Setting retrieved successfully", settingWithHistoryResponseSchema),
+    400: errorResponse("Validation error (e.g. historyLimit outside 1-100)"),
     401: unauthorized,
     403: missingPermission("read"),
     404: notFound,

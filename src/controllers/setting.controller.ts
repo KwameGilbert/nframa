@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { activityLogModel } from "../models/activityLog.model.js";
 import { settingModel, type Setting } from "../models/setting.model.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { AppError } from "../utils/AppError.js";
@@ -7,6 +8,7 @@ import {
   isValidSettingValue,
   settingValueError,
   type CreateSettingInput,
+  type GetSettingQuery,
   type SettingKeyParams,
   type UpdateSettingInput,
 } from "../schemas/setting.schema.js";
@@ -36,10 +38,16 @@ export async function listSettings(_req: Request, res: Response) {
   sendSuccess(res, "Settings retrieved successfully", await settingModel.list());
 }
 
+// The setting comes back with its change history, read from the activity log rather than a history table
+// of its own — logActivity already records the before and after of every settings write and who made it.
 export async function getSetting(req: Request, res: Response) {
   const { key } = req.validated.params as SettingKeyParams;
+  const { historyLimit } = req.validated.query as GetSettingQuery;
 
-  sendSuccess(res, "Setting retrieved successfully", await findSettingOrThrow(key));
+  const setting = await findSettingOrThrow(key);
+  const history = await activityLogModel.historyFor(SETTING_ACTIVITY.targetType, key, historyLimit);
+
+  sendSuccess(res, "Setting retrieved successfully", { ...setting, history });
 }
 
 export async function createSetting(req: Request, res: Response) {

@@ -3,6 +3,8 @@ import { api, auth, expectStatus } from "./helpers/api.js";
 import { createSignedInAdmin, loginAsSuperAdmin, signUpByPhone } from "./helpers/actors.js";
 import { newPromotion } from "./helpers/unique.js";
 import { trackForCleanup } from "./helpers/cleanup.js";
+import { flushActivityLogs } from "../src/services/activityLog.service.js";
+import db from "../src/database/knex.js";
 
 let superAdmin: Awaited<ReturnType<typeof loginAsSuperAdmin>>;
 let financeViewer: Awaited<ReturnType<typeof createSignedInAdmin>>; // settings: read
@@ -203,6 +205,114 @@ describe("GET /settings/:key", () => {
 
     expectStatus(res, 404);
     expect(res.body.error).toBe(`Setting not found: ${key}`);
+  });
+
+  // History is read from the activity log, which is written after the response goes out — flush first.
+  it("returns the setting's changes, newest first, naming who made each one", async () => {
+    const setting = await createSetting(await discountSetting());
+    const editor = await createSignedInAdmin(superAdmin.token, {
+      settings: { read: true, update: true },
+    });
+
+    expectStatus(
+      await api.patch(`/settings/${setting.key}`).set(auth(editor.token)).send({ value: 25 }),
+      200,
+    );
+    await flushActivityLogs();
+
+    const res = await api.get(`/settings/${setting.key}`).set(auth(financeViewer.token));
+
+    expectStatus(res, 200);
+    expect(res.body.data).toMatchObject({ key: setting.key, value: 25 });
+    const history = res.body.data.history;
+    expect(history).toHaveLength(2);
+
+    expect(history[0]).toMatchObject({
+      action: "setting.update",
+      description: "Updated a setting",
+      before: { key: setting.key, value: setting.value },
+      after: { key: setting.key, value: 25 },
+      actor: { id: editor.userId, fullName: editor.fullName, role: "admin" },
+    });
+    expect(history[0].changedFields.sort()).toEqual(["updatedBy", "value"]);
+
+    expect(history[1]).toMatchObject({
+      action: "setting.create",
+      before: null,
+      after: { key: setting.key, value: setting.value },
+      changedFields: null,
+      actor: { id: superAdmin.userId, role: "admin" },
+    });
+  });
+
+  // settings: read is enough to see the history, so it names the actor without handing out their contact
+  // details — those stay behind activityLogs: read.
+  it("leaves the actor's email and phone number out of the history", async () => {
+    const setting = await createSetting(await discountSetting());
+    await flushActivityLogs();
+
+    const res = await api.get(`/settings/${setting.key}`).set(auth(financeViewer.token));
+
+    expectStatus(res, 200);
+    expect(Object.keys(res.body.data.history[0].actor).sort()).toEqual(["fullName", "id", "role"]);
+    expect(res.body.data.history[0]).not.toHaveProperty("ipAddress");
+  });
+
+  it("caps the history at historyLimit, keeping the most recent changes", async () => {
+    const setting = await createSetting(await discountSetting());
+
+    for (const value of [11, 12]) {
+      expectStatus(
+        await api.patch(`/settings/${setting.key}`).set(auth(superAdmin.token)).send({ value }),
+        200,
+      );
+    }
+    await flushActivityLogs();
+
+    const all = await api.get(`/settings/${setting.key}`).set(auth(financeViewer.token));
+    expectStatus(all, 200);
+    expect(all.body.data.history).toHaveLength(3);
+
+    const capped = await api
+      .get(`/settings/${setting.key}?historyLimit=1`)
+      .set(auth(financeViewer.token));
+
+    expectStatus(capped, 200);
+    expect(capped.body.data.history).toHaveLength(1);
+    expect(capped.body.data.history[0]).toMatchObject({
+      action: "setting.update",
+      after: { value: 12 },
+    });
+  });
+
+  it("is empty for a setting nothing has been logged against yet", async () => {
+    const setting = await discountSetting();
+    // Inserted straight into the table, so no activity is logged for it.
+    await db("settings").insert({
+      key: setting.key,
+      type: setting.type,
+      value: JSON.stringify(setting.value),
+      description: setting.description,
+    });
+    trackForCleanup("settings", { key: setting.key });
+
+    const res = await api.get(`/settings/${setting.key}`).set(auth(financeViewer.token));
+
+    expectStatus(res, 200);
+    expect(res.body.data.history).toEqual([]);
+  });
+
+  it("rejects a historyLimit outside 1-100", async () => {
+    const setting = await createSetting(await discountSetting());
+
+    for (const historyLimit of [0, 101]) {
+      const res = await api
+        .get(`/settings/${setting.key}?historyLimit=${historyLimit}`)
+        .set(auth(financeViewer.token));
+
+      expectStatus(res, 400);
+      expect(res.body.error).toMatch(/^historyLimit:/);
+    }
   });
 });
 

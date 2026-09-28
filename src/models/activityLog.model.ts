@@ -74,6 +74,46 @@ function withActor({
   };
 }
 
+// A record's own change history is a narrower view of the same rows: enough to say what changed, when and
+// by whom, without the request detail (IP, device, path) or the actor's contact details — it's readable by
+// anyone who can read the record itself, which is a lower bar than activityLogs: read.
+const HISTORY_COLUMNS = [
+  "al.id",
+  "al.action",
+  "al.description",
+  "al.actorId",
+  "al.before",
+  "al.after",
+  "al.changedFields",
+  "al.createdAt",
+  "actor.fullName as actorFullName",
+  "actor.role as actorRole",
+];
+
+type HistoryRow = Pick<
+  ActivityLog,
+  "id" | "action" | "description" | "actorId" | "before" | "after" | "changedFields" | "createdAt"
+> & { actorFullName: string | null; actorRole: string | null };
+
+export interface ActivityHistoryEntry extends Omit<
+  HistoryRow,
+  "actorId" | "actorFullName" | "actorRole"
+> {
+  actor: { id: string; fullName: string | null; role: string | null } | null;
+}
+
+function toHistoryEntry({
+  actorId,
+  actorFullName,
+  actorRole,
+  ...entry
+}: HistoryRow): ActivityHistoryEntry {
+  return {
+    ...entry,
+    actor: actorId ? { id: actorId, fullName: actorFullName, role: actorRole } : null,
+  };
+}
+
 // jsonb columns are written JSON-encoded (see settingModel for why).
 function toJson(value: unknown) {
   return value === null || value === undefined ? null : JSON.stringify(value);
@@ -139,6 +179,25 @@ class ActivityLogModel extends BaseModel<ActivityLog> {
     ]);
 
     return { items: rows.map(withActor), stats };
+  }
+
+  // One record's change history, newest first: the actions logged against it that went through. Reads the
+  // audit trail rather than a history table per resource — logActivity already stores the before and after
+  // of every change and who made it, so a second table would only be a copy that can drift.
+  async historyFor(
+    targetType: string,
+    targetId: string,
+    limit: number,
+  ): Promise<ActivityHistoryEntry[]> {
+    const rows: HistoryRow[] = await this.filtered({ targetType, targetId, result: "success" })
+      .select(HISTORY_COLUMNS)
+      .orderBy([
+        { column: "al.createdAt", order: "desc" },
+        { column: "al.id", order: "desc" },
+      ])
+      .limit(limit);
+
+    return rows.map(toHistoryEntry);
   }
 
   async findWithActor(id: string) {

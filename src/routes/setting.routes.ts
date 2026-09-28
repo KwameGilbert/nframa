@@ -4,6 +4,7 @@ import { authenticate } from "../middlewares/authenticate.js";
 import { requirePermission } from "../middlewares/authorize.js";
 import {
   createSettingSchema,
+  getSettingQuerySchema,
   settingKeyParamsSchema,
   updateSettingSchema,
 } from "../schemas/setting.schema.js";
@@ -31,7 +32,7 @@ settingRouter.get(
   "/settings/:key",
   authenticate,
   requirePermission("settings", "read"),
-  validate({ params: settingKeyParamsSchema }),
+  validate({ params: settingKeyParamsSchema, query: getSettingQuerySchema }),
   getSetting,
 );
 
