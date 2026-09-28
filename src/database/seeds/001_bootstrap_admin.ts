@@ -61,6 +61,7 @@ export async function seed(knex: Knex): Promise<void> {
         status: "active",
       });
     }
+    // Skip sample users if admin already exists
     return;
   }
 
@@ -75,6 +76,100 @@ export async function seed(knex: Knex): Promise<void> {
   await knex("adminUsers").insert({
     userId: user.id,
     roleId: role.id,
+    status: "active",
+  });
+
+  // Sample riders
+  const [rider1] = await knex("users")
+    .insert({
+      fullName: "Ama Mensah",
+      phoneCountryCode: "+233",
+      phoneNumber: "541436414",
+      role: "rider",
+      isPhoneVerified: true,
+      status: "active",
+    })
+    .returning("*");
+
+  await knex("riderProfiles").insert({
+    userId: rider1.id,
+  });
+
+  const [rider2] = await knex("users")
+    .insert({
+      fullName: "Kwame Boateng",
+      phoneCountryCode: "+233",
+      phoneNumber: "501234567",
+      role: "rider",
+      isPhoneVerified: true,
+      status: "active",
+    })
+    .returning("*");
+
+  await knex("riderProfiles").insert({
+    userId: rider2.id,
+  });
+
+  // Sample drivers
+  const [driver1] = await knex("users")
+    .insert({
+      fullName: "Kofi Owusu",
+      phoneCountryCode: "+233",
+      phoneNumber: "541436415",
+      role: "driver",
+      isPhoneVerified: true,
+      status: "active",
+    })
+    .returning("*");
+
+  await knex("carOwnerProfiles")
+    .insert({
+      userId: driver1.id,
+      ghanaCardNumber: "GHA-123456789-0",
+      address: "12 Oxford St, Osu, Accra",
+      verificationStatus: "approved",
+    })
+    .returning("*");
+
+  await knex("vehicles").insert({
+    carOwnerUserId: driver1.id,
+    make: "Toyota",
+    model: "Corolla",
+    year: 2020,
+    color: "Silver",
+    plate: "GR 1234-21",
+    seats: 4,
+    status: "active",
+  });
+
+  const [driver2] = await knex("users")
+    .insert({
+      fullName: "Abena Amoah",
+      phoneCountryCode: "+233",
+      phoneNumber: "502234567",
+      role: "driver",
+      isPhoneVerified: true,
+      status: "active",
+    })
+    .returning("*");
+
+  await knex("carOwnerProfiles")
+    .insert({
+      userId: driver2.id,
+      ghanaCardNumber: "GHA-987654321-0",
+      address: "45 Independence Ave, Accra Central",
+      verificationStatus: "pending",
+    })
+    .returning("*");
+
+  await knex("vehicles").insert({
+    carOwnerUserId: driver2.id,
+    make: "Honda",
+    model: "Civic",
+    year: 2019,
+    color: "Black",
+    plate: "GR 5678-21",
+    seats: 5,
     status: "active",
   });
 }
