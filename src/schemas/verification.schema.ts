@@ -34,6 +34,9 @@ export const documentTypeSchema = z.object({
   hasExpiry: z
     .boolean()
     .meta({ description: "Whether this document type expires and needs renewal" }),
+  isRequired: z.boolean().meta({
+    description: "Whether a driver must submit this document type before they can be approved",
+  }),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -114,7 +117,7 @@ export const driverVerificationStatusSchema = z
   .enum(["unverified", "pending", "approved", "rejected", "expiring"])
   .meta({
     description:
-      "unverified: no documents submitted; pending: documents under review or awaiting review; approved: all required documents verified; rejected: one or more documents rejected; expiring: approved but expiration date approaching",
+      "unverified: no documents submitted; pending: documents awaiting or under review, or all verified and awaiting an admin's approval; approved: an admin approved the driver (only possible once a document of every required type is submitted, verified and in date — never set automatically); rejected: one or more documents rejected; expiring: approved but expiration date approaching",
     example: "approved",
   });
 

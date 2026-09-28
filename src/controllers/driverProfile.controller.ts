@@ -1,11 +1,14 @@
 import type { Request, Response } from "express";
 import { driverProfileModel } from "../models/driverProfile.model.js";
+import { logActivity } from "../services/activityLog.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 import type {
   CreateDriverProfileInput,
   UpdateDriverProfileInput,
 } from "../schemas/driverProfile.schema.js";
+
+const DRIVER_ACTIVITY = { module: "drivers", targetType: "driver" } as const;
 
 export async function listDrivers(_req: Request, res: Response) {
   const drivers = await driverProfileModel.findAllDriversWithRelations();
@@ -19,6 +22,14 @@ export async function createDriverProfile(req: Request, res: Response) {
   const profile = await driverProfileModel.createProfile(input);
 
   sendCreated(res, "Driver profile created successfully", profile);
+
+  logActivity(req, {
+    ...DRIVER_ACTIVITY,
+    action: "driver.create",
+    description: "Created a driver profile",
+    targetId: input.userId,
+    after: profile,
+  });
 }
 
 export async function getDriverProfile(req: Request, res: Response) {
@@ -64,6 +75,11 @@ export async function updateDriverProfile(req: Request, res: Response) {
   const { userId } = req.validated.params as { userId: string };
   const input = req.validated.body as UpdateDriverProfileInput;
 
+  const existing = await driverProfileModel.findByIdWithRelations(userId);
+  if (!existing) {
+    throw AppError.notFound(`Driver profile not found for user: ${userId}`);
+  }
+
   await driverProfileModel.updateProfile(userId, input);
 
   const result = await driverProfileModel.findByIdWithRelations(userId);
@@ -73,4 +89,13 @@ export async function updateDriverProfile(req: Request, res: Response) {
   }
 
   sendSuccess(res, "Driver profile updated successfully", result);
+
+  logActivity(req, {
+    ...DRIVER_ACTIVITY,
+    action: "driver.update",
+    description: "Updated a driver profile",
+    targetId: userId,
+    before: existing,
+    after: result,
+  });
 }

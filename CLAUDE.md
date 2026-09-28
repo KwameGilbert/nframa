@@ -95,6 +95,10 @@ Knex, not an ORM — query builder only, models hand-write queries. `knexfile.ts
 
 Write `jsonb` columns with `JSON.stringify(value)` (see `settingModel`): pg sends a JS string as raw text and a JS array as a Postgres array literal, neither of which is valid JSON. Reads come back already parsed.
 
+### Activity logs
+
+Every controller action that changes something (and every auth action) ends with `logActivity(req, { module, action, description, targetType, targetId, before?, after? })` from `src/services/activityLog.service.ts`, after its response is sent — a new create/update/delete handler without it is missing from the audit trail. `before` and `after` must be the record in the same shape (normally what the endpoint returns — load `before` with the same model method), or `changedFields` compares mismatched shapes. Only actions that went through are recorded: requests refused by `authenticate`/`requirePermission`/`validate` or a controller check never reach the call. The exception is failed sign-ins and password resets, which `auth.controller.ts` records as `error` entries (via `recordRefusal`) against the account they targeted. The actor defaults to `req.auth`; auth actions pass `actorId` once the account is proven. Writes are fire-and-forget, so call `flushActivityLogs()` before reading entries (tests do). Passwords, tokens, hashes and OTP codes are redacted from what's stored. Read via `GET /admin/activity-logs` (`activityLogs: read`); there is deliberately no way to edit or delete entries through the API. Test requests carry an `X-Request-Id` prefixed per test file, which is how cleanup finds and deletes that file's entries.
+
 ### Settings
 
 `/settings` is an admin-managed key/value store (`settings` table, guarded by the `settings` module's permissions). Each row has a dotted camelCase `key` (`fares.baseFare`), a `type` (`string`/`number`/`boolean`/`json`, where json means an object or array) and a jsonb `value` that every create and update is checked against the type. The key and type can't change after creation — delete and recreate instead. `updatedBy` records the admin who last wrote it.

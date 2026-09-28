@@ -11,10 +11,13 @@ import { settingRouter } from "./setting.routes.js";
 import { authRouter } from "./auth.routes.js";
 import { verificationRouter } from "./verification.routes.js";
 import { docsRouter } from "./docs.routes.js";
+import { activityLogRouter } from "./activityLog.routes.js";
 
 export const router = Router();
 
 router.use(healthRouter);
+// Before adminUserRouter: GET /admin/:userId would otherwise match "/admin/activity-logs" and 400 it.
+router.use(activityLogRouter);
 router.use(userRouter);
 // Before driverProfileRouter: GET/POST /driver/:userId would otherwise match "/driver/verification..."
 // first (same segment count, registered-order wins), 400ing every verification-document request.

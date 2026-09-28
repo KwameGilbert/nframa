@@ -1,6 +1,12 @@
+import { randomUUID } from "node:crypto";
 import db from "../../src/database/knex.js";
+import { flushActivityLogs } from "../../src/services/activityLog.service.js";
 
 type Criteria = Record<string, string>;
+
+// Every request this test file sends carries an X-Request-Id starting with this (see api.ts), which the
+// activity log records — so the file's log entries can be found and deleted without touching real ones.
+export const REQUEST_ID_PREFIX = `test-${randomUUID()}-`;
 
 const tracked: { table: string; criteria: Criteria }[] = [];
 
@@ -32,6 +38,9 @@ const DELETE_ORDER = [
 
 // Run once per test file, from tests/setup.ts's afterAll, before that file's connection pool closes.
 export async function cleanupTestData(): Promise<void> {
+  await flushActivityLogs();
+  await db("activityLogs").where("requestId", "like", `${REQUEST_ID_PREFIX}%`).del();
+
   for (const table of DELETE_ORDER) {
     for (const { criteria } of tracked.filter((t) => t.table === table)) {
       await db(table).where(criteria).del();

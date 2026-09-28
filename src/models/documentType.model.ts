@@ -14,6 +14,10 @@ export class DocumentTypeModel extends BaseModel<DocumentTypeRow> {
   async getAllTypes(): Promise<DocumentTypeRow[]> {
     return this.table.orderBy("id", "asc");
   }
+
+  async getRequiredTypes(): Promise<DocumentTypeRow[]> {
+    return this.table.where({ isRequired: true }).orderBy("id", "asc");
+  }
 }
 
 export const documentTypeModel = new DocumentTypeModel();

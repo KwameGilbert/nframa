@@ -3,6 +3,7 @@ import { userModel, type User } from "../models/user.model.js";
 import { roleModel } from "../models/role.model.js";
 import { authSessionModel } from "../models/authSession.model.js";
 import { assertPermission, assertSelfOrPermission } from "../middlewares/authorize.js";
+import { logActivity } from "../services/activityLog.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 import type { CreateUserInput, UpdateUserInput } from "../schemas/user.schema.js";
@@ -13,6 +14,8 @@ import type { CreateUserInput, UpdateUserInput } from "../schemas/user.schema.js
 function moduleFor(user: Pick<User, "role">) {
   return user.role === "admin" ? "admin" : "users";
 }
+
+const USER_ACTIVITY = { module: "users", targetType: "user" } as const;
 
 export async function findUserOrThrow(id: string) {
   const user = await userModel.findById(id);
@@ -71,6 +74,14 @@ export async function createUser(req: Request, res: Response) {
   const user = await userModel.createUser(input);
 
   sendCreated(res, "User created successfully", user);
+
+  logActivity(req, {
+    ...USER_ACTIVITY,
+    action: "user.create",
+    description: `Created a ${user.role} account`,
+    targetId: user.id,
+    after: user,
+  });
 }
 
 export async function getUser(req: Request, res: Response) {
@@ -107,6 +118,15 @@ export async function updateUser(req: Request, res: Response) {
   }
 
   sendSuccess(res, "User updated successfully", user);
+
+  logActivity(req, {
+    ...USER_ACTIVITY,
+    action: "user.update",
+    description: `Updated a ${user.role} account`,
+    targetId: id,
+    before: target,
+    after: user,
+  });
 }
 
 // Riders and drivers can delete their own account; deleting anyone else takes the delete permission
@@ -119,4 +139,12 @@ export async function deleteUser(req: Request, res: Response) {
   await softDeleteAccount(req, target);
 
   sendSuccess(res, "User deleted successfully");
+
+  logActivity(req, {
+    ...USER_ACTIVITY,
+    action: "user.delete",
+    description: `Deleted a ${target.role} account`,
+    targetId: id,
+    before: target,
+  });
 }

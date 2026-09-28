@@ -15,6 +15,7 @@ import { generateRefreshToken, hashRefreshToken } from "../utils/refreshToken.js
 import { signAccessToken } from "../utils/jwt.js";
 import { AppError } from "../utils/AppError.js";
 import { sendSuccess } from "../utils/response.js";
+import { logActivity, type Activity } from "../services/activityLog.service.js";
 import type {
   LoginInput,
   RequestOtpInput,
@@ -43,6 +44,34 @@ function toDbIdentifier(input: Identifier) {
 
 function toPurpose(role: string) {
   return `${role}Login`;
+}
+
+// Sign-in, session and password activity, filed against the account it concerns (when there is one) so
+// an account's history includes attempts made on it. Verification codes are blanked out of the stored body.
+function logAuthActivity(
+  req: Request,
+  activity: Omit<Activity, "module" | "targetType" | "redact">,
+) {
+  logActivity(req, {
+    module: "auth",
+    targetType: activity.targetId ? "user" : undefined,
+    redact: ["code"],
+    ...activity,
+  });
+}
+
+// For .catch() on a password or code check: records the refusal, then passes the error on. Only refusals —
+// an unexpected error isn't a failed attempt.
+function recordRefusal(
+  req: Request,
+  activity: Pick<Activity, "action" | "description" | "targetId">,
+) {
+  return (err: unknown): never => {
+    if (err instanceof AppError) {
+      logAuthActivity(req, { ...activity, error: err.message });
+    }
+    throw err;
+  };
 }
 
 // Deleted is a soft delete (deletedAt set), so a found row isn't enough — it must also be undeleted and active.
@@ -214,10 +243,8 @@ export async function getMe(req: Request, res: Response) {
   sendSuccess(res, "Account retrieved successfully", await buildAccount(account));
 }
 
-export async function login(req: Request, res: Response) {
-  const { email, password } = req.validated.body as LoginInput;
-  const user = await userModel.findWithCredentials({ email });
-
+// The account an email and password sign in to, once the password matches and the account is active.
+async function checkPassword(user: User | undefined, password: string) {
   if (!user?.passwordHash) {
     // Hash anyway so an unknown email takes as long to reject as a wrong password.
     await hashPassword(password);
@@ -234,16 +261,44 @@ export async function login(req: Request, res: Response) {
   }
   await assertAccountActive(account);
 
+  return account;
+}
+
+export async function login(req: Request, res: Response) {
+  const { email, password } = req.validated.body as LoginInput;
+  const user = await userModel.findWithCredentials({ email });
+
+  const account = await checkPassword(user, password).catch(
+    recordRefusal(req, {
+      action: "auth.login",
+      description: "Failed to sign in with email and password",
+      targetId: user?.id,
+    }),
+  );
+
   await completeLogin(account, req, res);
+
+  logAuthActivity(req, {
+    action: "auth.login",
+    description: "Signed in with email and password",
+    actorId: account.id,
+    targetId: account.id,
+  });
 }
 
 export async function requestLoginOtp(req: Request, res: Response) {
   const input = req.validated.body as RequestOtpInput;
-  const { identifier, channel, role } = await resolveOtpTarget(input);
+  const { user, identifier, channel, role } = await resolveOtpTarget(input);
 
   await sendOtp(identifier, channel, toPurpose(role), "verification code");
 
   sendSuccess(res, "Verification code sent");
+  // Nobody has proven who they are yet, so there's no actor — only the account the code is for.
+  logAuthActivity(req, {
+    action: "auth.otp.request",
+    description: "Requested a sign-in code",
+    targetId: user?.id,
+  });
 }
 
 export async function verifyLoginOtp(req: Request, res: Response) {
@@ -251,7 +306,13 @@ export async function verifyLoginOtp(req: Request, res: Response) {
   const { user, identifier, role } = await resolveOtpTarget(input);
   const isNewUser = !user; // true only when no account existed yet for this identifier
 
-  await consumeOtp(identifier, toPurpose(role), input.code);
+  await consumeOtp(identifier, toPurpose(role), input.code).catch(
+    recordRefusal(req, {
+      action: "auth.otp.verify",
+      description: "Failed to sign in with a verification code",
+      targetId: user?.id,
+    }),
+  );
 
   // Passing the OTP proves the person owns this phone, so it counts as verified from here on.
   let account = user;
@@ -270,6 +331,24 @@ export async function verifyLoginOtp(req: Request, res: Response) {
   }
 
   await completeLogin(account, req, res, isNewUser);
+
+  logAuthActivity(
+    req,
+    isNewUser
+      ? {
+          action: "auth.signup",
+          description: `Signed up as a ${account.role} with a verification code`,
+          actorId: account.id,
+          targetId: account.id,
+          after: account,
+        }
+      : {
+          action: "auth.otp.verify",
+          description: "Signed in with a verification code",
+          actorId: account.id,
+          targetId: account.id,
+        },
+  );
 }
 
 export async function refreshSession(req: Request, res: Response) {
@@ -292,6 +371,13 @@ export async function refreshSession(req: Request, res: Response) {
   const tokens = await issueTokens(user.id, session.userType as "user" | "admin", user.role, req);
 
   sendSuccess(res, "Tokens refreshed successfully", tokens);
+
+  logAuthActivity(req, {
+    action: "auth.refresh",
+    description: "Refreshed session tokens",
+    actorId: user.id,
+    targetId: user.id,
+  });
 }
 
 export async function logout(req: Request, res: Response) {
@@ -303,6 +389,15 @@ export async function logout(req: Request, res: Response) {
   }
 
   sendSuccess(res, "Logged out successfully");
+  // Signing out with a token that's already dead changes nothing, so there's nothing to record.
+  if (session) {
+    logAuthActivity(req, {
+      action: "auth.logout",
+      description: "Signed out",
+      actorId: session.userId,
+      targetId: session.userId,
+    });
+  }
 }
 
 export async function forgotPassword(req: Request, res: Response) {
@@ -319,12 +414,24 @@ export async function forgotPassword(req: Request, res: Response) {
   }
 
   sendSuccess(res, "If an account exists for this email, a reset code has been sent");
+  // Anyone can ask for a code for any email, so there's no actor — only the account it's for, if any.
+  logAuthActivity(req, {
+    action: "auth.password.forgot",
+    description: "Requested a password reset code",
+    targetId: user?.id,
+  });
 }
 
 export async function resetPassword(req: Request, res: Response) {
   const { email, code, newPassword } = req.validated.body as ResetPasswordInput;
 
-  await consumeOtp(email, PASSWORD_RESET_PURPOSE, code);
+  // No targetId on a refusal: looking the account up first would tell a wrong code apart from an unknown email.
+  await consumeOtp(email, PASSWORD_RESET_PURPOSE, code).catch(
+    recordRefusal(req, {
+      action: "auth.password.reset",
+      description: "Failed to reset a password with a reset code",
+    }),
+  );
 
   const user = await userModel.findOne({ email });
   if (!user) {
@@ -335,6 +442,13 @@ export async function resetPassword(req: Request, res: Response) {
   await authSessionModel.revokeAllForUser(user.id);
 
   sendSuccess(res, "Password reset successfully. Sign in with your new password.");
+
+  logAuthActivity(req, {
+    action: "auth.password.reset",
+    description: "Reset password with a reset code",
+    actorId: user.id,
+    targetId: user.id,
+  });
 }
 
 export async function changePassword(req: Request, res: Response) {
@@ -361,4 +475,10 @@ export async function changePassword(req: Request, res: Response) {
   const tokens = await issueTokens(credentials.id, req.auth.userType, credentials.role, req);
 
   sendSuccess(res, "Password changed successfully", tokens);
+
+  logAuthActivity(req, {
+    action: "auth.password.change",
+    description: "Changed password",
+    targetId: credentials.id,
+  });
 }

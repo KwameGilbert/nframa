@@ -10,6 +10,7 @@ import {
   signUpByPhone,
 } from "./helpers/actors.js";
 import * as data from "./helpers/data.js";
+import { MODULES } from "../src/config/permissions.js";
 import { newEmail, newPhone } from "./helpers/unique.js";
 import { trackForCleanup } from "./helpers/cleanup.js";
 import db from "../src/database/knex.js";
@@ -97,13 +98,9 @@ describe("POST /auth/login", () => {
 
     expect(account.adminRole).toMatchObject({ slug: "superadmin", isSystem: true });
     const everything = { create: true, read: true, update: true, delete: true };
-    expect(account.permissions).toEqual({
-      settings: everything,
-      roles: everything,
-      users: everything,
-      verification: everything,
-      admin: everything,
-    });
+    expect(account.permissions).toEqual(
+      Object.fromEntries(MODULES.map((module) => [module, everything])),
+    );
   });
 
   it("refuses an admin who hasn't been activated yet", async () => {

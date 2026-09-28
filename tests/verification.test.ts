@@ -2,10 +2,17 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { api, auth, expectStatus } from "./helpers/api.js";
 import { createSignedInAdmin, loginAsSuperAdmin, signUpByPhone } from "./helpers/actors.js";
 import { trackForCleanup } from "./helpers/cleanup.js";
+import db from "../src/database/knex.js";
 
 let superAdmin: Awaited<ReturnType<typeof loginAsSuperAdmin>>;
 let reviewer: Awaited<ReturnType<typeof createSignedInAdmin>>; // verification: read + update
-let documentTypes: { id: number; code: string; name: string; hasExpiry: boolean }[];
+let documentTypes: {
+  id: number;
+  code: string;
+  name: string;
+  hasExpiry: boolean;
+  isRequired: boolean;
+}[];
 
 function typeIdFor(code: string): number {
   const type = documentTypes.find((t) => t.code === code);
@@ -29,6 +36,53 @@ async function driverWithDocument(code = "NATIONAL_ID") {
   expectStatus(res, 201);
   trackForCleanup("verificationDocuments", { id: res.body.data.id });
   return { driver, document: res.body.data };
+}
+
+// A driver with a profile and one uploaded document of each given type, verified by the reviewer unless
+// verify is false.
+async function driverWithDocuments(codes: string[], { verify = true } = {}) {
+  const driver = await signUpByPhone("driver");
+  expectStatus(
+    await api.post("/driver").set(auth(driver.token)).send({ userId: driver.userId }),
+    201,
+  );
+  trackForCleanup("carOwnerProfiles", { userId: driver.userId });
+
+  const documents = await Promise.all(
+    codes.map(async (code) => {
+      const res = await api
+        .post(`/driver/verification/${typeIdFor(code)}`)
+        .set(auth(driver.token))
+        .attach("file", fakeFile(`${code}.pdf`), `${code}.pdf`);
+      expectStatus(res, 201);
+      trackForCleanup("verificationDocuments", { id: res.body.data.id });
+      return res.body.data as { id: string; documentTypeId: number };
+    }),
+  );
+  if (verify) {
+    for (const document of documents) {
+      expectStatus(
+        await api
+          .patch(`/admin/verification/document/${document.id}`)
+          .set(auth(reviewer.token))
+          .send({ status: "VERIFIED" }),
+        200,
+      );
+    }
+  }
+
+  return { driver, documents };
+}
+
+function requiredTypes() {
+  return documentTypes.filter((type) => type.isRequired);
+}
+
+function approve(userId: string) {
+  return api
+    .patch(`/admin/driver/${userId}/verification`)
+    .set(auth(reviewer.token))
+    .send({ verificationStatus: "approved" });
 }
 
 beforeAll(async () => {
@@ -201,12 +255,12 @@ describe("GET /driver/verification", () => {
   });
 });
 
-describe("PATCH /admin/verification/:documentId", () => {
+describe("PATCH /admin/verification/document/:documentId", () => {
   it("verifies a document and records who verified it, with a history entry", async () => {
     const { document } = await driverWithDocument("DRIVERS_LICENSE");
 
     const res = await api
-      .patch(`/admin/verification/${document.id}`)
+      .patch(`/admin/verification/document/${document.id}`)
       .set(auth(reviewer.token))
       .send({ status: "VERIFIED", notes: "Matches the selfie on file" });
 
@@ -241,7 +295,7 @@ describe("PATCH /admin/verification/:documentId", () => {
     trackForCleanup("carOwnerProfiles", { userId: driver.userId });
 
     const res = await api
-      .patch(`/admin/verification/${document.id}`)
+      .patch(`/admin/verification/document/${document.id}`)
       .set(auth(reviewer.token))
       .send({ status: "REJECTED", notes: "Photo is too blurry to read" });
 
@@ -261,7 +315,7 @@ describe("PATCH /admin/verification/:documentId", () => {
     ]);
 
     const res = await api
-      .patch(`/admin/verification/${document.id}`)
+      .patch(`/admin/verification/document/${document.id}`)
       .set(auth(viewer.token))
       .send({ status: "VERIFIED" });
 
@@ -273,7 +327,7 @@ describe("PATCH /admin/verification/:documentId", () => {
     const id = "3f9a1c2e-6b4d-4a8f-9c1e-2d5b7a9c3e1f";
 
     const res = await api
-      .patch(`/admin/verification/${id}`)
+      .patch(`/admin/verification/document/${id}`)
       .set(auth(reviewer.token))
       .send({ status: "VERIFIED" });
 
@@ -302,7 +356,7 @@ describe("GET /admin/driver/verification/pending", () => {
     const { document } = await driverWithDocument("DRIVERS_LICENSE");
     expectStatus(
       await api
-        .patch(`/admin/verification/${document.id}`)
+        .patch(`/admin/verification/document/${document.id}`)
         .set(auth(reviewer.token))
         .send({ status: "VERIFIED" }),
       200,
@@ -320,6 +374,85 @@ describe("GET /admin/driver/verification/pending", () => {
 
     expectStatus(res, 403);
     expect(res.body.error).toBe("Missing permission: read on verification");
+  });
+});
+
+describe("PATCH /admin/driver/:userId/verification", () => {
+  it("approves a driver only when an admin does, once every required document is verified", async () => {
+    const { driver } = await driverWithDocuments(requiredTypes().map((type) => type.code));
+
+    // Verifying every document leaves the driver waiting for an admin, not approved.
+    const waiting = await api.get(`/driver/${driver.userId}`).set(auth(superAdmin.token));
+    expect(waiting.body.data.driver.verificationStatus).toBe("pending");
+
+    const res = await approve(driver.userId);
+
+    expectStatus(res, 200);
+    expect(res.body.message).toBe("Driver verification status updated successfully");
+    expect(res.body.data.driver.verificationStatus).toBe("approved");
+  });
+
+  it("refuses approval while a required document type is missing, naming it", async () => {
+    const [missing, ...submitted] = requiredTypes();
+    const { driver } = await driverWithDocuments(submitted.map((type) => type.code));
+
+    const res = await approve(driver.userId);
+
+    expectStatus(res, 400);
+    expect(res.body.error).toBe(
+      `Cannot approve driver: missing required document(s): ${missing.name}`,
+    );
+  });
+
+  it("refuses approval while a submitted document isn't verified", async () => {
+    const required = requiredTypes();
+    const { driver } = await driverWithDocuments(
+      required.map((type) => type.code),
+      { verify: false },
+    );
+
+    const res = await approve(driver.userId);
+
+    expectStatus(res, 400);
+    expect(res.body.error).toBe(
+      `Cannot approve driver: ${required.length} document(s) not yet verified`,
+    );
+  });
+
+  it("refuses approval when a document has expired", async () => {
+    const { driver, documents } = await driverWithDocuments(
+      requiredTypes().map((type) => type.code),
+    );
+    // Backdated directly: expiry is a year out from upload, and this document is the test's own.
+    await db("verificationDocuments")
+      .where({ id: documents[0].id })
+      .update({ expiresAt: new Date(Date.now() - 24 * 60 * 60 * 1000) });
+
+    const res = await approve(driver.userId);
+
+    expectStatus(res, 400);
+    expect(res.body.error).toBe("Cannot approve driver: 1 document(s) have expired");
+  });
+
+  it("needs verification: update", async () => {
+    const viewer = await createSignedInAdmin(superAdmin.token, { verification: { read: true } });
+
+    const res = await api
+      .patch(`/admin/driver/5d1e8a3c-7b2f-4c9d-8e6a-1f3b5c7d9e2a/verification`)
+      .set(auth(viewer.token))
+      .send({ verificationStatus: "approved" });
+
+    expectStatus(res, 403);
+    expect(res.body.error).toBe("Missing permission: update on verification");
+  });
+
+  it("returns 404 for a user with no driver profile", async () => {
+    const driver = await signUpByPhone("driver");
+
+    const res = await approve(driver.userId);
+
+    expectStatus(res, 404);
+    expect(res.body.error).toBe(`Driver profile not found for user: ${driver.userId}`);
   });
 });
 

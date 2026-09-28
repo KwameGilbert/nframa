@@ -5,12 +5,16 @@ import { documentTypeModel } from "../models/documentType.model.js";
 import { driverProfileModel } from "../models/driverProfile.model.js";
 import { uploadFile } from "../services/storage.service.js";
 import { assertSelfOrPermission } from "../middlewares/authorize.js";
+import { logActivity } from "../services/activityLog.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendSuccess, sendCreated } from "../utils/response.js";
 import type {
   UpdateDocumentStatusInput,
   UpdateDriverVerificationStatusInput,
 } from "../schemas/verification.schema.js";
+
+const DOCUMENT_ACTIVITY = { module: "verification", targetType: "verificationDocument" } as const;
+const DRIVER_ACTIVITY = { module: "verification", targetType: "driver" } as const;
 
 // Reference data (id, code, name, description, hasExpiry) for building an upload UI — no auth-specific
 // filtering, so every signed-in user sees the same list.
@@ -65,6 +69,14 @@ export async function uploadVerificationDocument(req: Request, res: Response) {
   );
 
   sendCreated(res, "Document uploaded successfully", document);
+
+  logActivity(req, {
+    ...DOCUMENT_ACTIVITY,
+    action: "verification.document.upload",
+    description: `Uploaded a ${docType.name}`,
+    targetId: document.id,
+    after: document,
+  });
 }
 
 export async function getDriverDocuments(req: Request, res: Response) {
@@ -113,9 +125,18 @@ export async function updateDocumentStatus(req: Request, res: Response) {
   );
 
   // Recalculate driver verification status
-  await recalculateDriverVerificationStatus(document.userId);
+  await recalculateDriverVerificationStatus(req, document.userId);
 
   sendSuccess(res, "Document status updated successfully", updated);
+
+  logActivity(req, {
+    ...DOCUMENT_ACTIVITY,
+    action: "verification.document.review",
+    description: `Marked a verification document ${input.status.toLowerCase().replace("_", " ")}`,
+    targetId: documentId,
+    before: document,
+    after: updated,
+  });
 }
 
 export async function getDocumentHistory(req: Request, res: Response) {
@@ -141,33 +162,13 @@ export async function updateDriverVerificationStatus(req: Request, res: Response
   const { userId } = req.validated.params as { userId: string };
   const input = req.validated.body as UpdateDriverVerificationStatusInput;
 
-  const driverProfile = await driverProfileModel.findById(userId);
-  if (!driverProfile) {
+  const existing = await driverProfileModel.findByIdWithRelations(userId);
+  if (!existing) {
     throw AppError.notFound(`Driver profile not found for user: ${userId}`);
   }
 
-  // If approving driver, validate all documents are verified and not expired
   if (input.verificationStatus === "approved") {
-    const documents = await verificationDocumentModel.getDocumentsByUserId(userId);
-
-    if (documents.length === 0) {
-      throw AppError.badRequest("Cannot approve driver: no documents submitted");
-    }
-
-    const unverifiedDocs = documents.filter((doc) => doc.status !== "VERIFIED");
-    if (unverifiedDocs.length > 0) {
-      throw AppError.badRequest(
-        `Cannot approve driver: ${unverifiedDocs.length} document(s) not yet verified`,
-      );
-    }
-
-    const now = new Date();
-    const expiredDocs = documents.filter((doc) => doc.expiresAt && new Date(doc.expiresAt) < now);
-    if (expiredDocs.length > 0) {
-      throw AppError.badRequest(
-        `Cannot approve driver: ${expiredDocs.length} document(s) have expired`,
-      );
-    }
+    await assertReadyForApproval(userId);
   }
 
   // Update driver's verification status
@@ -181,11 +182,62 @@ export async function updateDriverVerificationStatus(req: Request, res: Response
   }
 
   sendSuccess(res, "Driver verification status updated successfully", result);
+
+  logActivity(req, {
+    ...DRIVER_ACTIVITY,
+    action: "verification.driver.update",
+    description: `Marked a driver ${input.verificationStatus}`,
+    targetId: userId,
+    before: existing,
+    after: result,
+  });
+}
+
+// Approval is only possible once the driver has submitted a document of every required type, and every
+// document they've submitted is verified and in date.
+async function assertReadyForApproval(userId: string) {
+  const [documents, requiredTypes] = await Promise.all([
+    verificationDocumentModel.getDocumentsByUserId(userId),
+    documentTypeModel.getRequiredTypes(),
+  ]);
+
+  const submitted = new Set(documents.map((doc) => doc.documentTypeId));
+  const missing = requiredTypes.filter((type) => !submitted.has(type.id));
+  if (missing.length > 0) {
+    throw AppError.badRequest(
+      `Cannot approve driver: missing required document(s): ${missing.map((type) => type.name).join(", ")}`,
+    );
+  }
+
+  if (documents.length === 0) {
+    throw AppError.badRequest("Cannot approve driver: no documents submitted");
+  }
+
+  const unverifiedDocs = documents.filter((doc) => doc.status !== "VERIFIED");
+  if (unverifiedDocs.length > 0) {
+    throw AppError.badRequest(
+      `Cannot approve driver: ${unverifiedDocs.length} document(s) not yet verified`,
+    );
+  }
+
+  const now = new Date();
+  const expiredDocs = documents.filter((doc) => doc.expiresAt && new Date(doc.expiresAt) < now);
+  if (expiredDocs.length > 0) {
+    throw AppError.badRequest(
+      `Cannot approve driver: ${expiredDocs.length} document(s) have expired`,
+    );
+  }
 }
 
 // Helper: Recalculate driver verification status based on document statuses
-async function recalculateDriverVerificationStatus(userId: string): Promise<void> {
-  const documents = await verificationDocumentModel.getDocumentsByUserId(userId);
+async function recalculateDriverVerificationStatus(req: Request, userId: string): Promise<void> {
+  const [documents, driverProfile] = await Promise.all([
+    verificationDocumentModel.getDocumentsByUserId(userId),
+    driverProfileModel.findById(userId),
+  ]);
+  if (!driverProfile) {
+    return;
+  }
 
   // Count statuses
   const statuses = documents.reduce(
@@ -208,11 +260,21 @@ async function recalculateDriverVerificationStatus(userId: string): Promise<void
   } else if (statuses["UNDER_REVIEW"] && statuses["UNDER_REVIEW"] > 0) {
     newStatus = "pending";
   } else if (statuses.VERIFIED === documents.length && documents.length > 0) {
-    newStatus = "approved";
+    // Approval is an admin's decision (PATCH /admin/driver/:userId/verification), never automatic: with every
+    // document verified the driver waits in pending for it, and a driver already approved stays approved.
+    newStatus = driverProfile.verificationStatus === "approved" ? "approved" : "pending";
   }
 
-  const driverProfile = await driverProfileModel.findById(userId);
-  if (driverProfile && driverProfile.verificationStatus !== newStatus) {
+  if (driverProfile.verificationStatus !== newStatus) {
     await driverProfileModel.updateVerificationStatus(userId, newStatus);
+    // Its own entry: the admin reviewed one document, but this changed the driver as a whole.
+    logActivity(req, {
+      ...DRIVER_ACTIVITY,
+      action: "verification.driver.recalculate",
+      description: `Driver's verification status changed to ${newStatus} after a document review`,
+      targetId: userId,
+      before: { verificationStatus: driverProfile.verificationStatus },
+      after: { verificationStatus: newStatus },
+    });
   }
 }

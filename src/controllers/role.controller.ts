@@ -1,11 +1,13 @@
 import type { Request, Response } from "express";
-import { roleModel, type Role } from "../models/role.model.js";
+import { roleModel, type Role, type RoleWithPermissions } from "../models/role.model.js";
+import { logActivity } from "../services/activityLog.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 import type { CreateRoleInput, UpdateRoleInput } from "../schemas/role.schema.js";
 
-export async function findRoleOrThrow(id: string): Promise<Role> {
-  const role = await roleModel.findById(id);
+// With its permissions, the shape every role endpoint returns — so it doubles as an activity's "before".
+export async function findRoleOrThrow(id: string): Promise<RoleWithPermissions> {
+  const role = await roleModel.findWithPermissions(id);
 
   if (!role) {
     throw AppError.notFound(`Role not found: ${id}`);
@@ -21,6 +23,8 @@ export function assertNotSystemRole(role: Role) {
   }
 }
 
+const ROLE_ACTIVITY = { module: "roles", targetType: "role" } as const;
+
 export async function listRoles(_req: Request, res: Response) {
   sendSuccess(res, "Roles retrieved successfully", await roleModel.listWithPermissions());
 }
@@ -28,13 +32,7 @@ export async function listRoles(_req: Request, res: Response) {
 export async function getRole(req: Request, res: Response) {
   const { id } = req.validated.params as { id: string };
 
-  const role = await roleModel.findWithPermissions(id);
-
-  if (!role) {
-    throw AppError.notFound(`Role not found: ${id}`);
-  }
-
-  sendSuccess(res, "Role retrieved successfully", role);
+  sendSuccess(res, "Role retrieved successfully", await findRoleOrThrow(id));
 }
 
 export async function createRole(req: Request, res: Response) {
@@ -43,17 +41,35 @@ export async function createRole(req: Request, res: Response) {
   const role = await roleModel.createWithPermissions(input);
 
   sendCreated(res, "Role created successfully", role);
+
+  logActivity(req, {
+    ...ROLE_ACTIVITY,
+    action: "role.create",
+    description: "Created a role",
+    targetId: role?.id,
+    after: role,
+  });
 }
 
 export async function updateRole(req: Request, res: Response) {
   const { id } = req.validated.params as { id: string };
   const input = req.validated.body as UpdateRoleInput;
 
-  assertNotSystemRole(await findRoleOrThrow(id));
+  const existing = await findRoleOrThrow(id);
+  assertNotSystemRole(existing);
 
   const role = await roleModel.updateWithPermissions(id, input);
 
   sendSuccess(res, "Role updated successfully", role);
+
+  logActivity(req, {
+    ...ROLE_ACTIVITY,
+    action: "role.update",
+    description: "Updated a role",
+    targetId: id,
+    before: existing,
+    after: role,
+  });
 }
 
 export async function deleteRole(req: Request, res: Response) {
@@ -74,4 +90,12 @@ export async function deleteRole(req: Request, res: Response) {
   await roleModel.deleteById(id);
 
   sendSuccess(res, "Role deleted successfully");
+
+  logActivity(req, {
+    ...ROLE_ACTIVITY,
+    action: "role.delete",
+    description: "Deleted a role",
+    targetId: id,
+    before: role,
+  });
 }

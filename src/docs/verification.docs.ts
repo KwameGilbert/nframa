@@ -19,7 +19,7 @@ registry.registerPath({
   tags: ["Driver Verification"],
   summary: "List document types",
   description:
-    "Reference data for building the upload UI: every document type a driver can be asked to submit, with whether it expires.",
+    "Reference data for building the upload UI: every document type a driver can be asked to submit, with whether it expires and whether it's required before the driver can be approved.",
   security: [{ bearerAuth: [] }],
   responses: {
     200: successResponse("Document types retrieved successfully", z.array(documentTypeSchema)),
@@ -82,7 +82,7 @@ registry.registerPath({
   tags: ["Document Verification"],
   summary: "Update document verification status",
   description:
-    "Admin approves, rejects, or leaves notes on a verification document. Needs verification: update.",
+    "Admin approves, rejects, or leaves notes on a verification document. The driver's overall status follows automatically — rejected if any document is rejected, expiring if any has expired, otherwise pending — but never becomes approved: once every document is verified the driver stays pending until an admin approves them through PATCH /admin/driver/{userId}/verification (an already-approved driver stays approved). Needs verification: update.",
   security: [{ bearerAuth: [] }],
   request: {
     params: documentIdParamsSchema,
@@ -148,7 +148,7 @@ registry.registerPath({
   tags: ["Driver Verification Admin"],
   summary: "Update driver verification status",
   description:
-    "Admin sets a driver's overall verification status (unverified, pending, approved, rejected, or expiring) independently from individual document reviews. To approve a driver, ALL submitted documents must be verified and not expired. Needs verification: update. Returns the full driver profile with relations.",
+    "Admin sets a driver's overall verification status (unverified, pending, approved, rejected, or expiring) independently from individual document reviews. This is the only way a driver becomes approved, and only once they've submitted a document of every required type (see GET /document-types, isRequired) and every document they've submitted is verified and not expired. Needs verification: update. Returns the full driver profile with relations.",
   security: [{ bearerAuth: [] }],
   request: {
     params: driverProfileParamsSchema,
@@ -162,7 +162,7 @@ registry.registerPath({
       driverWithRelationsResponseSchema,
     ),
     400: errorResponse(
-      "Validation error, or cannot approve: no documents submitted, unverified documents exist, or documents have expired",
+      "Validation error, or cannot approve: a required document type is missing (named in the error), a document isn't verified yet, or a document has expired",
     ),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Missing permission: update on verification"),

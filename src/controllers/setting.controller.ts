@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { settingModel, type Setting } from "../models/setting.model.js";
+import { logActivity } from "../services/activityLog.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 import {
@@ -29,6 +30,8 @@ function callerId(req: Request) {
   return req.auth.id;
 }
 
+const SETTING_ACTIVITY = { module: "settings", targetType: "setting" } as const;
+
 export async function listSettings(_req: Request, res: Response) {
   sendSuccess(res, "Settings retrieved successfully", await settingModel.list());
 }
@@ -49,6 +52,14 @@ export async function createSetting(req: Request, res: Response) {
   const setting = await settingModel.createSetting(input, callerId(req));
 
   sendCreated(res, "Setting created successfully", setting);
+
+  logActivity(req, {
+    ...SETTING_ACTIVITY,
+    action: "setting.create",
+    description: "Created a setting",
+    targetId: input.key,
+    after: setting,
+  });
 }
 
 export async function updateSetting(req: Request, res: Response) {
@@ -63,13 +74,30 @@ export async function updateSetting(req: Request, res: Response) {
   const setting = await settingModel.updateSetting(key, input, callerId(req));
 
   sendSuccess(res, "Setting updated successfully", setting);
+
+  logActivity(req, {
+    ...SETTING_ACTIVITY,
+    action: "setting.update",
+    description: "Updated a setting",
+    targetId: key,
+    before: existing,
+    after: setting,
+  });
 }
 
 export async function deleteSetting(req: Request, res: Response) {
   const { key } = req.validated.params as SettingKeyParams;
 
-  await findSettingOrThrow(key);
+  const existing = await findSettingOrThrow(key);
   await settingModel.deleteById(key);
 
   sendSuccess(res, "Setting deleted successfully");
+
+  logActivity(req, {
+    ...SETTING_ACTIVITY,
+    action: "setting.delete",
+    description: "Deleted a setting",
+    targetId: key,
+    before: existing,
+  });
 }

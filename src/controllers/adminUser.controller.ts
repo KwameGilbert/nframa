@@ -1,11 +1,24 @@
 import type { Request, Response } from "express";
 import { adminUserModel } from "../models/adminUser.model.js";
 import { userModel } from "../models/user.model.js";
+import { logActivity } from "../services/activityLog.service.js";
 import { hashPassword } from "../utils/password.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 import { findUserOrThrow, softDeleteAccount } from "./user.controller.js";
 import type { CreateAdminUserInput, UpdateAdminUserInput } from "../schemas/adminUser.schema.js";
+
+const ADMIN_ACTIVITY = { module: "admin", targetType: "adminUser" } as const;
+
+async function findAdminOrThrow(userId: string) {
+  const result = await adminUserModel.findByIdWithRelations(userId);
+
+  if (!result) {
+    throw AppError.notFound(`Admin user not found for user: ${userId}`);
+  }
+
+  return result;
+}
 
 export async function listAdminUsers(_req: Request, res: Response) {
   const adminUsers = await adminUserModel.findAllWithRelations();
@@ -36,18 +49,20 @@ export async function createAdminUser(req: Request, res: Response) {
   }
 
   sendCreated(res, "Admin user created successfully", result);
+
+  logActivity(req, {
+    ...ADMIN_ACTIVITY,
+    action: "admin.create",
+    description: "Created an admin account",
+    targetId: input.userId,
+    after: result,
+  });
 }
 
 export async function getAdminUser(req: Request, res: Response) {
   const { userId } = req.validated.params as { userId: string };
 
-  const result = await adminUserModel.findByIdWithRelations(userId);
-
-  if (!result) {
-    throw AppError.notFound(`Admin user not found for user: ${userId}`);
-  }
-
-  sendSuccess(res, "Admin user retrieved successfully", result);
+  sendSuccess(res, "Admin user retrieved successfully", await findAdminOrThrow(userId));
 }
 
 export async function updateAdminUser(req: Request, res: Response) {
@@ -59,6 +74,7 @@ export async function updateAdminUser(req: Request, res: Response) {
     throw AppError.forbidden("You can't change your own role or status");
   }
 
+  const existing = await findAdminOrThrow(userId);
   const result = await adminUserModel.updateAdminUser(userId, input);
 
   if (!result) {
@@ -66,6 +82,15 @@ export async function updateAdminUser(req: Request, res: Response) {
   }
 
   sendSuccess(res, "Admin user updated successfully", result);
+
+  logActivity(req, {
+    ...ADMIN_ACTIVITY,
+    action: "admin.update",
+    description: "Updated an admin",
+    targetId: userId,
+    before: existing,
+    after: result,
+  });
 }
 
 // Soft-deletes the admin's user account (the admin record is kept for history). Same guards as
@@ -73,10 +98,7 @@ export async function updateAdminUser(req: Request, res: Response) {
 export async function deleteAdminUser(req: Request, res: Response) {
   const { userId } = req.validated.params as { userId: string };
 
-  const adminUser = await adminUserModel.findById(userId);
-  if (!adminUser) {
-    throw AppError.notFound(`Admin user not found for user: ${userId}`);
-  }
+  const existing = await findAdminOrThrow(userId);
 
   await softDeleteAccount(req, await findUserOrThrow(userId));
 
@@ -84,4 +106,13 @@ export async function deleteAdminUser(req: Request, res: Response) {
   // admin endpoint's response shape.
   const result = await adminUserModel.findByIdWithRelations(userId);
   sendSuccess(res, "Admin user deleted successfully", result);
+
+  logActivity(req, {
+    ...ADMIN_ACTIVITY,
+    action: "admin.delete",
+    description: "Deleted an admin",
+    targetId: userId,
+    before: existing,
+    after: result,
+  });
 }

@@ -1,6 +1,13 @@
 // The admin areas a role can be granted access to. Adding one here makes it grantable everywhere
 // (validation, docs, enforcement) — also add a migration granting it to super-admin, or re-run the seed.
-export const MODULES = ["settings", "roles", "users", "verification", "admin"] as const;
+export const MODULES = [
+  "settings",
+  "roles",
+  "users",
+  "verification",
+  "admin",
+  "activityLogs",
+] as const;
 
 export type Module = (typeof MODULES)[number];
 
