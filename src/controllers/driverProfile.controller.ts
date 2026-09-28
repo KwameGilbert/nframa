@@ -42,6 +42,15 @@ export async function getDriverProfile(req: Request, res: Response) {
   }
 
   sendSuccess(res, "Driver profile retrieved successfully", result);
+
+  if (req.auth?.id !== userId) {
+    logActivity(req, {
+      ...DRIVER_ACTIVITY,
+      action: "driver.view",
+      description: "Viewed a driver profile",
+      targetId: userId,
+    });
+  }
 }
 
 export async function getDriverByCode(req: Request, res: Response) {
@@ -54,6 +63,13 @@ export async function getDriverByCode(req: Request, res: Response) {
   }
 
   sendSuccess(res, "Driver profile retrieved successfully", result);
+
+  logActivity(req, {
+    ...DRIVER_ACTIVITY,
+    action: "driver.view",
+    description: "Looked up a driver by code",
+    targetId: result.userId,
+  });
 }
 
 export async function getDriverByPhone(req: Request, res: Response) {
@@ -69,6 +85,13 @@ export async function getDriverByPhone(req: Request, res: Response) {
   }
 
   sendSuccess(res, "Driver profile retrieved successfully", result);
+
+  logActivity(req, {
+    ...DRIVER_ACTIVITY,
+    action: "driver.view",
+    description: "Looked up a driver by phone",
+    targetId: result.userId,
+  });
 }
 
 export async function updateDriverProfile(req: Request, res: Response) {

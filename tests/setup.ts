@@ -10,7 +10,7 @@ vi.mock("../src/services/sms.service.js", () => ({ sendSms: vi.fn(async () => un
 vi.mock("../src/services/email.service.js", () => ({ sendEmail: vi.fn(async () => undefined) }));
 
 // No test ever calls Cloudinary: uploadFile returns a plausible-looking fake URL
-// (still shaped by the real inputs) instead.
+// (still shaped by the real inputs) instead. deleteFile is a no-op.
 vi.mock("../src/services/storage.service.js", () => ({
   uploadFile: vi.fn(async (_buffer: Buffer, folder: string, originalFilename: string) => {
     const storageKey = `${folder}/${randomUUID()}-${originalFilename}`;
@@ -19,6 +19,7 @@ vi.mock("../src/services/storage.service.js", () => ({
       storageKey,
     };
   }),
+  deleteFile: vi.fn(async () => undefined),
 }));
 
 afterAll(async () => {

@@ -9,6 +9,7 @@ import {
   getDriverDocuments,
   updateDocumentStatus,
   getDocumentHistory,
+  deleteVerificationDocument,
   listPendingDocuments,
   updateDriverVerificationStatus,
 } from "../controllers/verification.controller.js";
@@ -63,6 +64,15 @@ verificationRouter.get(
   authenticate,
   validate({ params: documentIdParamsSchema }),
   getDocumentHistory,
+);
+
+// The document's own driver can delete it, or an admin with verification: delete. Like history, ownership
+// is checked in the controller.
+verificationRouter.delete(
+  "/verification/:documentId",
+  authenticate,
+  validate({ params: documentIdParamsSchema }),
+  deleteVerificationDocument,
 );
 
 // Admin updates driver's overall verification status (distinct from individual document updates)

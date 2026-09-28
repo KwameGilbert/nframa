@@ -60,6 +60,10 @@ class UserModel extends BaseModel<User> {
     return this.updateById(id, { deletedAt: now, updatedAt: now });
   }
 
+  async touchLastLogin(id: string): Promise<void> {
+    await this.updateById(id, { lastActiveAt: new Date() });
+  }
+
   // Riders and drivers only — admin accounts are a separate concern with their own permission module (see
   // MODULES), listed instead via GET /admin. Mirrors moduleFor() in user.controller.ts.
   async findAllRidersAndDrivers(): Promise<User[]> {

@@ -32,4 +32,14 @@ export async function getRiderProfile(req: Request, res: Response) {
   }
 
   sendSuccess(res, "Rider profile retrieved successfully", profile);
+
+  if (req.auth?.id !== userId) {
+    logActivity(req, {
+      module: "riders",
+      targetType: "rider",
+      action: "rider.view",
+      description: "Viewed a rider profile",
+      targetId: userId,
+    });
+  }
 }

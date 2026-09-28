@@ -33,7 +33,7 @@ registry.registerPath({
   tags: ["Driver Verification"],
   summary: "Upload a verification document",
   description:
-    "Driver submits a verification document (ID, license, insurance, etc) as multipart/form-data. Accepts JPEG, PNG, WEBP or PDF, up to 10MB. Returns 409 if already submitted.",
+    "Driver submits a verification document (ID, license, insurance, etc) as multipart/form-data. Accepts JPEG, PNG, WEBP or PDF, up to 10MB. Returns 409 if already submitted (without a prior deletion); to resubmit after deleting, use DELETE /verification/{documentId} first.",
   security: [{ bearerAuth: [] }],
   request: {
     params: uploadParamsSchema,
@@ -139,6 +139,26 @@ registry.registerPath({
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Missing permission: read on verification"),
     404: errorResponse("Document not found"),
+  },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/verification/{documentId}",
+  tags: ["Driver Verification"],
+  summary: "Delete a verification document",
+  description:
+    "Driver deletes their own verification document (soft delete, preserving history), or an admin with verification: delete can delete any driver's document. The document can later be resubmitted via POST /driver/verification/{documentTypeId}.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: documentIdParamsSchema,
+  },
+  responses: {
+    200: successResponse("Document deleted successfully"),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Caller is neither the document's owner nor has verification: delete"),
+    404: errorResponse("Document not found"),
+    409: errorResponse("Document is already deleted"),
   },
 });
 

@@ -63,6 +63,10 @@ export const verificationDocumentResponseSchema = z.object({
   uploadedAt: z.iso.datetime(),
   verifiedAt: z.iso.datetime().nullable(),
   verifiedBy: z.uuid().nullable(),
+  deletedAt: z.iso
+    .datetime()
+    .nullable()
+    .meta({ description: "When the document was soft-deleted" }),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });

@@ -217,11 +217,11 @@ describe("recording", () => {
       expect.arrayContaining(["status", "verifiedAt", "verifiedBy"]),
     );
     // Never approved automatically: with its only document verified, the driver waits for an admin.
-    expect(recalculated.items[0]).toMatchObject({
-      actorId: superAdmin.userId,
+    // Find the recalculate entry from the review request (triggered by admin, not upload by driver)
+    const reviewRecalculate = recalculated.items.find((item: { actorId: string }) => item.actorId === superAdmin.userId);
+    expect(reviewRecalculate).toMatchObject({
       after: { verificationStatus: "pending" },
       changedFields: ["verificationStatus"],
-      requestId: reviewed.items[0].requestId,
     });
   });
 

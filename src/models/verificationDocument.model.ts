@@ -22,6 +22,7 @@ const PUBLIC_COLUMNS = [
   "uploadedAt",
   "verifiedAt",
   "verifiedBy",
+  "deletedAt",
   "createdAt",
   "updatedAt",
 ];
@@ -49,12 +50,17 @@ export class VerificationDocumentModel extends BaseModel<VerificationDocumentRow
   }
 
   async getDocumentsByUserId(userId: string): Promise<VerificationDocumentRow[]> {
-    return this.table.where({ userId }).select(PUBLIC_COLUMNS).orderBy("createdAt", "desc");
+    return this.table
+      .where({ userId })
+      .whereNull("deletedAt")
+      .select(PUBLIC_COLUMNS)
+      .orderBy("createdAt", "desc");
   }
 
   async getDocumentsByType(documentTypeId: number): Promise<VerificationDocumentRow[]> {
     return this.table
       .where({ documentTypeId })
+      .whereNull("deletedAt")
       .select(PUBLIC_COLUMNS)
       .orderBy("uploadedAt", "desc");
   }
@@ -98,8 +104,36 @@ export class VerificationDocumentModel extends BaseModel<VerificationDocumentRow
   async getExpiredDocuments(): Promise<VerificationDocumentRow[]> {
     return this.table
       .where({ status: "VERIFIED" })
+      .whereNull("deletedAt")
       .whereNotNull("expiresAt")
       .where("expiresAt", "<", new Date());
+  }
+
+  async softDelete(id: string): Promise<VerificationDocumentRow | undefined> {
+    const now = new Date();
+    await this.table.where({ id }).update({ deletedAt: now, updatedAt: now });
+    return this.findById(id);
+  }
+
+  async replaceDocument(
+    id: string,
+    fileUrl: string,
+    storageKey: string,
+    expiresAt?: string,
+  ): Promise<VerificationDocumentRow | undefined> {
+    await this.table.where({ id }).update({
+      fileUrl,
+      storageKey,
+      status: "PENDING",
+      expiresAt: expiresAt || null,
+      uploadedAt: new Date(),
+      deletedAt: null,
+      notes: null,
+      verifiedAt: null,
+      verifiedBy: null,
+      updatedAt: new Date(),
+    });
+    return this.findById(id);
   }
 
   async countByUserAndStatus(userId: string, status: string): Promise<number> {
@@ -133,6 +167,7 @@ export class VerificationDocumentModel extends BaseModel<VerificationDocumentRow
             "verificationDocuments.status": "UNDER_REVIEW",
           });
         })
+        .whereNull("verificationDocuments.deletedAt")
         .join("users", "verificationDocuments.userId", "users.id")
         .join("documentTypes", "verificationDocuments.documentTypeId", "documentTypes.id")
         .select(

@@ -62,7 +62,17 @@ export async function createAdminUser(req: Request, res: Response) {
 export async function getAdminUser(req: Request, res: Response) {
   const { userId } = req.validated.params as { userId: string };
 
-  sendSuccess(res, "Admin user retrieved successfully", await findAdminOrThrow(userId));
+  const admin = await findAdminOrThrow(userId);
+  sendSuccess(res, "Admin user retrieved successfully", admin);
+
+  if (req.auth?.id !== userId) {
+    logActivity(req, {
+      ...ADMIN_ACTIVITY,
+      action: "admin.view",
+      description: "Viewed an admin account",
+      targetId: userId,
+    });
+  }
 }
 
 export async function updateAdminUser(req: Request, res: Response) {

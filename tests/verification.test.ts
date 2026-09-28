@@ -200,7 +200,7 @@ describe("POST /driver/verification/:documentTypeId", () => {
 
     expectStatus(res, 409);
     expect(res.body.error).toBe(
-      "You already submitted a National ID. Contact support to resubmit.",
+      "You already submitted a National ID. Delete it first to submit a new one.",
     );
   });
 

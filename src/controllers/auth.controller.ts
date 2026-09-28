@@ -224,6 +224,7 @@ async function completeLogin(account: User, req: Request, res: Response, isNewUs
   const [tokens, user] = await Promise.all([
     issueTokens(account.id, userType, account.role, req),
     buildAccount(account),
+    userModel.touchLastLogin(account.id),
   ]);
 
   sendSuccess(res, "Login successful", { ...tokens, user, isNewUser });

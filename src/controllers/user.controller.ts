@@ -91,6 +91,16 @@ export async function getUser(req: Request, res: Response) {
   await assertSelfOrPermission(req, user.id, moduleFor(user), "read");
 
   sendSuccess(res, "User retrieved successfully", user);
+
+  if (req.auth?.id !== user.id) {
+    logActivity(req, {
+      module: "users",
+      action: "user.view",
+      description: `Viewed a ${user.role} account`,
+      targetType: "user",
+      targetId: user.id,
+    });
+  }
 }
 
 export async function updateUser(req: Request, res: Response) {

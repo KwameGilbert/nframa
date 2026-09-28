@@ -3,7 +3,7 @@ import { verificationDocumentModel } from "../models/verificationDocument.model.
 import { verificationDocumentHistoryModel } from "../models/verificationDocumentHistory.model.js";
 import { documentTypeModel } from "../models/documentType.model.js";
 import { driverProfileModel } from "../models/driverProfile.model.js";
-import { uploadFile } from "../services/storage.service.js";
+import { uploadFile, deleteFile } from "../services/storage.service.js";
 import { assertSelfOrPermission } from "../middlewares/authorize.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { AppError } from "../utils/AppError.js";
@@ -44,9 +44,9 @@ export async function uploadVerificationDocument(req: Request, res: Response) {
 
   // Check if this user already submitted this document type
   const existing = await verificationDocumentModel.getDocumentByUserAndType(userId, typeId);
-  if (existing) {
+  if (existing && !existing.deletedAt) {
     throw AppError.conflict(
-      `You already submitted a ${docType.name}. Contact support to resubmit.`,
+      `You already submitted a ${docType.name}. Delete it first to submit a new one.`,
     );
   }
 
@@ -60,21 +60,52 @@ export async function uploadVerificationDocument(req: Request, res: Response) {
     ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
     : undefined;
 
-  const document = await verificationDocumentModel.uploadDocument(
-    userId,
-    typeId,
-    uploaded.fileUrl,
-    uploaded.storageKey,
-    expiresAt,
-  );
+  let document;
+  let action: string;
+
+  if (existing && existing.deletedAt) {
+    // Replace an existing soft-deleted document
+    document = await verificationDocumentModel.replaceDocument(
+      existing.id,
+      uploaded.fileUrl,
+      uploaded.storageKey,
+      expiresAt,
+    );
+    action = "verification.document.replace";
+
+    // Log to history: marked as DELETED previously, now PENDING again
+    await verificationDocumentHistoryModel.logStatusChange(
+      existing.id,
+      "DELETED",
+      "PENDING",
+      null,
+      "Document resubmitted",
+    );
+  } else {
+    // New document
+    document = await verificationDocumentModel.uploadDocument(
+      userId,
+      typeId,
+      uploaded.fileUrl,
+      uploaded.storageKey,
+      expiresAt,
+    );
+    action = "verification.document.upload";
+  }
 
   sendCreated(res, "Document uploaded successfully", document);
 
+  // Recalculate driver status: a replace should drop an approved driver back to pending if their doc was verified
+  await recalculateDriverVerificationStatus(req, userId);
+
   logActivity(req, {
     ...DOCUMENT_ACTIVITY,
-    action: "verification.document.upload",
-    description: `Uploaded a ${docType.name}`,
-    targetId: document.id,
+    action,
+    description:
+      action === "verification.document.replace"
+        ? `Resubmitted a ${docType.name}`
+        : `Uploaded a ${docType.name}`,
+    targetId: document!.id,
     after: document,
   });
 }
@@ -151,11 +182,68 @@ export async function getDocumentHistory(req: Request, res: Response) {
   const history = await verificationDocumentHistoryModel.getDocumentHistory(documentId);
 
   sendSuccess(res, "Document history retrieved successfully", history);
+
+  if (req.auth?.id !== document.userId) {
+    logActivity(req, {
+      ...DOCUMENT_ACTIVITY,
+      action: "verification.document.history.view",
+      description: "Viewed a verification document's history",
+      targetId: documentId,
+    });
+  }
 }
 
-export async function listPendingDocuments(_req: Request, res: Response) {
+export async function deleteVerificationDocument(req: Request, res: Response) {
+  const { documentId } = req.validated.params as { documentId: string };
+
+  const document = await verificationDocumentModel.findById(documentId);
+  if (!document) {
+    throw AppError.notFound(`Document not found: ${documentId}`);
+  }
+
+  if (document.deletedAt) {
+    throw AppError.conflict("Document is already deleted");
+  }
+
+  await assertSelfOrPermission(req, document.userId, "verification", "delete");
+
+  const deleted = await verificationDocumentModel.softDelete(documentId);
+
+  // Best-effort cleanup of the stored file; don't fail the request if storage is unreachable
+  deleteFile(document.storageKey).catch(() => undefined);
+
+  // Log to history: status changed to DELETED
+  await verificationDocumentHistoryModel.logStatusChange(
+    documentId,
+    document.status,
+    "DELETED",
+    null,
+  );
+
+  // Recalculate driver status: if they were approved, soft-deleting a verified document drops them to pending
+  await recalculateDriverVerificationStatus(req, document.userId);
+
+  sendSuccess(res, "Document deleted successfully");
+
+  logActivity(req, {
+    ...DOCUMENT_ACTIVITY,
+    action: "verification.document.delete",
+    description: "Deleted a verification document",
+    targetId: documentId,
+    before: document,
+    after: deleted,
+  });
+}
+
+export async function listPendingDocuments(req: Request, res: Response) {
   const pending = await verificationDocumentModel.getPendingDocumentsWithDetails();
   sendSuccess(res, "Pending documents retrieved", pending);
+
+  logActivity(req, {
+    ...DOCUMENT_ACTIVITY,
+    action: "verification.pending.view",
+    description: `Viewed ${pending.length} pending verification document(s)`,
+  });
 }
 
 export async function updateDriverVerificationStatus(req: Request, res: Response) {
