@@ -12,8 +12,10 @@
 2. [Rider Sign-Up & Sign-In](#rider-signup--signin)
 3. [Driver Sign-Up & Sign-In](#driver-signup--signin)
 4. [Driver Verification Documents](#driver-verification-documents)
-5. [Error Codes & Handling](#error-codes--handling)
-6. [Rate Limiting](#rate-limiting)
+5. [Driver Approval & Verification Status](#driver-approval--verification-status)
+6. [Admin Document Review](#admin-document-review)
+7. [Error Codes & Handling](#error-codes--handling)
+8. [Rate Limiting](#rate-limiting)
 
 ---
 
@@ -628,7 +630,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-## Driver Approval Process
+## Driver Approval & Verification Status
 
 ### Driver Verification Status States
 
@@ -711,6 +713,102 @@ Authorization: Bearer <accessToken>
   }
 }
 ```
+
+---
+
+## Admin Document Review
+
+**Admin-only endpoints for reviewing driver documents and managing the verification queue.**
+
+### List Pending Documents (Admin)
+
+Retrieve all documents awaiting or currently under review by admins, with driver details.
+
+```http
+GET /admin/driver/verification/pending
+Authorization: Bearer <accessToken>
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Pending documents retrieved",
+  "data": [
+    {
+      "id": "doc-id-1",
+      "userId": "driver-id",
+      "documentTypeId": 2,
+      "fileUrl": "https://storage.nframa.local/...",
+      "status": "PENDING",
+      "expiresAt": null,
+      "notes": null,
+      "uploadedAt": "2026-09-28T10:30:00Z",
+      "verifiedAt": null,
+      "verifiedBy": null,
+      "deletedAt": null,
+      "createdAt": "2026-09-28T10:30:00Z",
+      "updatedAt": "2026-09-28T10:30:00Z",
+      "fullName": "John Doe",
+      "email": "john@example.com",
+      "phoneNumber": "0501234567",
+      "documentTypeCode": "DRIVERS_LICENSE",
+      "documentTypeName": "Driver's License"
+    }
+  ]
+}
+```
+
+**Requires:** `verification: read` permission
+
+### Update Document Verification Status (Admin)
+
+Approve, reject, or request changes to a document. Updates driver status automatically.
+
+```http
+PATCH /admin/verification/document/{documentId}
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{
+  "status": "VERIFIED",
+  "notes": "Looks good, clear image"
+}
+```
+
+**Status Values:**
+- `PENDING` — Back to pending (awaiting review)
+- `UNDER_REVIEW` — Currently reviewing (for internal tracking)
+- `VERIFIED` — Approved ✅
+- `REJECTED` — Reject with reason in notes ❌
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Document status updated successfully",
+  "data": {
+    "id": "doc-id-1",
+    "userId": "driver-id",
+    "documentTypeId": 2,
+    "status": "VERIFIED",
+    "notes": "Looks good, clear image",
+    "verifiedAt": "2026-09-28T14:00:00Z",
+    "verifiedBy": "admin-id",
+    "updatedAt": "2026-09-28T14:00:00Z"
+  }
+}
+```
+
+**Response (404):**
+```json
+{
+  "success": false,
+  "error": "Document not found: {documentId}"
+}
+```
+
+**Requires:** `verification: update` permission
 
 ---
 
