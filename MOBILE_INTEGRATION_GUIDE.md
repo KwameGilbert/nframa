@@ -1,8 +1,9 @@
 # Mobile App Integration Guide
 
-**Last Updated:** 2026-09-28  
-**API Base URL:** `https://api.nframa.local/api/v1` (development)  
-**API Docs:** `https://api.nframa.local/docs` (Swagger UI)
+**Last Updated:** 2026-09-28
+**API Docs:** `/docs` (Swagger UI, generated from the same code this guide is based on — treat it as the source of truth if anything here ever looks stale)
+
+Every response has the shape `{ "success": true, "message": "...", "data": ... }` on success, or `{ "success": false, "error": "..." }` on failure. `data` is `null` when there's nothing to return (e.g. delete, logout).
 
 ---
 
@@ -21,24 +22,26 @@
 
 ## Authentication
 
+**There is no separate "sign up" endpoint.** Riders and drivers sign up and sign in through the same two-step phone OTP flow: `POST /auth/login/otp` (send a code) then `POST /auth/login/verify` (verify it). If no account exists yet for that phone number, verifying the code **creates the account automatically** — the response tells you this happened via `isNewUser: true`.
+
+Email + password login (`POST /auth/login`) only works for accounts that already have a password set. Riders/drivers never get one automatically — this path is mainly for admins (who are provisioned with a password) or any account that has gone through `/auth/password/forgot` to set one.
+
 ### Token Management
 
 All authenticated endpoints require the `Authorization: Bearer <accessToken>` header.
 
-**Token Lifecycle:**
 - `accessToken` expires after **15 minutes**
-- `refreshToken` is long-lived (e.g., days/weeks)
-- Before each API call, check token expiry; refresh if needed
-- On logout, clear both tokens and all user data
+- `refreshToken` is valid for **30 days** and is **single-use** — every refresh call revokes the one sent and issues a new pair
+- On logout, clear both tokens and all cached user data
 
-### Get New Tokens
+### Refresh Tokens
 
 ```http
 POST /auth/refresh
 Content-Type: application/json
 
 {
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  "refreshToken": "q3J8b1xN0pZ4mW7tE2vY9cR5kL6hG1sD8fA3uQ0iO4nB7xT2eV5wC9zM1yK6jH3g"
 }
 ```
 
@@ -46,11 +49,10 @@ Content-Type: application/json
 ```json
 {
   "success": true,
-  "message": "Token refreshed successfully",
+  "message": "Tokens refreshed successfully",
   "data": {
-    "accessToken": "new.jwt.token",
-    "refreshToken": "new.refresh.token",
-    "expiresIn": 900
+    "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+    "refreshToken": "new-refresh-token-string"
   }
 }
 ```
@@ -59,11 +61,49 @@ Content-Type: application/json
 ```json
 {
   "success": false,
-  "error": "Invalid or expired refresh token"
+  "error": "Invalid, expired, or already-used refresh token"
+}
+```
+Clear stored tokens and send the user to sign-in.
+
+**Response (403):**
+```json
+{
+  "success": false,
+  "error": "Account is suspended or deleted, or the admin account is not active — the session is revoked"
 }
 ```
 
-Clear stored tokens and prompt re-login if 401.
+### Get the Signed-In Account
+
+Use this to restore session state on app launch, or to refresh what the account can do after something changes server-side.
+
+```http
+GET /auth/me
+Authorization: Bearer <accessToken>
+```
+
+**Response (200):** Same `user` shape documented under [Sign-In: Phone OTP](#2-verify-code--sign-in-or-sign-up) below.
+
+### Log Out
+
+```http
+POST /auth/logout
+Content-Type: application/json
+
+{
+  "refreshToken": "q3J8b1xN0pZ4mW7tE2vY9cR5kL6hG1sD8fA3uQ0iO4nB7xT2eV5wC9zM1yK6jH3g"
+}
+```
+
+**Response (200):** always succeeds, even if the token was already invalid.
+```json
+{
+  "success": true,
+  "message": "Logged out successfully",
+  "data": null
+}
+```
 
 ---
 
@@ -72,221 +112,138 @@ Clear stored tokens and prompt re-login if 401.
 ### Flow Overview
 
 ```
-Sign-Up (Email/Phone)
+Request OTP (phone)
   ↓
-Send OTP Code
+Verify OTP
+  ├─ No account existed → account created automatically, isNewUser: true
+  └─ Account existed → isNewUser: false
   ↓
-Verify Code → Create Account
+Store accessToken + refreshToken
   ↓
-Store Tokens
+If isNewUser (or user.profile is null): POST /rider to create the rider profile
   ↓
-Show "Complete Profile" Screen
+Optionally PATCH /users/{id} to fill in fullName, dateOfBirth, etc.
   ↓
-Update User Profile
-  ↓
-Ready to Use App
+Ready to use the app
 ```
 
-### 1. Sign-Up: Send OTP (Email)
+### 1. Request OTP (Phone)
 
 ```http
-POST /auth/send-code
+POST /auth/login/otp
 Content-Type: application/json
 
 {
-  "email": "rider@example.com",
-  "codeType": "signup"
-}
-```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Code sent to rider@example.com",
-  "data": {
-    "codeSentTo": "rider@example.com",
-    "codeExpiresIn": 600
-  }
-}
-```
-
-**Response (429) - Rate Limited:**
-```json
-{
-  "success": false,
-  "error": "Too many attempts. Try again in 15 minutes.",
-  "RateLimit": "5",
-  "RateLimit-Policy": "5 requests per 15 minutes"
-}
-```
-
-### 2. Sign-Up: Verify Code & Create Account
-
-```http
-POST /auth/signup/verify
-Content-Type: application/json
-
-{
-  "email": "rider@example.com",
-  "code": "123456",
-  "password": "SecurePassword123!",
+  "phoneCountryCode": "+233",
+  "phoneNumber": "541436414",
   "role": "rider"
 }
 ```
 
-**Response (201) - Account Created:**
+**`role` is required only when this phone number has no account yet** (i.e. this will be a signup). Omit it for an existing account — it's ignored if present.
+
+**Response (200):**
 ```json
 {
   "success": true,
-  "message": "Signed up as a rider with a verification code",
+  "message": "Verification code sent",
+  "data": null
+}
+```
+
+**Response (400) — role missing for a new number:**
+```json
+{
+  "success": false,
+  "error": "role is required to sign up"
+}
+```
+
+**Response (429) — Rate Limited:**
+```json
+{
+  "success": false,
+  "error": "Too many requests — try again later (see the RateLimit headers for when)"
+}
+```
+See [Rate Limiting](#rate-limiting) — this endpoint allows 5 codes per phone number per 15 minutes.
+
+### 2. Verify Code → Sign In or Sign Up
+
+Send the **same identifier** used above, plus the 6-digit code. The code expires after **5 minutes** and allows **5 wrong attempts** before it's locked.
+
+```http
+POST /auth/login/verify
+Content-Type: application/json
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "541436414",
+  "role": "rider",
+  "code": "123456"
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Login successful",
   "data": {
-    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+    "refreshToken": "q3J8b1xN0pZ4mW7tE2vY9cR5kL6hG1sD8fA3uQ0iO4nB7xT2eV5wC9zM1yK6jH3g",
+    "isNewUser": true,
     "user": {
       "id": "550e8400-e29b-41d4-a716-446655440000",
       "fullName": null,
-      "email": "rider@example.com",
-      "role": "rider",
-      "isPhoneVerified": false,
-      "isEmailVerified": true,
-      "isProfileComplete": false,
-      "lastActiveAt": "2026-09-28T10:30:00Z"
-    }
-  }
-}
-```
-
-**Response (400) - Invalid Code:**
-```json
-{
-  "success": false,
-  "error": "Invalid or expired verification code"
-}
-```
-
-**Response (409) - Account Exists:**
-```json
-{
-  "success": false,
-  "error": "An account with this email already exists"
-}
-```
-
-### 3. Sign-In: Email & Password
-
-```http
-POST /auth/login
-Content-Type: application/json
-
-{
-  "email": "rider@example.com",
-  "password": "SecurePassword123!"
-}
-```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Signed in with email and password",
-  "data": {
-    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "user": {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "fullName": "John Doe",
-      "email": "rider@example.com",
+      "email": null,
+      "phoneCountryCode": "+233",
+      "phoneNumber": "541436414",
+      "dateOfBirth": null,
+      "status": "active",
+      "profilePicture": null,
+      "oauthProvider": null,
       "role": "rider",
       "isPhoneVerified": true,
-      "isEmailVerified": true,
-      "isProfileComplete": true,
-      "lastActiveAt": "2026-09-28T10:30:00Z"
+      "isEmailVerified": false,
+      "isProfileComplete": false,
+      "lastActiveAt": "2026-09-28T10:30:00Z",
+      "createdAt": "2026-09-28T10:30:00Z",
+      "updatedAt": "2026-09-28T10:30:00Z",
+      "deletedAt": null,
+      "profile": null,
+      "adminRole": null,
+      "permissions": {}
     }
   }
 }
 ```
 
-**Response (401):**
+**`isNewUser: true`** only when this call just created the account. **`user.profile` is `null`** until a rider profile has been created (step 3) — use this, not `isNewUser`, to decide whether to show the "complete profile" flow, since a returning user who never finished onboarding will also have `profile: null`.
+
+**Response (400) — bad/expired code:**
 ```json
 {
   "success": false,
-  "error": "Invalid email or password"
+  "error": "Invalid verification code"
 }
 ```
+Other possible messages: `"No pending verification code for this identifier"`, `"Verification code has expired"`, `"Too many attempts, request a new code"`.
 
-### 4. Update Rider Profile
-
-```http
-PATCH /users/{userId}
-Authorization: Bearer <accessToken>
-Content-Type: application/json
-
-{
-  "fullName": "John Doe",
-  "dateOfBirth": "1990-05-15"
-}
-```
-
-**Response (200):**
+**Response (403):**
 ```json
 {
-  "success": true,
-  "message": "User updated successfully",
-  "data": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "fullName": "John Doe",
-    "email": "rider@example.com",
-    "phoneCountryCode": null,
-    "phoneNumber": null,
-    "dateOfBirth": "1990-05-15",
-    "role": "rider",
-    "isPhoneVerified": false,
-    "isEmailVerified": true,
-    "isProfileComplete": false,
-    "lastActiveAt": "2026-09-28T10:30:00Z"
-  }
+  "success": false,
+  "error": "Account is suspended or deleted, or the admin account is not active"
 }
 ```
 
----
+### 3. Create Rider Profile
 
-## Driver Sign-Up & Sign-In
-
-### Flow Overview
-
-```
-Sign-Up (Email/Phone)
-  ↓
-Send OTP Code → Verify Code
-  ↓
-Create Account → Create Driver Profile
-  ↓
-Store Tokens
-  ↓
-Show "Upload Documents" Screen
-  ↓
-Get Available Document Types
-  ↓
-Upload Each Required Document
-  ↓
-Documents Under Review
-  ↓
-[Admin Reviews] → Approved / Rejected
-  ↓
-If Approved: Driver Ready to Accept Rides
-```
-
-### 1. Driver Sign-Up (Same as Rider)
-
-Use the same endpoints as riders, but with `"role": "driver"`.
-
-### 2. Create Driver Profile
-
-After sign-up, drivers must create their profile before uploading documents.
+Required once, right after the first successful sign-up (when `user.profile` is `null`).
 
 ```http
-POST /driver
+POST /rider
 Authorization: Bearer <accessToken>
 Content-Type: application/json
 
@@ -299,25 +256,188 @@ Content-Type: application/json
 ```json
 {
   "success": true,
-  "message": "Driver profile created successfully",
+  "message": "Rider profile created successfully",
   "data": {
     "userId": "550e8400-e29b-41d4-a716-446655440000",
-    "code": "DRV-ABC123456",
-    "status": "active",
-    "verificationStatus": "unverified",
-    "createdAt": "2026-09-28T10:30:00Z",
-    "updatedAt": "2026-09-28T10:30:00Z"
+    "createdAt": "2026-09-28T10:31:00Z"
   }
 }
 ```
 
-**Response (409) - Profile Already Exists:**
+### 4. Fill In Profile Details (Optional)
+
+```http
+PATCH /users/{userId}
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{
+  "fullName": "John Doe",
+  "dateOfBirth": "1995-04-12"
+}
+```
+
+All fields are optional but at least one is required. Accepted fields: `fullName`, `email`, `phoneCountryCode`, `phoneNumber`, `dateOfBirth`, `profilePicture`.
+
+**Response (200):** the full updated user object (same shape as `user` above, without `profile`/`adminRole`/`permissions`).
+
+---
+
+## Driver Sign-Up & Sign-In
+
+### Flow Overview
+
+```
+Request OTP (phone, role: "driver") → Verify OTP
+  ↓
+Account created if new (isNewUser: true)
+  ↓
+Store tokens
+  ↓
+POST /driver — create driver profile (if user.profile is null)
+  ↓
+POST /vehicles — register their vehicle
+  ↓
+Get document types → Upload each required document
+  ↓
+Documents under review (see Driver Verification Documents below)
+  ↓
+Admin approves → driver.verificationStatus becomes "approved"
+  ↓
+Ready to accept rides
+```
+
+### 1. Request OTP & Verify — Same as Riders
+
+Use the exact endpoints from [Rider Sign-Up & Sign-In](#rider-signup--signin) above, with `"role": "driver"` instead of `"rider"`.
+
+The `user.profile` field, once a driver profile exists, will be the **flat** driver profile shape (not the nested one document endpoints return — see note below):
+```json
+"profile": {
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "code": "DR-7KQ2MX",
+  "verificationStatus": "unverified",
+  "ghanaCardNumber": null,
+  "address": null,
+  "isOnline": false,
+  "autoAcceptBookings": false,
+  "termsAcceptedAt": null
+}
+```
+
+> **Important:** `GET /auth/me` and login responses return this **flat** profile shape under `user.profile`. The dedicated driver endpoints (`GET /driver/{userId}`, `POST /driver`, etc.) return a **differently-shaped, nested** object — see the next section. Don't assume they match; read each response's actual `data` shape.
+
+### 2. Create Driver Profile
+
+```http
+POST /driver
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "ghanaCardNumber": "GHA-123456789-0",
+  "address": "12 Oxford St, Osu, Accra"
+}
+```
+
+`ghanaCardNumber` and `address` are both optional and can be added later via `PATCH /driver/{userId}`.
+
+**Response (201) — note the `driver` wrapper:**
+```json
+{
+  "success": true,
+  "message": "Driver profile created successfully",
+  "data": {
+    "driver": {
+      "userId": "550e8400-e29b-41d4-a716-446655440000",
+      "code": "DR-7KQ2MX",
+      "verificationStatus": "unverified",
+      "ghanaCardNumber": "GHA-123456789-0",
+      "address": "12 Oxford St, Osu, Accra",
+      "isOnline": false,
+      "autoAcceptBookings": false,
+      "termsAcceptedAt": null,
+      "user": { "id": "550e8400-...", "fullName": null, "role": "driver", "...": "..." },
+      "vehicles": [],
+      "documents": []
+    }
+  }
+}
+```
+
+Every driver-returning endpoint (`POST /driver`, `GET /driver/{userId}`, `GET /drivers/code/{code}`, `GET /drivers/phone/{code}/{number}`, `PATCH /driver/{userId}`) uses this **same nested shape**: `{ driver: { ...profile fields, user, vehicles, documents } }`.
+
+**Response (409) — profile already exists:**
 ```json
 {
   "success": false,
-  "error": "Driver profile already exists for this user"
+  "error": "..."
 }
 ```
+
+### 3. Get / Update Driver Profile
+
+```http
+GET /driver/{userId}
+Authorization: Bearer <accessToken>
+```
+Returns the same `{ driver: {...} }` shape as above. A driver can always read their own profile; reading someone else's needs `users: read`.
+
+```http
+PATCH /driver/{userId}
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{
+  "isOnline": true,
+  "autoAcceptBookings": false
+}
+```
+All fields optional (`ghanaCardNumber`, `address`, `isOnline`, `autoAcceptBookings`), at least one required. Same `{ driver: {...} }` response shape.
+
+### 4. Register a Vehicle
+
+```http
+POST /vehicles
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{
+  "carOwnerUserId": "550e8400-e29b-41d4-a716-446655440000",
+  "make": "Toyota",
+  "model": "Corolla",
+  "year": 2020,
+  "color": "Silver",
+  "plate": "GR 1234-21",
+  "seats": 4
+}
+```
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "message": "Vehicle created successfully",
+  "data": {
+    "id": "a1b2c3d4-...",
+    "carOwnerUserId": "550e8400-...",
+    "make": "Toyota",
+    "model": "Corolla",
+    "year": 2020,
+    "color": "Silver",
+    "plate": "GR 1234-21",
+    "seats": 4,
+    "status": "active",
+    "isVerified": false,
+    "verificationDate": null,
+    "createdAt": "2026-09-28T10:32:00Z",
+    "updatedAt": "2026-09-28T10:32:00Z"
+  }
+}
+```
+
+`isVerified` is separate from document verification — it reflects an admin checking the vehicle's registration/roadworthiness documents.
 
 ---
 
@@ -326,32 +446,25 @@ Content-Type: application/json
 ### Document Flow
 
 ```
-1. Get Available Document Types
+1. GET /document-types — see what's needed
    ↓
-2. Upload Document (JPEG, PNG, WEBP, PDF, max 10MB)
+2. POST /driver/verification/{documentTypeId} — upload each one
    ↓
-3. Document Status: PENDING
+3. Document status: PENDING
    ↓
-4. [Admin Review Process]
+4. [Admin Review]
    ├─ UNDER_REVIEW (admin is checking it)
-   ├─ VERIFIED ✓ (accepted)
-   │  └─ If has expiry → auto-refresh yearly
-   ├─ REJECTED ✗ (with notes explaining why)
-   │  └─ Driver can delete and re-upload
-   └─ EXPIRED (document passed expiry date)
-      └─ Driver must replace with new one
+   ├─ VERIFIED ✓ — accepted
+   ├─ REJECTED ✗ — see `notes` for why; delete and re-upload
+   └─ EXPIRED — delete and re-upload with a fresh document
    ↓
-5. Driver Status Updates Based on All Docs
-   ├─ unverified: no docs submitted
-   ├─ pending: awaiting review or all verified & awaiting admin approval
-   ├─ approved: admin approved driver (only happens manually, see below)
-   ├─ rejected: one or more docs rejected
-   └─ expiring: approved but some docs expiring soon
+5. Driver's overall verificationStatus updates automatically after every review
+   (see Driver Approval & Verification Status below)
 ```
 
 ### Get Document Types
 
-List all document types available for drivers to submit. Each shows whether it expires and if it's required.
+Any signed-in user can list this — it's reference data for building the upload UI.
 
 ```http
 GET /document-types
@@ -373,75 +486,28 @@ Authorization: Bearer <accessToken>
       "isRequired": true,
       "createdAt": "2026-01-01T00:00:00Z",
       "updatedAt": "2026-01-01T00:00:00Z"
-    },
-    {
-      "id": 2,
-      "code": "DRIVERS_LICENSE",
-      "name": "Driver's License",
-      "description": "Current driving license",
-      "hasExpiry": true,
-      "isRequired": true,
-      "createdAt": "2026-01-01T00:00:00Z",
-      "updatedAt": "2026-01-01T00:00:00Z"
-    },
-    {
-      "id": 3,
-      "code": "VEHICLE_REGISTRATION",
-      "name": "Vehicle Registration",
-      "description": "Current vehicle registration certificate",
-      "hasExpiry": true,
-      "isRequired": true,
-      "createdAt": "2026-01-01T00:00:00Z",
-      "updatedAt": "2026-01-01T00:00:00Z"
-    },
-    {
-      "id": 4,
-      "code": "VEHICLE_INSURANCE",
-      "name": "Vehicle Insurance",
-      "description": "Active vehicle insurance policy",
-      "hasExpiry": true,
-      "isRequired": true,
-      "createdAt": "2026-01-01T00:00:00Z",
-      "updatedAt": "2026-01-01T00:00:00Z"
-    },
-    {
-      "id": 5,
-      "code": "VEHICLE_ROADWORTHINESS",
-      "name": "Vehicle Roadworthiness Certificate",
-      "description": "Current roadworthiness/fitness certificate",
-      "hasExpiry": true,
-      "isRequired": true,
-      "createdAt": "2026-01-01T00:00:00Z",
-      "updatedAt": "2026-01-01T00:00:00Z"
     }
   ]
 }
 ```
 
-**Mark Required Fields in UI:**
-- Show a badge/asterisk on `isRequired: true` documents
-- Drivers must submit all required types before they can be approved
+Show a "required" badge for `isRequired: true` types — a driver can't be approved without submitting one of each.
 
-### Upload Document
-
-Submit a document image/PDF for a specific document type.
+### Upload a Document
 
 ```http
 POST /driver/verification/{documentTypeId}
 Authorization: Bearer <accessToken>
 Content-Type: multipart/form-data
 
-file: <binary file data>
+file: <binary>
 ```
 
-**Supported Formats:**
-- JPEG (image/jpeg)
-- PNG (image/png)
-- WEBP (image/webp)
-- PDF (application/pdf)
-- **Max Size:** 10 MB
+- Formats: JPEG, PNG, WEBP, PDF
+- Max size: **10 MB**
+- Field name **must be `file`**
 
-**Response (201) - Upload Successful:**
+**Response (201):**
 ```json
 {
   "success": true,
@@ -450,7 +516,7 @@ file: <binary file data>
     "id": "a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6",
     "userId": "550e8400-e29b-41d4-a716-446655440000",
     "documentTypeId": 2,
-    "fileUrl": "https://storage.nframa.local/verification/550e8400.../file.jpg",
+    "fileUrl": "https://storage.example.com/verification/550e8400.../file.jpg",
     "status": "PENDING",
     "expiresAt": "2027-09-28T23:59:59Z",
     "notes": null,
@@ -464,42 +530,35 @@ file: <binary file data>
 }
 ```
 
-**Response (400) - File Error:**
+**Response (400):**
 ```json
-{
-  "success": false,
-  "error": "Invalid document type, missing/unsupported file, or file too large"
-}
+{ "success": false, "error": "Invalid document type, missing/unsupported file, or file too large" }
 ```
 
-**Response (409) - Already Submitted:**
+**Response (409) — already submitted:**
 ```json
-{
-  "success": false,
-  "error": "You already submitted a Driver's License. Delete it first to submit a new one."
-}
+{ "success": false, "error": "You already submitted a Driver's License. Delete it first to submit a new one." }
 ```
+If the existing document was already deleted (see below), uploading again **replaces** it instead of conflicting — same document `id`, fresh content, full history preserved.
 
-### Get Driver's Documents
-
-Retrieve all documents the driver has submitted, with full status history.
+### Get Driver's Own Documents
 
 ```http
 GET /driver/verification
 Authorization: Bearer <accessToken>
 ```
 
-**Response (200):**
+**Response (200):** array of documents, each with its `history` (status change log) nested in:
 ```json
 {
   "success": true,
   "message": "Documents retrieved successfully",
   "data": [
     {
-      "id": "a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6",
-      "userId": "550e8400-e29b-41d4-a716-446655440000",
+      "id": "a1b2c3d4-...",
+      "userId": "550e8400-...",
       "documentTypeId": 2,
-      "fileUrl": "https://storage.nframa.local/verification/550e8400.../file.jpg",
+      "fileUrl": "https://storage.example.com/...",
       "status": "VERIFIED",
       "expiresAt": "2027-09-28T23:59:59Z",
       "notes": "Looks good",
@@ -512,7 +571,7 @@ Authorization: Bearer <accessToken>
       "history": [
         {
           "id": "hist-1",
-          "documentId": "a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6",
+          "documentId": "a1b2c3d4-...",
           "previousStatus": null,
           "newStatus": "PENDING",
           "changedBy": null,
@@ -522,18 +581,8 @@ Authorization: Bearer <accessToken>
         },
         {
           "id": "hist-2",
-          "documentId": "a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6",
+          "documentId": "a1b2c3d4-...",
           "previousStatus": "PENDING",
-          "newStatus": "UNDER_REVIEW",
-          "changedBy": "admin-id",
-          "notes": "Checking document authenticity",
-          "changedAt": "2026-09-28T10:35:00Z",
-          "createdAt": "2026-09-28T10:35:00Z"
-        },
-        {
-          "id": "hist-3",
-          "documentId": "a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6",
-          "previousStatus": "UNDER_REVIEW",
           "newStatus": "VERIFIED",
           "changedBy": "admin-id",
           "notes": "Looks good",
@@ -541,122 +590,87 @@ Authorization: Bearer <accessToken>
           "createdAt": "2026-09-28T10:45:00Z"
         }
       ]
-    },
-    {
-      "id": "b2c3d4e5-f6g7-h8i9-j0k1-l2m3n4o5p6q7",
-      "userId": "550e8400-e29b-41d4-a716-446655440000",
-      "documentTypeId": 1,
-      "fileUrl": "https://storage.nframa.local/verification/550e8400.../national-id.jpg",
-      "status": "REJECTED",
-      "expiresAt": null,
-      "notes": "ID photo is blurry. Please resubmit with a clear image.",
-      "uploadedAt": "2026-09-28T09:00:00Z",
-      "verifiedAt": null,
-      "verifiedBy": null,
-      "deletedAt": null,
-      "createdAt": "2026-09-28T09:00:00Z",
-      "updatedAt": "2026-09-28T10:20:00Z",
-      "history": [
-        {
-          "id": "hist-4",
-          "documentId": "b2c3d4e5-f6g7-h8i9-j0k1-l2m3n4o5p6q7",
-          "previousStatus": null,
-          "newStatus": "PENDING",
-          "changedBy": null,
-          "notes": null,
-          "changedAt": "2026-09-28T09:00:00Z",
-          "createdAt": "2026-09-28T09:00:00Z"
-        },
-        {
-          "id": "hist-5",
-          "documentId": "b2c3d4e5-f6g7-h8i9-j0k1-l2m3n4o5p6q7",
-          "previousStatus": "PENDING",
-          "newStatus": "REJECTED",
-          "changedBy": "admin-id",
-          "notes": "ID photo is blurry. Please resubmit with a clear image.",
-          "changedAt": "2026-09-28T10:20:00Z",
-          "createdAt": "2026-09-28T10:20:00Z"
-        }
-      ]
     }
   ]
 }
 ```
 
-**Document Status Codes:**
+Only **non-deleted** documents are returned here — a deleted document simply disappears from this list until it's replaced.
 
-| Status | Meaning | Action |
-|--------|---------|--------|
-| **PENDING** | Just uploaded, awaiting admin review | Wait or check back later |
-| **UNDER_REVIEW** | Admin is currently reviewing | Wait for final decision |
-| **VERIFIED** | ✅ Accepted, approved | Done with this type (unless expires) |
-| **REJECTED** | ❌ Rejected with reason in `notes` | Delete and re-upload with corrections |
-| **EXPIRED** | Document passed its expiry date | Delete and upload a fresh copy |
-| **DELETED** | Driver deleted (soft-delete) | Can re-upload same type |
+**Document Status Reference:**
+
+| Status | Meaning | Driver Action |
+|--------|---------|----------------|
+| `PENDING` | Just uploaded, awaiting review | Wait |
+| `UNDER_REVIEW` | Admin is actively reviewing | Wait |
+| `VERIFIED` | ✅ Accepted | None — done, unless it expires |
+| `REJECTED` | ❌ Rejected — reason is in `notes` | Delete, fix the issue, re-upload |
+| `EXPIRED` | Passed its `expiresAt` date | Delete and upload a fresh copy |
+
+### Get a Document's History
+
+```http
+GET /verification/{documentId}/history
+Authorization: Bearer <accessToken>
+```
+The document's own driver can always see it; anyone else needs `verification: read`.
+
+**Response (200):** array of history entries (same shape as the `history` field above), newest first.
+
+**Response (404):**
+```json
+{ "success": false, "error": "Document not found: {documentId}" }
+```
 
 ### Delete a Document
 
-If a document is rejected or you want to resubmit, delete it first.
+Lets a driver remove and later re-upload (replace) a document — e.g. after a rejection, or to update an expiring one. This is a **soft delete**: the document's full history is preserved, and re-uploading the same type reuses the same document `id`.
 
 ```http
 DELETE /verification/{documentId}
 Authorization: Bearer <accessToken>
 ```
 
+The document's own driver can delete it; an admin with `verification: delete` can delete any driver's document.
+
 **Response (200):**
 ```json
-{
-  "success": true,
-  "message": "Document deleted successfully",
-  "data": null
-}
+{ "success": true, "message": "Document deleted successfully", "data": null }
 ```
 
 **Response (404):**
 ```json
-{
-  "success": false,
-  "error": "Document not found: {documentId}"
-}
+{ "success": false, "error": "Document not found: {documentId}" }
 ```
 
-**Response (409) - Already Deleted:**
+**Response (409) — already deleted:**
 ```json
-{
-  "success": false,
-  "error": "Document is already deleted"
-}
+{ "success": false, "error": "Document is already deleted" }
 ```
 
 ---
 
 ## Driver Approval & Verification Status
 
-### Driver Verification Status States
+### Verification Status Values
 
-| Status | Meaning | Next Action |
-|--------|---------|-------------|
-| **unverified** | No documents submitted yet | Start uploading documents |
-| **pending** | Documents under review OR all verified but waiting for admin approval | Wait for admin decision; all required types must be submitted & verified |
-| **approved** | ✅ Admin approved (only by manual action) | Ready to accept rides |
-| **rejected** | ❌ One or more documents rejected | Fix rejected docs and re-submit |
-| **expiring** | ✅ Approved but some docs expiring soon | Renew expiring documents soon |
+| Status | Meaning |
+|--------|---------|
+| `unverified` | No documents submitted yet |
+| `pending` | Documents awaiting/under review, **or** every document is verified and the driver is waiting for an admin to approve them |
+| `approved` | ✅ An admin has approved the driver — the only way this status is ever set |
+| `rejected` | At least one document was rejected |
+| `expiring` | Was approved, but a document is now expired |
 
-### How Approval Works
+**Approval is never automatic.** Even once every required document type is submitted and verified, the driver stays `pending` until an admin explicitly approves them via the admin endpoint below. Show this clearly in the UI — "all documents verified, waiting on final approval" is a distinct, expected state.
 
-**Automatic (Happens After Admin Reviews Docs):**
-1. Admin reviews each document (VERIFIED, REJECTED, etc.)
-2. Driver status auto-updates:
-   - If ANY doc is REJECTED → `rejected`
-   - If ANY doc is EXPIRED → `expiring`
-   - If docs are PENDING or UNDER_REVIEW → `pending`
-   - If ALL docs VERIFIED + none expired → `pending` (waits for admin approval)
+### Requirements to Become `approved`
 
-**Manual Approval (Admin Action):**
-1. All required document types must be submitted
-2. All submitted documents must be VERIFIED
-3. No documents can be EXPIRED
-4. Admin manually approves via admin dashboard → Status becomes `approved`
+1. A document has been submitted for **every** `isRequired: true` document type (see `GET /document-types`)
+2. Every submitted document's status is `VERIFIED`
+3. None of them are past their `expiresAt`
+
+If any of these fail, the admin's approval attempt is rejected with a message naming exactly what's missing/wrong — that message is safe to show directly to a driver support agent, but not usually surfaced to the driver's own app (they should rely on document statuses instead).
 
 ### Get Current Driver Status
 
@@ -664,106 +678,23 @@ Authorization: Bearer <accessToken>
 GET /driver/{userId}
 Authorization: Bearer <accessToken>
 ```
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Driver profile retrieved successfully",
-  "data": {
-    "userId": "550e8400-e29b-41d4-a716-446655440000",
-    "code": "DRV-ABC123456",
-    "status": "active",
-    "verificationStatus": "approved",
-    "createdAt": "2026-09-28T10:30:00Z",
-    "updatedAt": "2026-09-28T14:00:00Z",
-    "user": {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "fullName": "John Doe",
-      "email": "john@example.com",
-      "role": "driver",
-      "isPhoneVerified": true,
-      "isEmailVerified": true,
-      "isProfileComplete": true,
-      "lastActiveAt": "2026-09-28T14:00:00Z"
-    },
-    "documents": [
-      {
-        "id": "a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6",
-        "documentTypeId": 1,
-        "status": "VERIFIED",
-        "expiresAt": null
-      },
-      {
-        "id": "c3d4e5f6-g7h8-i9j0-k1l2-m3n4o5p6q7r8",
-        "documentTypeId": 2,
-        "status": "VERIFIED",
-        "expiresAt": "2027-09-28T23:59:59Z"
-      }
-    ],
-    "vehicles": [
-      {
-        "id": "v1",
-        "plate": "ACC-001",
-        "make": "Toyota",
-        "model": "Corolla",
-        "year": 2020
-      }
-    ]
-  }
-}
-```
+Returns the full `{ driver: {...} }` shape from earlier, including `verificationStatus` and the nested `documents` array — poll this (or `GET /driver/verification`) to reflect status changes in the UI.
 
 ---
 
 ## Admin Document Review
 
-**Admin-only endpoints for reviewing driver documents and managing the verification queue.**
+**Admin-only.** Not for the driver-facing app, but documented here so the picture is complete — a driver support/back-office tool would use these.
 
-### List Pending Documents (Admin)
-
-Retrieve all documents awaiting or currently under review by admins, with driver details.
+### List Pending Documents
 
 ```http
 GET /admin/driver/verification/pending
 Authorization: Bearer <accessToken>
 ```
+Requires `verification: read`. Returns every `PENDING`/`UNDER_REVIEW` document across all drivers, each with the submitting driver's name, email and phone attached.
 
-**Response (200):**
-```json
-{
-  "success": true,
-  "message": "Pending documents retrieved",
-  "data": [
-    {
-      "id": "doc-id-1",
-      "userId": "driver-id",
-      "documentTypeId": 2,
-      "fileUrl": "https://storage.nframa.local/...",
-      "status": "PENDING",
-      "expiresAt": null,
-      "notes": null,
-      "uploadedAt": "2026-09-28T10:30:00Z",
-      "verifiedAt": null,
-      "verifiedBy": null,
-      "deletedAt": null,
-      "createdAt": "2026-09-28T10:30:00Z",
-      "updatedAt": "2026-09-28T10:30:00Z",
-      "fullName": "John Doe",
-      "email": "john@example.com",
-      "phoneNumber": "0501234567",
-      "documentTypeCode": "DRIVERS_LICENSE",
-      "documentTypeName": "Driver's License"
-    }
-  ]
-}
-```
-
-**Requires:** `verification: read` permission
-
-### Update Document Verification Status (Admin)
-
-Approve, reject, or request changes to a document. Updates driver status automatically.
+### Review a Document
 
 ```http
 PATCH /admin/verification/document/{documentId}
@@ -772,160 +703,101 @@ Content-Type: application/json
 
 {
   "status": "VERIFIED",
-  "notes": "Looks good, clear image"
+  "notes": "Clear and valid"
 }
 ```
+`status` is one of `PENDING`, `UNDER_REVIEW`, `VERIFIED`, `REJECTED`. Requires `verification: update`. Updating a document's status also recalculates the driver's overall `verificationStatus` automatically (see above) — but never sets it to `approved`.
 
-**Status Values:**
-- `PENDING` — Back to pending (awaiting review)
-- `UNDER_REVIEW` — Currently reviewing (for internal tracking)
-- `VERIFIED` — Approved ✅
-- `REJECTED` — Reject with reason in notes ❌
+### Approve/Change a Driver's Overall Status
 
-**Response (200):**
-```json
+```http
+PATCH /admin/driver/{userId}/verification
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
 {
-  "success": true,
-  "message": "Document status updated successfully",
-  "data": {
-    "id": "doc-id-1",
-    "userId": "driver-id",
-    "documentTypeId": 2,
-    "status": "VERIFIED",
-    "notes": "Looks good, clear image",
-    "verifiedAt": "2026-09-28T14:00:00Z",
-    "verifiedBy": "admin-id",
-    "updatedAt": "2026-09-28T14:00:00Z"
-  }
+  "verificationStatus": "approved",
+  "notes": "All documents verified, approved for service"
 }
 ```
+Requires `verification: update`. This is the **only** endpoint that can set a driver to `approved` — see [requirements above](#requirements-to-become-approved). Returns the full `{ driver: {...} }` shape.
 
-**Response (404):**
+**Response (400) — not ready for approval:**
 ```json
-{
-  "success": false,
-  "error": "Document not found: {documentId}"
-}
+{ "success": false, "error": "Cannot approve driver: missing required document(s): National ID, Driver's License" }
 ```
-
-**Requires:** `verification: update` permission
 
 ---
 
 ## Error Codes & Handling
 
-### Common HTTP Status Codes
+| Code | Meaning | Retry? | Action |
+|------|---------|--------|--------|
+| 200 / 201 | Success | — | Use `data` |
+| 400 | Validation error | No | Fix the request |
+| 401 | Missing/invalid/expired access token | Refresh, then retry | Call `/auth/refresh`; if that fails, send to sign-in |
+| 403 | Forbidden, or account suspended/deleted | No | Show the error message; sign out if the account is blocked |
+| 404 | Not found | No | Check the ID being used |
+| 409 | Conflict (duplicate, already exists/deleted) | No | Show the message, adjust the request |
+| 429 | Rate limited | Yes, after waiting | See [Rate Limiting](#rate-limiting) |
+| 500 | Server error | Yes, with backoff | Retry a couple of times, then surface a generic error |
 
-| Code | Reason | Retry? | Action |
-|------|--------|--------|--------|
-| **200** | Success | — | Use data from response |
-| **201** | Resource created | — | Use data from response |
-| **400** | Bad request (validation) | No | Fix the request and retry |
-| **401** | Unauthorized (invalid/expired token) | Yes | Refresh token; if refresh fails, ask user to re-login |
-| **403** | Forbidden (permission denied) | No | User doesn't have access to this resource |
-| **404** | Not found | No | Resource doesn't exist; check ID |
-| **409** | Conflict (duplicate, already exists) | No | Fix the conflict and retry |
-| **429** | Rate limited | Yes | Wait before retrying; show user the rate limit policy |
-| **500** | Server error | Yes | Retry with exponential backoff |
+---
 
-### Rate Limiting
+## Rate Limiting
 
-Authentication endpoints are rate-limited to prevent brute force attacks.
+All limits are **per 15-minute window** and apply in addition to a generous per-IP flood guard (100 requests/IP on most auth endpoints, 300/IP on refresh — these exist mainly to stop abuse, not to affect normal use).
 
-**Limits:**
-- Sign-up/sign-in: **5 attempts per 15 minutes**
-- Send OTP: **3 attempts per hour per email/phone**
+| Endpoint | Limit | Counts |
+|----------|-------|--------|
+| `POST /auth/login/otp` | 5 per phone/email | Every request |
+| `POST /auth/login/verify` | 10 per phone/email | Failed attempts only |
+| `POST /auth/login` | 10 per email | Failed attempts only |
+| `POST /auth/password/forgot` | 5 per email | Every request |
+| `POST /auth/password/reset` | 10 per email | Failed attempts only |
+| `POST /auth/password/change` | 5 per account | Failed attempts only |
+| `POST /auth/refresh` | 300 per IP | Every request |
 
 **Response (429):**
 ```json
 {
   "success": false,
-  "error": "Too many attempts. Try again in 15 minutes.",
-  "RateLimit": "5",
-  "RateLimit-Policy": "5 requests per 15 minutes"
+  "error": "Too many requests — try again later (see the RateLimit headers for when)"
 }
 ```
-
-**Headers in Response:**
-- `RateLimit` — max requests allowed in the window
-- `RateLimit-Policy` — human-readable policy (e.g., "5 requests per 15 minutes")
-
-**Mobile Implementation:**
-- Parse `RateLimit-Policy` from 429 responses
-- Show user: "Too many attempts. Try again in 15 minutes."
-- Disable login/sign-up forms for the duration
+Standard `RateLimit` / `RateLimit-Policy` response headers (draft-8 format) tell you the limit and reset time — read those rather than hardcoding the table above, in case limits change server-side.
 
 ---
 
-## Best Practices
+## Quick Reference: All Endpoints Used Above
 
-### Token Management
-```kotlin
-// Pseudocode for mobile app
-class AuthManager {
-    fun isTokenExpired(): Boolean {
-        return (expiresAt - now) < 60 // Refresh if < 1 min left
-    }
-    
-    suspend fun getValidToken(): String {
-        if (isTokenExpired()) {
-            return refreshToken()
-        }
-        return accessToken
-    }
-}
-```
-
-### Handle Rejected Documents
-```
-When status = "REJECTED":
-1. Show document preview
-2. Display notes (reason for rejection)
-3. Offer "Delete & Re-upload" button
-4. Help user fix the issue:
-   - "Image is blurry" → Use camera's focus
-   - "Information is cut off" → Frame entire document
-   - "Expired" → Get new document from authority
-```
-
-### Show Document Status
-```
-UI States:
-- PENDING: "⏳ Awaiting Review"
-- UNDER_REVIEW: "🔍 Being Reviewed"
-- VERIFIED: "✅ Approved"
-- REJECTED: "❌ Rejected: [show notes]"
-- EXPIRED: "⚠️ Expired: Please renew"
-- DELETED: "🗑️ Deleted"
-```
-
-### Long Polling for Status
-```kotlin
-// Check document status periodically (every 30 seconds)
-// while on verification screen
-launch {
-    while (isActive) {
-        delay(30_000) // 30 seconds
-        val docs = api.getDriverDocuments()
-        updateUI(docs)
-    }
-}
-```
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/auth/login/otp` | — | Request a sign-up/sign-in code |
+| POST | `/auth/login/verify` | — | Verify code, get tokens (creates account if new) |
+| POST | `/auth/login` | — | Email + password sign-in (accounts with a password) |
+| POST | `/auth/refresh` | — | Exchange refresh token for a new pair |
+| GET | `/auth/me` | ✓ | Get the signed-in account |
+| POST | `/auth/logout` | — | Revoke a refresh token |
+| POST | `/auth/password/forgot` | — | Email a reset code |
+| POST | `/auth/password/reset` | — | Set new password with the reset code |
+| POST | `/auth/password/change` | ✓ | Change password while signed in |
+| POST | `/rider` | ✓ | Create rider profile |
+| GET | `/rider/{userId}` | ✓ | Get rider profile |
+| POST | `/driver` | ✓ | Create driver profile |
+| GET | `/driver/{userId}` | ✓ | Get driver profile (with vehicles/documents) |
+| PATCH | `/driver/{userId}` | ✓ | Update driver profile / go online |
+| POST | `/vehicles` | ✓ | Register a vehicle |
+| PATCH | `/users/{id}` | ✓ | Update account details (fullName, dateOfBirth, etc) |
+| GET | `/document-types` | ✓ | List document types to upload |
+| POST | `/driver/verification/{documentTypeId}` | ✓ | Upload a document |
+| GET | `/driver/verification` | ✓ | Get own documents with history |
+| GET | `/verification/{documentId}/history` | ✓ | Get one document's history |
+| DELETE | `/verification/{documentId}` | ✓ | Delete (soft) a document |
+| GET | `/admin/driver/verification/pending` | ✓ (admin) | List documents awaiting review |
+| PATCH | `/admin/verification/document/{documentId}` | ✓ (admin) | Review a document |
+| PATCH | `/admin/driver/{userId}/verification` | ✓ (admin) | Approve/change driver status |
 
 ---
 
-## Testing Credentials (Development Only)
-
-```
-Email: test-driver@nframa.local
-Password: TestPassword123!
-OTP Code (all environments): 123456
-```
-
----
-
-## Support
-
-- **API Status:** `https://api.nframa.local/health`
-- **Report Issues:** Use in-app feedback or email dev-support@nframa.local
-- **Docs:** Swagger UI at `https://api.nframa.local/docs`
+**Questions or discrepancies?** Cross-check against the live Swagger UI at `/docs` — it's generated directly from the backend's request/response schemas, so it can never drift from what the API actually does the way a hand-written doc can.

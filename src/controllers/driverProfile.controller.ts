@@ -68,7 +68,7 @@ export async function getDriverByCode(req: Request, res: Response) {
     ...DRIVER_ACTIVITY,
     action: "driver.view",
     description: "Looked up a driver by code",
-    targetId: result.userId,
+    targetId: result.driver.userId,
   });
 }
 
@@ -90,7 +90,7 @@ export async function getDriverByPhone(req: Request, res: Response) {
     ...DRIVER_ACTIVITY,
     action: "driver.view",
     description: "Looked up a driver by phone",
-    targetId: result.userId,
+    targetId: result.driver.userId,
   });
 }
 
