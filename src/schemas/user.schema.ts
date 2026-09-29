@@ -121,3 +121,12 @@ export const userResponseSchema = z.object({
     .nullable()
     .meta({ description: "Set when the account is soft-deleted" }),
 });
+
+// GET /users/:id only — not the base userResponseSchema, so login, GET /auth/me, GET /users (list), and the
+// nested user field on driver/rider/admin responses don't all carry this extra query along for the ride.
+export const userWithStatusHistoryResponseSchema = userResponseSchema.extend({
+  statusHistory: z.array(userStatusHistoryResponseSchema).meta({
+    description:
+      "Every suspend/reactivate transition, newest first. When the account holder is viewing their own record, each entry's notes is null — notes is staff-only; an admin viewing someone else's account sees it as recorded.",
+  }),
+});

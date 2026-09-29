@@ -202,6 +202,34 @@ describe("GET /users/:id", () => {
     expectStatus(res, 200);
     expect(res.body.message).toBe("User retrieved successfully");
     expect(res.body.data).toMatchObject({ id: rider.userId, fullName: rider.fullName });
+    expect(res.body.data.statusHistory).toEqual([]);
+  });
+
+  it("includes statusHistory; notes is null for a self-view but visible to an admin", async () => {
+    const target = await signUpByPhone("rider");
+    expectStatus(
+      await api
+        .patch(`/users/${target.userId}/status`)
+        .set(auth(userManager.token))
+        .send({ status: "suspended", reason: "Repeated cancellations", notes: "Internal note" }),
+      200,
+    );
+
+    const self = await api.get(`/users/${target.userId}`).set(auth(target.token));
+    const admin = await api.get(`/users/${target.userId}`).set(auth(userManager.token));
+
+    expectStatus(self, 200);
+    expect(self.body.data.statusHistory).toHaveLength(1);
+    expect(self.body.data.statusHistory[0]).toMatchObject({
+      reason: "Repeated cancellations",
+      notes: null,
+    });
+
+    expectStatus(admin, 200);
+    expect(admin.body.data.statusHistory[0]).toMatchObject({
+      reason: "Repeated cancellations",
+      notes: "Internal note",
+    });
   });
 
   it("doesn't let a rider read someone else's account", async () => {

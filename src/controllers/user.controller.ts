@@ -98,9 +98,15 @@ export async function getUser(req: Request, res: Response) {
   const user = await findUserOrThrow(id);
   await assertSelfOrPermission(req, user.id, moduleFor(user), "read");
 
-  sendSuccess(res, "User retrieved successfully", user);
+  const isSelf = req.auth?.id === user.id;
+  const history = await userStatusHistoryModel.getHistory(id);
+  // notes is staff-only — an account holder viewing their own record still sees why (reason) and when, just
+  // not internal commentary. An admin viewing someone else's account (the only other way to reach this) sees it.
+  const statusHistory = isSelf ? history.map((entry) => ({ ...entry, notes: null })) : history;
 
-  if (req.auth?.id !== user.id) {
+  sendSuccess(res, "User retrieved successfully", { ...user, statusHistory });
+
+  if (!isSelf) {
     logActivity(req, {
       module: "users",
       action: "user.view",
