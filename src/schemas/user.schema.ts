@@ -32,6 +32,19 @@ export const createUserSchema = z
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 
+// Mirrors updateDriverProfileSchema's fields (driverProfile.schema.ts) without importing it — that schema
+// already imports from this file (for driverWithRelationsResponseSchema's nested user), so importing it back
+// here would cycle. Only meaningful when the target account's role is driver (checked in the controller,
+// since the target isn't known until it's loaded); riders have no editable profile fields today.
+const driverProfileFieldsSchema = z
+  .object({
+    ghanaCardNumber: z.string().min(1).meta({ example: "GHA-123456789-0" }),
+    address: z.string().min(1).meta({ example: "12 Oxford St, Osu, Accra" }),
+    isOnline: z.boolean(),
+    autoAcceptBookings: z.boolean(),
+  })
+  .partial();
+
 export const updateUserSchema = z
   .object({
     fullName: fullNameSchema,
@@ -40,6 +53,10 @@ export const updateUserSchema = z
     phoneNumber: z.string().min(9).meta({ example: "541436414" }),
     dateOfBirth: z.iso.date().meta({ example: "1995-04-12" }),
     profilePicture: z.string().min(1).meta({ example: "https://cdn.nframa.com/avatars/ama.jpg" }),
+    profile: driverProfileFieldsSchema.meta({
+      description:
+        "Driver-specific fields (ghanaCardNumber, address, isOnline, autoAcceptBookings) — only valid when the target account's role is driver. Saved atomically with the personal fields above, in the same transaction.",
+    }),
   })
   .partial()
   .refine((data) => Object.keys(data).length > 0, {

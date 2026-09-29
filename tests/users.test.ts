@@ -378,6 +378,57 @@ describe("PATCH /users/:id", () => {
     expectStatus(res, 400);
     expect(res.body.error).toBe("At least one field must be provided");
   });
+
+  it("saves personal and driver-specific fields together in one call", async () => {
+    const target = await createPhoneAccount(userManager.token, "driver");
+    expectStatus(
+      await api.post("/driver").set(auth(userManager.token)).send({ userId: target.id }),
+      201,
+    );
+    trackForCleanup("carOwnerProfiles", { userId: target.id });
+    const { fullName } = data.person();
+
+    const res = await api.patch(`/users/${target.id}`).set(auth(userManager.token)).send({
+      fullName,
+      profile: { ghanaCardNumber: "GHA-555555555-0", isOnline: true },
+    });
+
+    expectStatus(res, 200);
+    expect(res.body.data).toMatchObject({ fullName });
+    expect(res.body.data).not.toHaveProperty("profile");
+
+    const driver = await api.get(`/driver/${target.id}`).set(auth(userManager.token));
+    expectStatus(driver, 200);
+    expect(driver.body.data.driver).toMatchObject({
+      ghanaCardNumber: "GHA-555555555-0",
+      isOnline: true,
+      user: { fullName },
+    });
+  });
+
+  it("rejects profile for a non-driver account", async () => {
+    const res = await api
+      .patch(`/users/${rider.userId}`)
+      .set(auth(rider.token))
+      .send({ profile: { isOnline: true } });
+
+    expectStatus(res, 400);
+    expect(res.body.error).toBe("profile can only be set for driver accounts");
+  });
+
+  it("rejects profile for a driver that hasn't created one yet", async () => {
+    const target = await createPhoneAccount(userManager.token, "driver");
+
+    const res = await api
+      .patch(`/users/${target.id}`)
+      .set(auth(userManager.token))
+      .send({ profile: { isOnline: true } });
+
+    expectStatus(res, 400);
+    expect(res.body.error).toBe(
+      "This driver has no profile yet — create one first via POST /driver",
+    );
+  });
 });
 
 describe("PATCH /users/:id/status", () => {

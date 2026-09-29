@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { userModel, type User } from "../models/user.model.js";
 import { roleModel } from "../models/role.model.js";
 import { authSessionModel } from "../models/authSession.model.js";
+import { driverProfileModel } from "../models/driverProfile.model.js";
 import { userStatusHistoryModel } from "../models/userStatusHistory.model.js";
 import { assertPermission, assertSelfOrPermission } from "../middlewares/authorize.js";
 import { logActivity } from "../services/activityLog.service.js";
@@ -110,11 +111,18 @@ export async function getUser(req: Request, res: Response) {
 
 export async function updateUser(req: Request, res: Response) {
   const { id } = req.validated.params as { id: string };
-  const { email, phoneCountryCode, phoneNumber, ...profile } = req.validated
+  const { email, phoneCountryCode, phoneNumber, profile, ...personalFields } = req.validated
     .body as UpdateUserInput;
 
   const target = await findUserOrThrow(id);
   await assertSelfOrPermission(req, target.id, moduleFor(target), "update");
+
+  if (profile && target.role !== "driver") {
+    throw AppError.badRequest("profile can only be set for driver accounts");
+  }
+  if (profile && !(await driverProfileModel.findById(id))) {
+    throw AppError.badRequest("This driver has no profile yet — create one first via POST /driver");
+  }
 
   // A changed identifier is no longer verified. Resending the current value isn't a change.
   const emailChanged = email !== undefined && email !== target.email;
@@ -122,11 +130,18 @@ export async function updateUser(req: Request, res: Response) {
     (phoneCountryCode !== undefined && phoneCountryCode !== target.phoneCountryCode) ||
     (phoneNumber !== undefined && phoneNumber !== target.phoneNumber);
 
-  const user = await userModel.updateUser(id, {
-    ...profile,
+  const userFields = {
+    ...personalFields,
     ...(emailChanged && { email, isEmailVerified: false }),
     ...(phoneChanged && { phoneCountryCode, phoneNumber, isPhoneVerified: false }),
-  });
+  };
+
+  // Personal and driver-specific fields are written in one transaction when profile is included, so a
+  // dashboard editing both together can't leave one saved without the other on a partial failure. The
+  // response stays the same flat user shape either way.
+  const user = profile
+    ? (await driverProfileModel.updateProfileWithUser(id, profile, userFields))?.driver.user
+    : await userModel.updateUser(id, userFields);
 
   if (!user) {
     throw AppError.notFound(`User not found: ${id}`);

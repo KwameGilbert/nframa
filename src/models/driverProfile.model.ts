@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import db from "../database/knex.js";
 import { BaseModel } from "./BaseModel.js";
 import type {
   CreateDriverProfileInput,
@@ -46,6 +47,34 @@ class DriverProfileModel extends BaseModel<DriverProfile> {
 
   updateProfile(userId: string, input: UpdateDriverProfileInput) {
     return this.updateById(userId, input as unknown as Partial<DriverProfile>);
+  }
+
+  // Personal fields (users table) and driver-specific fields (carOwnerProfiles) written in one transaction,
+  // so a dashboard editing both together (e.g. name + ghanaCardNumber) can't leave one saved without the
+  // other on a network glitch or validation error mid-request. Raw trx(...) on "users" rather than importing
+  // userModel here — driverProfile.model.ts is already imported by user.model.ts's callers the other way
+  // around (findByIdWithRelations reads userModel), so importing userModel's write path back would cycle.
+  async updateProfileWithUser(
+    userId: string,
+    profileFields: Partial<DriverProfile>,
+    userFields: Record<string, unknown>,
+  ) {
+    try {
+      await db.transaction(async (trx) => {
+        if (Object.keys(profileFields).length > 0) {
+          await trx(this.tableName).where({ userId }).update(profileFields);
+        }
+        if (Object.keys(userFields).length > 0) {
+          await trx("users")
+            .where({ id: userId })
+            .update({ ...userFields, updatedAt: new Date() });
+        }
+      });
+    } catch (err) {
+      this.handleDbError(err);
+    }
+
+    return this.findByIdWithRelations(userId);
   }
 
   updateVerificationStatus(
