@@ -5,12 +5,11 @@ import type { VerificationDocument } from "../schemas/verification.schema.js";
 // excludedColumns below) — it's only needed internally, to delete the underlying file later.
 export type VerificationDocumentRow = VerificationDocument & {
   storageKey: string;
-  storageDriver: "cloudinary";
 };
 
 // Columns safe to return to clients. Custom queries below use `this.table` directly, which — unlike
 // findById/findOne/updateById — doesn't run through BaseModel's sanitize(), so they select these
-// explicitly instead of `.select("*")` to keep storageKey/storageDriver from ever reaching a response.
+// explicitly instead of `.select("*")` to keep storageKey from ever reaching a response.
 const PUBLIC_COLUMNS = [
   "id",
   "userId",
@@ -29,7 +28,7 @@ const PUBLIC_COLUMNS = [
 
 export class VerificationDocumentModel extends BaseModel<VerificationDocumentRow> {
   protected readonly tableName = "verificationDocuments";
-  protected readonly excludedColumns = ["storageKey", "storageDriver"];
+  protected readonly excludedColumns = ["storageKey"];
 
   async uploadDocument(
     userId: string,
@@ -43,7 +42,6 @@ export class VerificationDocumentModel extends BaseModel<VerificationDocumentRow
       documentTypeId,
       fileUrl,
       storageKey,
-      storageDriver: "cloudinary",
       expiresAt,
       status: "PENDING",
     } as unknown as Partial<VerificationDocumentRow>);
@@ -65,8 +63,8 @@ export class VerificationDocumentModel extends BaseModel<VerificationDocumentRow
       .orderBy("uploadedAt", "desc");
   }
 
-  // Kept internal (includes storageKey/storageDriver) — used to check for a prior submission before
-  // insert, and by the caller to delete the old file if the driver is ever allowed to resubmit.
+  // Kept internal (includes storageKey) — used to check for a prior submission before insert, and
+  // by the caller to delete the old file if the driver is ever allowed to resubmit.
   async getDocumentByUserAndType(
     userId: string,
     documentTypeId: number,

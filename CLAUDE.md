@@ -107,14 +107,11 @@ Every controller action that changes something (and every auth action) ends with
 
 ### File storage
 
-Uploaded files (currently: driver verification documents) go through `src/services/storage.service.ts`, which switches between two drivers on `STORAGE_DRIVER` (`local` | `cloudinary`, default `local`) — nothing else in the app should read Cloudinary/filesystem APIs directly. `uploadFile(buffer, folder, originalFilename)` returns `{ fileUrl, storageKey, storageDriver }`; `storageKey` (a relative path for local, a `public_id` for Cloudinary) and `storageDriver` are stored alongside `fileUrl` so a file can be deleted later regardless of which driver holds it — they're internal-only, kept off every response the same way `UserModel` excludes `passwordHash` (see `VerificationDocumentModel.excludedColumns`, and its `PUBLIC_COLUMNS` for the custom queries that bypass `sanitize()`).
-
-- **local**: writes to `LOCAL_STORAGE_DIR` (default `uploads/`, gitignored) and is served back unauthenticated via `express.static` in `app.ts`, mounted at the path portion of `LOCAL_STORAGE_BASE_URL`. Fine for local dev; not a substitute for real access control on documents containing ID/license numbers — use `cloudinary` once this needs to be production-safe.
-- **cloudinary**: needs `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET`. Uploads via `upload_stream` with `resource_type: "auto"` so both images and PDFs work.
+Uploaded files (currently: driver verification documents) go through `src/services/storage.service.ts`, a thin wrapper over `src/services/cloudinary.service.ts` — nothing else in the app should call the Cloudinary SDK directly. `uploadFile(buffer, folder, originalFilename)` returns `{ fileUrl, storageKey }`: `fileUrl` is Cloudinary's real `secure_url`, stored as-is and returned to clients; `storageKey` (Cloudinary's `public_id`) is internal-only, kept off every response the same way `UserModel` excludes `passwordHash` (see `VerificationDocumentModel.excludedColumns`, and its `PUBLIC_COLUMNS` for the custom queries that bypass `sanitize()`), used only to delete the file later via `deleteFile(storageKey)`. Needs `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET`. Uploads via `upload_stream` with `resource_type: "auto"` so both images and PDFs work.
 
 Uploads arrive as `multipart/form-data`, not JSON — `src/middlewares/upload.ts` wraps `multer` (memory storage, 10MB limit, JPEG/PNG/WEBP/PDF only) and converts its errors to `AppError` so they reach `errorHandler` like any other 400, instead of an unhandled 500. It runs before `validate()` on routes that accept a file, since `express.json()` skips multipart bodies entirely — multer is what parses them.
 
-Tests never hit disk or Cloudinary: `tests/setup.ts` mocks `storage.service.js` the same way it mocks SMS/email, returning a fake-but-real-shaped URL built from the actual inputs.
+Tests never hit Cloudinary: `tests/setup.ts` mocks `storage.service.js` the same way it mocks SMS/email, returning a fake-but-real-shaped URL built from the actual inputs.
 
 ### Environment
 

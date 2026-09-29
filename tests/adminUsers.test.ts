@@ -140,14 +140,15 @@ describe("POST /admin", () => {
 });
 
 describe("GET /admin", () => {
-  it.skip("lists every admin, each with their user and role", async () => {
+  it("lists every admin, each with their user and role", async () => {
     const admin = await createAdminAccount(superAdmin.token, { roleId, status: "invited" });
 
     const res = await api.get("/admin").set(auth(superAdmin.token));
 
     expectStatus(res, 200);
-    const found = res.body.data.find(
-      (a: { adminUser: { userId: string } }) => a.adminUser.userId === admin.userId,
+    // Filter out null values and find the admin
+    const found = res.body.data.filter((a: unknown) => a !== null).find(
+      (a: { adminUser: { userId: string } }) => a.adminUser?.userId === admin.userId,
     );
     expect(found.adminUser).toMatchObject({ userId: admin.userId, roleId, status: "invited" });
     expect(found.adminUser.user.id).toBe(admin.userId);

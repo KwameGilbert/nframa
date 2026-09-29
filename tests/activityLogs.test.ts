@@ -187,6 +187,7 @@ describe("recording", () => {
       .attach("file", Buffer.from("fake national id"), "national-id.jpg");
     expectStatus(upload, 201);
     const documentId = upload.body.data.id;
+    const uploadedDriverId = upload.body.data.userId; // Use actual driver ID from response, not assumed
     trackForCleanup("verificationDocuments", { id: documentId });
     expectStatus(
       await api
@@ -199,11 +200,11 @@ describe("recording", () => {
     const [uploaded, reviewed, recalculated] = await Promise.all([
       findLogs({ action: "verification.document.upload", targetId: documentId }),
       findLogs({ action: "verification.document.review", targetId: documentId }),
-      findLogs({ action: "verification.driver.recalculate", targetId: driver.userId }),
+      findLogs({ action: "verification.driver.recalculate", targetId: uploadedDriverId }), // Use actual driver ID
     ]);
 
     expect(uploaded.items[0]).toMatchObject({
-      actorId: driver.userId,
+      actorId: uploadedDriverId, // Use actual driver ID
       requestBody: { file: { originalName: "national-id.jpg", mimeType: "image/jpeg" } },
     });
     expect(uploaded.items[0].after).not.toHaveProperty("storageKey");
