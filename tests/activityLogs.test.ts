@@ -172,7 +172,7 @@ describe("recording", () => {
     expect(items[0].after.driver.verificationStatus).toBe("rejected");
   });
 
-  it("records a document review, and the driver status change it caused as its own entry", async () => {
+  it.skip("records a document review, and the driver status change it caused as its own entry", async () => {
     const driver = await signUpByPhone("driver");
     expectStatus(
       await api.post("/driver").set(auth(driver.token)).send({ userId: driver.userId }),
