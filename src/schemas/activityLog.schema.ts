@@ -80,6 +80,20 @@ export const listActivityLogsQuerySchema = z
 
 export type ListActivityLogsQuery = z.infer<typeof listActivityLogsQuerySchema>;
 
+// Just paging — the user is fixed by the route param (GET /users/:id/activity-logs), not a filter here.
+export const userActivityLogsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1).meta({ description: "Page number, from 1" }),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(20)
+    .meta({ description: "Entries per page, 1-100 (default 20)" }),
+});
+
+export type UserActivityLogsQuery = z.infer<typeof userActivityLogsQuerySchema>;
+
 const snapshotSchema = z.record(z.string(), z.unknown()).nullable();
 
 export const activityLogActorSchema = z

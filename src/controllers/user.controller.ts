@@ -4,6 +4,7 @@ import { roleModel } from "../models/role.model.js";
 import { authSessionModel } from "../models/authSession.model.js";
 import { driverProfileModel } from "../models/driverProfile.model.js";
 import { userStatusHistoryModel } from "../models/userStatusHistory.model.js";
+import { activityLogModel } from "../models/activityLog.model.js";
 import { assertPermission, assertSelfOrPermission } from "../middlewares/authorize.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { AppError } from "../utils/AppError.js";
@@ -13,6 +14,7 @@ import type {
   UpdateUserInput,
   UpdateUserStatusInput,
 } from "../schemas/user.schema.js";
+import type { UserActivityLogsQuery } from "../schemas/activityLog.schema.js";
 
 // Admin accounts are managed under "admin" (a dedicated module — see MODULES), riders/drivers under
 // "users" — otherwise anyone with users access could edit an admin's email and take the account over via
@@ -230,6 +232,33 @@ export async function getUserStatusHistory(req: Request, res: Response) {
     module: "users",
     action: "user.status.history.view",
     description: `Viewed a ${target.role} account's status history`,
+    targetType: "user",
+    targetId: id,
+  });
+}
+
+// The full audit-log shape (IP, request body, etc.), so this is gated on activityLogs: read like
+// GET /admin/activity-logs itself, not on users: read — someone with only users: read shouldn't get audit
+// detail through a side door. Combines both directions: what this account did (actor) and what was done to
+// it (target) — GET /admin/activity-logs?targetType=user&targetId=<id> alone only covers the latter.
+export async function getUserActivityLogs(req: Request, res: Response) {
+  const { id } = req.validated.params as { id: string };
+  const { page, limit } = req.validated.query as UserActivityLogsQuery;
+
+  await findUserOrThrow(id);
+
+  const { items, stats } = await activityLogModel.forUser(id, { page, limit });
+
+  sendSuccess(res, "User activity logs retrieved successfully", {
+    items,
+    pagination: { page, limit, totalItems: stats.total, totalPages: Math.ceil(stats.total / limit) },
+    stats,
+  });
+
+  logActivity(req, {
+    module: "activityLogs",
+    action: "activityLogs.user.list",
+    description: `Viewed ${items.length} activity log entr${items.length === 1 ? "y" : "ies"} for a user (page ${page})`,
     targetType: "user",
     targetId: id,
   });

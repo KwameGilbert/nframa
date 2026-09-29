@@ -8,6 +8,7 @@ import {
   updateUserStatusSchema,
   userIdParamsSchema,
 } from "../schemas/user.schema.js";
+import { userActivityLogsQuerySchema } from "../schemas/activityLog.schema.js";
 import {
   listUsers,
   createUser,
@@ -15,6 +16,7 @@ import {
   updateUser,
   updateUserStatus,
   getUserStatusHistory,
+  getUserActivityLogs,
   deleteUser,
 } from "../controllers/user.controller.js";
 
@@ -49,6 +51,16 @@ userRouter.get(
   authenticate,
   validate({ params: userIdParamsSchema }),
   getUserStatusHistory,
+);
+
+// Fixed permission (unlike the routes above, it doesn't depend on the target's role), so checked here
+// rather than in the controller — same as GET /admin/activity-logs.
+userRouter.get(
+  "/users/:id/activity-logs",
+  authenticate,
+  requirePermission("activityLogs", "read"),
+  validate({ params: userIdParamsSchema, query: userActivityLogsQuerySchema }),
+  getUserActivityLogs,
 );
 
 userRouter.delete("/users/:id", authenticate, validate({ params: userIdParamsSchema }), deleteUser);

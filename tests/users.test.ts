@@ -12,6 +12,7 @@ import {
 import * as data from "./helpers/data.js";
 import { newEmail, newPhone } from "./helpers/unique.js";
 import { trackForCleanup } from "./helpers/cleanup.js";
+import { flushActivityLogs } from "../src/services/activityLog.service.js";
 import db from "../src/database/knex.js";
 
 type SignedInAdmin = Awaited<ReturnType<typeof createSignedInAdmin>>;
@@ -582,6 +583,49 @@ describe("GET /users/:id/status-history", () => {
 
     expectStatus(res, 403);
     expect(res.body.error).toBe("Missing permission: read on users");
+  });
+});
+
+describe("GET /users/:id/activity-logs", () => {
+  it("combines what the account did and what was done to it, newest first", async () => {
+    const target = await signUpByPhone("driver"); // actor: the account itself (auth.signup, user.update)
+    expectStatus(
+      await api
+        .patch(`/users/${target.userId}/status`)
+        .set(auth(userManager.token))
+        .send({ status: "suspended", reason: "Test" }), // actor: userManager, target: the account
+      200,
+    );
+    await flushActivityLogs();
+
+    const res = await api
+      .get(`/users/${target.userId}/activity-logs`)
+      .set(auth(superAdmin.token));
+
+    expectStatus(res, 200);
+    const actions = res.body.data.items.map((item: { action: string }) => item.action);
+    expect(actions).toContain("auth.signup"); // as actor
+    expect(actions).toContain("user.suspend"); // as target, by a different account
+    expect(res.body.data.items[0].action).toBe("user.suspend");
+  });
+
+  it("needs activityLogs: read — users: read alone isn't enough", async () => {
+    const target = await createPhoneAccount(userManager.token, "rider");
+
+    const res = await api
+      .get(`/users/${target.id}/activity-logs`)
+      .set(auth(supportAgent.token));
+
+    expectStatus(res, 403);
+    expect(res.body.error).toBe("Missing permission: read on activityLogs");
+  });
+
+  it("returns 404 for an unknown user", async () => {
+    const res = await api
+      .get("/users/7c1e4b2a-9d3f-4e8a-b6c5-2f1a3d4e5b6c/activity-logs")
+      .set(auth(superAdmin.token));
+
+    expectStatus(res, 404);
   });
 });
 

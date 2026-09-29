@@ -8,6 +8,10 @@ import {
   userResponseSchema,
   userStatusHistoryResponseSchema,
 } from "../schemas/user.schema.js";
+import {
+  activityLogListResponseSchema,
+  userActivityLogsQuerySchema,
+} from "../schemas/activityLog.schema.js";
 
 registry.registerPath({
   method: "get",
@@ -140,6 +144,30 @@ registry.registerPath({
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller lacks users: read (admin: read for an admin account)"),
+    404: errorResponse("User not found"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/users/{id}/activity-logs",
+  tags: ["Users"],
+  summary: "Get one account's activity: what it did, and what was done to it",
+  description:
+    "Both directions of the audit trail for this account — entries where it's the actor (sign-ins, uploads, changes it made) and entries where it's the target (profile changes, suspensions, etc. done to it by someone else). Newest first. This is the same entry shape as GET /admin/activity-logs, so it needs the same permission — activityLogs: read, not users: read — rather than exposing audit detail (IP, request body) to anyone who can merely view profiles. For a narrower view (target only, or actor only), use GET /admin/activity-logs directly with targetType=user&targetId={id} or actorId={id}.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: userIdParamsSchema,
+    query: userActivityLogsQuerySchema,
+  },
+  responses: {
+    200: successResponse(
+      "User activity logs retrieved successfully",
+      activityLogListResponseSchema,
+    ),
+    400: errorResponse("Validation error"),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Missing permission: read on activityLogs"),
     404: errorResponse("User not found"),
   },
 });

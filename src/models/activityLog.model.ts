@@ -2,6 +2,11 @@ import db from "../database/knex.js";
 import { BaseModel } from "./BaseModel.js";
 import type { ActivityModule, ListActivityLogsQuery } from "../schemas/activityLog.schema.js";
 
+interface Page {
+  page: number;
+  limit: number;
+}
+
 export interface ActivityLog {
   id: string;
   actorId: string | null;
@@ -206,6 +211,37 @@ class ActivityLogModel extends BaseModel<ActivityLog> {
       .where("al.id", id)
       .first();
     return row && withActor(row);
+  }
+
+  // Everything about one account: what they did (actorId) and what was done to them (targetId — used as-is
+  // whatever the targetType, since a user's own id is never coincidentally another record's id). A fuller
+  // view than targetType=user&targetId=<id> alone, which GET /admin/activity-logs already covers for "changes
+  // to the account itself" but misses the account's own sign-ins, uploads, and other actions as actor.
+  private forUserFiltered(userId: string) {
+    return db("activityLogs as al")
+      .leftJoin("users as actor", "actor.id", "al.actorId")
+      .where((qb) => qb.where("al.actorId", userId).orWhere("al.targetId", normalizeTargetId(userId)));
+  }
+
+  async forUser(userId: string, { page, limit }: Page) {
+    const [stats, rows] = await Promise.all([
+      this.forUserFiltered(userId).first(
+        db.raw("count(*)::int as total"),
+        db.raw("(count(*) filter (where al.result = 'success'))::int as success"),
+        db.raw("(count(*) filter (where al.result = 'failure'))::int as failure"),
+        db.raw(`count(distinct al."actorId")::int as actors`),
+      ) as Promise<{ total: number; success: number; failure: number; actors: number }>,
+      this.forUserFiltered(userId)
+        .select("al.*", ...ACTOR_COLUMNS)
+        .orderBy([
+          { column: "al.createdAt", order: "desc" },
+          { column: "al.id", order: "desc" },
+        ])
+        .limit(limit)
+        .offset((page - 1) * limit) as Promise<Row[]>,
+    ]);
+
+    return { items: rows.map(withActor), stats };
   }
 }
 
