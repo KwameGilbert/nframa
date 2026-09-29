@@ -167,6 +167,7 @@ export class VerificationDocumentModel extends BaseModel<VerificationDocumentRow
         })
         .whereNull("verificationDocuments.deletedAt")
         .join("users", "verificationDocuments.userId", "users.id")
+        .whereNull("users.deletedAt")
         .join("documentTypes", "verificationDocuments.documentTypeId", "documentTypes.id")
         .select(
           ...PUBLIC_COLUMNS.map((column) => `verificationDocuments.${column}`),

@@ -375,6 +375,16 @@ describe("GET /admin/driver/verification/pending", () => {
     expectStatus(res, 403);
     expect(res.body.error).toBe("Missing permission: read on verification");
   });
+
+  it("excludes a document whose driver account has been deleted", async () => {
+    const { driver, document } = await driverWithDocument("NATIONAL_ID");
+    expectStatus(await api.delete(`/users/${driver.userId}`).set(auth(driver.token)), 200);
+
+    const res = await api.get("/admin/driver/verification/pending").set(auth(reviewer.token));
+
+    expectStatus(res, 200);
+    expect(res.body.data.some((d: { id: string }) => d.id === document.id)).toBe(false);
+  });
 });
 
 describe("PATCH /admin/driver/:userId/verification", () => {
