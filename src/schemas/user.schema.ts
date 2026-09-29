@@ -3,6 +3,11 @@ import { emailSchema, idParamsSchema, phoneCountryCodeSchema } from "./common.sc
 
 const fullNameSchema = z.string().min(1).meta({ example: "Ama Mensah" });
 
+const userStatusSchema = z.enum(["active", "suspended"]).meta({
+  description: "active: account is usable; suspended: locked out of sign-in and session refresh",
+  example: "active",
+});
+
 export const createUserSchema = z
   .object({
     fullName: fullNameSchema.optional(),
@@ -43,6 +48,12 @@ export const updateUserSchema = z
 
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 
+export const updateUserStatusSchema = z.object({
+  status: userStatusSchema,
+});
+
+export type UpdateUserStatusInput = z.infer<typeof updateUserStatusSchema>;
+
 export const userIdParamsSchema = idParamsSchema;
 
 export const userResponseSchema = z.object({
@@ -52,10 +63,7 @@ export const userResponseSchema = z.object({
   phoneCountryCode: z.string().nullable().meta({ example: "+233" }),
   phoneNumber: z.string().nullable().meta({ example: "541436414" }),
   dateOfBirth: z.iso.date().nullable().meta({ example: "1995-04-12" }),
-  status: z.enum(["active", "suspended"]).meta({
-    description: "active: account is usable; suspended: account is locked out",
-    example: "active",
-  }),
+  status: userStatusSchema,
   profilePicture: z.string().nullable().meta({ example: "https://cdn.nframa.com/avatars/ama.jpg" }),
   oauthProvider: z.enum(["google", "facebook", "apple"]).nullable().meta({
     description: "OAuth provider if the account was created via social login",

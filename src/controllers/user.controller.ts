@@ -6,7 +6,11 @@ import { assertPermission, assertSelfOrPermission } from "../middlewares/authori
 import { logActivity } from "../services/activityLog.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
-import type { CreateUserInput, UpdateUserInput } from "../schemas/user.schema.js";
+import type {
+  CreateUserInput,
+  UpdateUserInput,
+  UpdateUserStatusInput,
+} from "../schemas/user.schema.js";
 
 // Admin accounts are managed under "admin" (a dedicated module — see MODULES), riders/drivers under
 // "users" — otherwise anyone with users access could edit an admin's email and take the account over via
@@ -139,8 +143,48 @@ export async function updateUser(req: Request, res: Response) {
   });
 }
 
-// Riders and drivers can delete their own account; deleting anyone else takes the delete permission
-// (admin: delete for an admin account). Admins can't delete themselves — see softDeleteAccount.
+
+// Suspending is a distinct moderation action, not a routine profile edit — kept off PATCH /users/:id so
+// it gets its own permission check, self-lockout guard, and activity log action (mirrors PATCH
+// /admin/:userId's status field for admins, but as its own endpoint here since updateUserSchema is mostly
+// self-editable profile fields that a suspend/reactivate shouldn't be mixed in with).
+export async function updateUserStatus(req: Request, res: Response) {
+  const { id } = req.validated.params as { id: string };
+  const { status } = req.validated.body as UpdateUserStatusInput;
+
+  if (req.auth?.id === id) {
+    throw AppError.forbidden("You can't change your own account status");
+  }
+
+  const target = await findUserOrThrow(id);
+  await assertPermission(req, moduleFor(target), "update");
+
+  if (target.status === status) {
+    throw AppError.conflict(`Account is already ${status}`);
+  }
+
+  const user = await userModel.setStatus(id, status);
+  if (!user) {
+    throw AppError.notFound(`User not found: ${id}`);
+  }
+
+  if (status === "suspended") {
+    // Existing access tokens die within 15 minutes; this makes sure none of them can be refreshed.
+    await authSessionModel.revokeAllForUser(id);
+  }
+
+  sendSuccess(res, `Account ${status} successfully`, user);
+
+  logActivity(req, {
+    ...USER_ACTIVITY,
+    action: status === "suspended" ? "user.suspend" : "user.reactivate",
+    description: `${status === "suspended" ? "Suspended" : "Reactivated"} a ${target.role} account`,
+    targetId: id,
+    before: target,
+    after: user,
+  });
+}
+
 export async function deleteUser(req: Request, res: Response) {
   const { id } = req.validated.params as { id: string };
 

@@ -60,6 +60,11 @@ class UserModel extends BaseModel<User> {
     return this.updateById(id, { deletedAt: now, updatedAt: now });
   }
 
+  // login/refresh/getMe all call assertAccountActive, which already checks status — this just sets it.
+  setStatus(id: string, status: "active" | "suspended") {
+    return this.updateById(id, { status, updatedAt: new Date() });
+  }
+
   async touchLastLogin(id: string): Promise<void> {
     await this.updateById(id, { lastActiveAt: new Date() });
   }

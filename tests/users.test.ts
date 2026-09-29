@@ -380,6 +380,93 @@ describe("PATCH /users/:id", () => {
   });
 });
 
+describe("PATCH /users/:id/status", () => {
+  it("suspends a rider, blocking further sign-in", async () => {
+    const target = await createPhoneAccount(userManager.token, "rider");
+
+    const res = await api
+      .patch(`/users/${target.id}/status`)
+      .set(auth(userManager.token))
+      .send({ status: "suspended" });
+
+    expectStatus(res, 200);
+    expect(res.body.message).toBe("Account suspended successfully");
+    expect(res.body.data.status).toBe("suspended");
+    const otp = await api.post("/auth/login/otp").send({
+      phoneCountryCode: data.GHANA_COUNTRY_CODE,
+      phoneNumber: target.phoneNumber,
+    });
+    expectStatus(otp, 403);
+    expect(otp.body.error).toBe("Account is not active");
+  });
+
+  it("reactivates a suspended account", async () => {
+    const target = await createPhoneAccount(userManager.token, "driver");
+    expectStatus(
+      await api
+        .patch(`/users/${target.id}/status`)
+        .set(auth(userManager.token))
+        .send({ status: "suspended" }),
+      200,
+    );
+
+    const res = await api
+      .patch(`/users/${target.id}/status`)
+      .set(auth(userManager.token))
+      .send({ status: "active" });
+
+    expectStatus(res, 200);
+    expect(res.body.data.status).toBe("active");
+  });
+
+  it("returns 409 for a status the account already has", async () => {
+    const target = await createPhoneAccount(userManager.token, "rider");
+
+    const res = await api
+      .patch(`/users/${target.id}/status`)
+      .set(auth(userManager.token))
+      .send({ status: "active" });
+
+    expectStatus(res, 409);
+    expect(res.body.error).toBe("Account is already active");
+  });
+
+  it("doesn't let a rider change someone else's status", async () => {
+    const other = await createPhoneAccount(userManager.token, "rider");
+
+    const res = await api
+      .patch(`/users/${other.id}/status`)
+      .set(auth(rider.token))
+      .send({ status: "suspended" });
+
+    expectStatus(res, 403);
+    expect(res.body.error).toBe("Missing permission: update on users");
+  });
+
+  it("doesn't let anyone change their own status", async () => {
+    const res = await api
+      .patch(`/users/${userManager.userId}/status`)
+      .set(auth(userManager.token))
+      .send({ status: "suspended" });
+
+    expectStatus(res, 403);
+    expect(res.body.error).toBe("You can't change your own account status");
+  });
+
+  it("needs admin: update, not users: update, to change an admin's status", async () => {
+    const role = await createRole(superAdmin.token, { users: { read: true } });
+    const target = await createAdminAccount(superAdmin.token, { roleId: role.id });
+
+    const res = await api
+      .patch(`/users/${target.userId}/status`)
+      .set(auth(userManager.token))
+      .send({ status: "suspended" });
+
+    expectStatus(res, 403);
+    expect(res.body.error).toBe("Missing permission: update on admin");
+  });
+});
+
 describe("DELETE /users/:id", () => {
   it("lets a rider delete their own account, keeping the record (soft delete)", async () => {
     const self = await signUpByPhone("rider");

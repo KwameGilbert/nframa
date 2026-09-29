@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   createUserSchema,
   updateUserSchema,
+  updateUserStatusSchema,
   userIdParamsSchema,
   userResponseSchema,
 } from "../schemas/user.schema.js";
@@ -13,7 +14,7 @@ registry.registerPath({
   tags: ["Users"],
   summary: "List every rider and driver",
   description:
-    "Riders and drivers only — admin accounts are listed via GET /admin instead (they're a separate permission module). Needs users: read.",
+    "Riders and drivers only — admin accounts are listed via GET /admin instead (they're a separate permission module). Deleted accounts are excluded; look one up directly by id (GET /users/{id}) if you already have it. Needs users: read.",
   security: [{ bearerAuth: [] }],
   responses: {
     200: successResponse("Users retrieved successfully", z.array(userResponseSchema)),
@@ -88,6 +89,32 @@ registry.registerPath({
     ),
     404: errorResponse("User not found"),
     409: errorResponse("Another user already has this email or phone number"),
+  },
+});
+
+registry.registerPath({
+  method: "patch",
+  path: "/users/{id}/status",
+  tags: ["Users"],
+  summary: "Suspend or reactivate a user",
+  description:
+    "Separate from PATCH /users/{id} since this is a moderation action, not a profile edit. Suspending signs the account out of every session — it can no longer log in or refresh, and any access token it holds stops working within 15 minutes. Needs users: update (admin: update for an admin account); the caller can't change their own status.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: userIdParamsSchema,
+    body: {
+      content: { "application/json": { schema: updateUserStatusSchema } },
+    },
+  },
+  responses: {
+    200: successResponse("Account suspended successfully", userResponseSchema),
+    400: errorResponse("Validation error"),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse(
+      "Caller lacks users: update (admin: update for an admin account), or tried to change their own status",
+    ),
+    404: errorResponse("User not found"),
+    409: errorResponse("Account is already active/suspended"),
   },
 });
 

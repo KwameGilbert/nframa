@@ -2,12 +2,18 @@ import { Router } from "express";
 import { validate } from "../middlewares/validate.js";
 import { authenticate } from "../middlewares/authenticate.js";
 import { requirePermission } from "../middlewares/authorize.js";
-import { createUserSchema, updateUserSchema, userIdParamsSchema } from "../schemas/user.schema.js";
+import {
+  createUserSchema,
+  updateUserSchema,
+  updateUserStatusSchema,
+  userIdParamsSchema,
+} from "../schemas/user.schema.js";
 import {
   listUsers,
   createUser,
   getUser,
   updateUser,
+  updateUserStatus,
   deleteUser,
 } from "../controllers/user.controller.js";
 
@@ -27,6 +33,14 @@ userRouter.patch(
   authenticate,
   validate({ params: userIdParamsSchema, body: updateUserSchema }),
   updateUser,
+);
+
+// Permission is checked in the controller, same reason as POST /users above.
+userRouter.patch(
+  "/users/:id/status",
+  authenticate,
+  validate({ params: userIdParamsSchema, body: updateUserStatusSchema }),
+  updateUserStatus,
 );
 
 userRouter.delete("/users/:id", authenticate, validate({ params: userIdParamsSchema }), deleteUser);
