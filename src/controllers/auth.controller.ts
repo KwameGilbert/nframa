@@ -239,6 +239,7 @@ export async function getMe(req: Request, res: Response) {
   if (!account) {
     throw AppError.unauthorized("User no longer exists");
   }
+
   await assertAccountActive(account);
 
   sendSuccess(res, "Account retrieved successfully", await buildAccount(account));
@@ -251,6 +252,7 @@ async function checkPassword(user: User | undefined, password: string) {
     await hashPassword(password);
     throw AppError.unauthorized("Invalid email or password");
   }
+  
   if (!(await verifyPassword(password, user.passwordHash))) {
     throw AppError.unauthorized("Invalid email or password");
   }
