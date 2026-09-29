@@ -65,9 +65,14 @@ class UserModel extends BaseModel<User> {
   }
 
   // Riders and drivers only — admin accounts are a separate concern with their own permission module (see
-  // MODULES), listed instead via GET /admin. Mirrors moduleFor() in user.controller.ts.
+  // MODULES), listed instead via GET /admin. Mirrors moduleFor() in user.controller.ts. Deleted accounts are
+  // excluded here (unlike findById) — an admin browsing the list shouldn't see accounts that no longer
+  // exist; one with the id already (e.g. from an activity log entry) can still look it up directly.
   async findAllRidersAndDrivers(): Promise<User[]> {
-    const rows = await this.table.whereIn("role", ["rider", "driver"]).orderBy("createdAt", "desc");
+    const rows = await this.table
+      .whereIn("role", ["rider", "driver"])
+      .whereNull("deletedAt")
+      .orderBy("createdAt", "desc");
     return rows.map((row: User) => this.sanitize(row));
   }
 }

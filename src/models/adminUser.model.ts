@@ -43,8 +43,15 @@ class AdminUserModel extends BaseModel<AdminUser> {
     return { adminUser: { ...adminUser, user, role: role ?? null } };
   }
 
+  // Deleted accounts are excluded here (unlike findByIdWithRelations, used directly by GET /admin/:userId) —
+  // an admin browsing the list shouldn't see admins whose account no longer exists; one with the id already
+  // can still look it up directly. The join also drops any orphaned admin row whose user row is gone entirely.
   async findAllWithRelations() {
-    const adminUsers = await this.table.orderBy("userId", "desc");
+    const adminUsers = await this.table
+      .join("users", "users.id", "adminUsers.userId")
+      .whereNull("users.deletedAt")
+      .select("adminUsers.*")
+      .orderBy("adminUsers.userId", "desc");
     return Promise.all(adminUsers.map((admin) => this.findByIdWithRelations(admin.userId)));
   }
 }

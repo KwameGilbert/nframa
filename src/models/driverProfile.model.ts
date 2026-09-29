@@ -58,9 +58,16 @@ class DriverProfileModel extends BaseModel<DriverProfile> {
   }
 
   // Every "get driver(s)" endpoint returns the same shape — profile, user, vehicles, documents — built here
-  // once and reused by the single-record lookups below, so none of them duplicate the joins.
+  // once and reused by the single-record lookups below, so none of them duplicate the joins. Deleted
+  // accounts are excluded (unlike findByIdWithRelations, used directly by GET /driver/:userId) — an admin
+  // browsing the list shouldn't see drivers whose account no longer exists; one with the id already can
+  // still look it up directly. The join also drops any orphaned profile whose user row is gone entirely.
   async findAllDriversWithRelations() {
-    const drivers = await this.table.orderBy("userId", "desc");
+    const drivers = await this.table
+      .join("users", "users.id", "carOwnerProfiles.userId")
+      .whereNull("users.deletedAt")
+      .select("carOwnerProfiles.*")
+      .orderBy("carOwnerProfiles.userId", "desc");
     return Promise.all(drivers.map((driver) => this.findByIdWithRelations(driver.userId)));
   }
 
