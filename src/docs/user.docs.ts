@@ -6,6 +6,7 @@ import {
   updateUserStatusSchema,
   userIdParamsSchema,
   userResponseSchema,
+  userStatusHistoryResponseSchema,
 } from "../schemas/user.schema.js";
 
 registry.registerPath({
@@ -98,7 +99,7 @@ registry.registerPath({
   tags: ["Users"],
   summary: "Suspend or reactivate a user",
   description:
-    "Separate from PATCH /users/{id} since this is a moderation action, not a profile edit. Suspending signs the account out of every session — it can no longer log in or refresh, and any access token it holds stops working within 15 minutes. Needs users: update (admin: update for an admin account); the caller can't change their own status.",
+    "Separate from PATCH /users/{id} since this is a moderation action, not a profile edit. Suspending signs the account out of every session — it can no longer log in or refresh, and any access token it holds stops working within 15 minutes. reason and notes (both optional) are recorded on a status history entry (GET /users/{id}/status-history), not on the user record itself — reason is meant to be shown to the account holder on request, notes are for staff only. Needs users: update (admin: update for an admin account); the caller can't change their own status.",
   security: [{ bearerAuth: [] }],
   request: {
     params: userIdParamsSchema,
@@ -115,6 +116,29 @@ registry.registerPath({
     ),
     404: errorResponse("User not found"),
     409: errorResponse("Account is already active/suspended"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/users/{id}/status-history",
+  tags: ["Users"],
+  summary: "Get a user's status change history (suspensions and reactivations)",
+  description:
+    "Every status transition, newest first, each with who made it, when, and its reason/notes. Admin-only — not visible via self-access, since notes may contain internal staff commentary. Needs users: read (admin: read for an admin account).",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: userIdParamsSchema,
+  },
+  responses: {
+    200: successResponse(
+      "Status history retrieved successfully",
+      z.array(userStatusHistoryResponseSchema),
+    ),
+    400: errorResponse("Validation error"),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Caller lacks users: read (admin: read for an admin account)"),
+    404: errorResponse("User not found"),
   },
 });
 

@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { userModel, type User } from "../models/user.model.js";
 import { roleModel } from "../models/role.model.js";
 import { authSessionModel } from "../models/authSession.model.js";
+import { userStatusHistoryModel } from "../models/userStatusHistory.model.js";
 import { assertPermission, assertSelfOrPermission } from "../middlewares/authorize.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { AppError } from "../utils/AppError.js";
@@ -150,7 +151,7 @@ export async function updateUser(req: Request, res: Response) {
 // self-editable profile fields that a suspend/reactivate shouldn't be mixed in with).
 export async function updateUserStatus(req: Request, res: Response) {
   const { id } = req.validated.params as { id: string };
-  const { status } = req.validated.body as UpdateUserStatusInput;
+  const { status, reason, notes } = req.validated.body as UpdateUserStatusInput;
 
   if (req.auth?.id === id) {
     throw AppError.forbidden("You can't change your own account status");
@@ -173,15 +174,49 @@ export async function updateUserStatus(req: Request, res: Response) {
     await authSessionModel.revokeAllForUser(id);
   }
 
+  // The full reason/notes live here, not on the users row itself — GET /users/:id/status-history is
+  // where a dashboard reads "why", across every past transition, not just the current one.
+  await userStatusHistoryModel.logStatusChange(
+    id,
+    target.status,
+    status,
+    req.auth?.id ?? null,
+    reason,
+    notes,
+  );
+
   sendSuccess(res, `Account ${status} successfully`, user);
 
   logActivity(req, {
     ...USER_ACTIVITY,
     action: status === "suspended" ? "user.suspend" : "user.reactivate",
-    description: `${status === "suspended" ? "Suspended" : "Reactivated"} a ${target.role} account`,
+    description:
+      `${status === "suspended" ? "Suspended" : "Reactivated"} a ${target.role} account` +
+      (reason ? ` (${reason})` : ""),
     targetId: id,
     before: target,
     after: user,
+  });
+}
+
+// Admin-only: reason is meant for the account holder to see on request, but notes are internal, so this
+// isn't exposed via assertSelfOrPermission the way GET /users/:id is.
+export async function getUserStatusHistory(req: Request, res: Response) {
+  const { id } = req.validated.params as { id: string };
+
+  const target = await findUserOrThrow(id);
+  await assertPermission(req, moduleFor(target), "read");
+
+  const history = await userStatusHistoryModel.getHistory(id);
+
+  sendSuccess(res, "Status history retrieved successfully", history);
+
+  logActivity(req, {
+    module: "users",
+    action: "user.status.history.view",
+    description: `Viewed a ${target.role} account's status history`,
+    targetType: "user",
+    targetId: id,
   });
 }
 

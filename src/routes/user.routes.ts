@@ -14,6 +14,7 @@ import {
   getUser,
   updateUser,
   updateUserStatus,
+  getUserStatusHistory,
   deleteUser,
 } from "../controllers/user.controller.js";
 
@@ -41,6 +42,13 @@ userRouter.patch(
   authenticate,
   validate({ params: userIdParamsSchema, body: updateUserStatusSchema }),
   updateUserStatus,
+);
+
+userRouter.get(
+  "/users/:id/status-history",
+  authenticate,
+  validate({ params: userIdParamsSchema }),
+  getUserStatusHistory,
 );
 
 userRouter.delete("/users/:id", authenticate, validate({ params: userIdParamsSchema }), deleteUser);

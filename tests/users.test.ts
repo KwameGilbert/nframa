@@ -465,6 +465,73 @@ describe("PATCH /users/:id/status", () => {
     expectStatus(res, 403);
     expect(res.body.error).toBe("Missing permission: update on admin");
   });
+
+  it("records the reason and notes on a status history entry, not on the user record", async () => {
+    const target = await createPhoneAccount(userManager.token, "rider");
+
+    const res = await api
+      .patch(`/users/${target.id}/status`)
+      .set(auth(userManager.token))
+      .send({
+        status: "suspended",
+        reason: "Repeated ride cancellations",
+        notes: "Third warning this month, see ticket #482",
+      });
+
+    expectStatus(res, 200);
+    expect(res.body.data).not.toHaveProperty("reason");
+    expect(res.body.data).not.toHaveProperty("notes");
+
+    const history = await api
+      .get(`/users/${target.id}/status-history`)
+      .set(auth(userManager.token));
+
+    expectStatus(history, 200);
+    expect(history.body.data[0]).toMatchObject({
+      userId: target.id,
+      previousStatus: "active",
+      newStatus: "suspended",
+      reason: "Repeated ride cancellations",
+      notes: "Third warning this month, see ticket #482",
+      changedBy: userManager.userId,
+    });
+  });
+});
+
+describe("GET /users/:id/status-history", () => {
+  it("lists every status transition, newest first", async () => {
+    const target = await createPhoneAccount(userManager.token, "driver");
+    await api
+      .patch(`/users/${target.id}/status`)
+      .set(auth(userManager.token))
+      .send({ status: "suspended", reason: "Fraud investigation" });
+    await api
+      .patch(`/users/${target.id}/status`)
+      .set(auth(userManager.token))
+      .send({ status: "active" });
+
+    const res = await api
+      .get(`/users/${target.id}/status-history`)
+      .set(auth(userManager.token));
+
+    expectStatus(res, 200);
+    expect(res.body.data).toHaveLength(2);
+    expect(res.body.data[0]).toMatchObject({ previousStatus: "suspended", newStatus: "active" });
+    expect(res.body.data[1]).toMatchObject({
+      previousStatus: "active",
+      newStatus: "suspended",
+      reason: "Fraud investigation",
+    });
+  });
+
+  it("needs users: read — not visible to the account holder themselves", async () => {
+    const target = await signUpByPhone("rider");
+
+    const res = await api.get(`/users/${target.userId}/status-history`).set(auth(target.token));
+
+    expectStatus(res, 403);
+    expect(res.body.error).toBe("Missing permission: read on users");
+  });
 });
 
 describe("DELETE /users/:id", () => {

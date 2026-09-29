@@ -50,11 +50,31 @@ export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 
 export const updateUserStatusSchema = z.object({
   status: userStatusSchema,
+  reason: z.string().min(1).optional().meta({
+    description: "Why the status is changing — kept on the status history record",
+    example: "Repeated ride cancellations",
+  }),
+  notes: z.string().min(1).optional().meta({
+    description: "Internal admin-only notes, not shown to the account holder",
+    example: "Third warning this month, see ticket #482",
+  }),
 });
 
 export type UpdateUserStatusInput = z.infer<typeof updateUserStatusSchema>;
 
 export const userIdParamsSchema = idParamsSchema;
+
+export const userStatusHistoryResponseSchema = z.object({
+  id: z.uuid(),
+  userId: z.uuid(),
+  previousStatus: userStatusSchema,
+  newStatus: userStatusSchema,
+  reason: z.string().nullable(),
+  notes: z.string().nullable().meta({ description: "Internal admin-only notes" }),
+  changedBy: z.uuid().nullable().meta({ description: "The admin who made the change" }),
+  changedAt: z.iso.datetime(),
+  createdAt: z.iso.datetime(),
+});
 
 export const userResponseSchema = z.object({
   id: z.uuid(),
