@@ -347,7 +347,7 @@ async function recalculateDriverVerificationStatus(req: Request, userId: string)
     newStatus = "pending";
   } else if (statuses["UNDER_REVIEW"] && statuses["UNDER_REVIEW"] > 0) {
     newStatus = "pending";
-  } else if (statuses.VERIFIED === documents.length && documents.length > 0) {
+  } else if (documents.length > 0 && statuses.VERIFIED === documents.length) {
     // Approval is an admin's decision (PATCH /admin/driver/:userId/verification), never automatic: with every
     // document verified the driver waits in pending for it, and a driver already approved stays approved.
     newStatus = driverProfile.verificationStatus === "approved" ? "approved" : "pending";

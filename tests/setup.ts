@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, vi } from "vitest";
+import { afterAll, beforeAll, vi } from "vitest";
 import db from "../src/database/knex.js";
 import { logOutSuperAdmin } from "./helpers/actors.js";
 import { cleanupTestData } from "./helpers/cleanup.js";
@@ -21,6 +21,11 @@ vi.mock("../src/services/storage.service.js", () => ({
   }),
   deleteFile: vi.fn(async () => undefined),
 }));
+
+beforeAll(async () => {
+  // Run any pending migrations before tests start
+  await db.migrate.latest();
+});
 
 afterAll(async () => {
   await logOutSuperAdmin();
