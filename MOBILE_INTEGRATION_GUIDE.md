@@ -14,9 +14,10 @@ Every response has the shape `{ "success": true, "message": "...", "data": ... }
 3. [Driver Sign-Up & Sign-In](#driver-signup--signin)
 4. [Driver Verification Documents](#driver-verification-documents)
 5. [Driver Approval & Verification Status](#driver-approval--verification-status)
-6. [Admin Document Review](#admin-document-review)
-7. [Error Codes & Handling](#error-codes--handling)
-8. [Rate Limiting](#rate-limiting)
+6. [Real-Time Events (Socket.IO)](#real-time-events-socketio)
+7. [Admin Document Review](#admin-document-review)
+8. [Error Codes & Handling](#error-codes--handling)
+9. [Rate Limiting](#rate-limiting)
 
 ---
 
@@ -46,6 +47,7 @@ Content-Type: application/json
 ```
 
 **Response (200):**
+
 ```json
 {
   "success": true,
@@ -58,15 +60,18 @@ Content-Type: application/json
 ```
 
 **Response (401):**
+
 ```json
 {
   "success": false,
   "error": "Invalid, expired, or already-used refresh token"
 }
 ```
+
 Clear stored tokens and send the user to sign-in.
 
 **Response (403):**
+
 ```json
 {
   "success": false,
@@ -97,6 +102,7 @@ Content-Type: application/json
 ```
 
 **Response (200):** always succeeds, even if the token was already invalid.
+
 ```json
 {
   "success": true,
@@ -143,6 +149,7 @@ Content-Type: application/json
 **`role` is required only when this phone number has no account yet** (i.e. this will be a signup). Omit it for an existing account — it's ignored if present.
 
 **Response (200):**
+
 ```json
 {
   "success": true,
@@ -152,6 +159,7 @@ Content-Type: application/json
 ```
 
 **Response (400) — role missing for a new number:**
+
 ```json
 {
   "success": false,
@@ -160,12 +168,14 @@ Content-Type: application/json
 ```
 
 **Response (429) — Rate Limited:**
+
 ```json
 {
   "success": false,
   "error": "Too many requests — try again later (see the RateLimit headers for when)"
 }
 ```
+
 See [Rate Limiting](#rate-limiting) — this endpoint allows 5 codes per phone number per 15 minutes.
 
 ### 2. Verify Code → Sign In or Sign Up
@@ -185,6 +195,7 @@ Content-Type: application/json
 ```
 
 **Response (200):**
+
 ```json
 {
   "success": true,
@@ -222,15 +233,18 @@ Content-Type: application/json
 **`isNewUser: true`** only when this call just created the account. **`user.profile` is `null`** until a rider profile has been created (step 3) — use this, not `isNewUser`, to decide whether to show the "complete profile" flow, since a returning user who never finished onboarding will also have `profile: null`.
 
 **Response (400) — bad/expired code:**
+
 ```json
 {
   "success": false,
   "error": "Invalid verification code"
 }
 ```
+
 Other possible messages: `"No pending verification code for this identifier"`, `"Verification code has expired"`, `"Too many attempts, request a new code"`.
 
 **Response (403):**
+
 ```json
 {
   "success": false,
@@ -253,6 +267,7 @@ Content-Type: application/json
 ```
 
 **Response (201):**
+
 ```json
 {
   "success": true,
@@ -312,6 +327,7 @@ Ready to accept rides
 Use the exact endpoints from [Rider Sign-Up & Sign-In](#rider-signup--signin) above, with `"role": "driver"` instead of `"rider"`.
 
 The `user.profile` field, once a driver profile exists, will be the **flat** driver profile shape (not the nested one document endpoints return — see note below):
+
 ```json
 "profile": {
   "userId": "550e8400-e29b-41d4-a716-446655440000",
@@ -344,6 +360,7 @@ Content-Type: application/json
 `ghanaCardNumber` and `address` are both optional and can be added later via `PATCH /driver/{userId}`.
 
 **Response (201) — note the `driver` wrapper:**
+
 ```json
 {
   "success": true,
@@ -369,6 +386,7 @@ Content-Type: application/json
 Every driver-returning endpoint (`POST /driver`, `GET /driver/{userId}`, `GET /drivers/code/{code}`, `GET /drivers/phone/{code}/{number}`, `PATCH /driver/{userId}`) uses this **same nested shape**: `{ driver: { ...profile fields, user, vehicles, documents } }`.
 
 **Response (409) — profile already exists:**
+
 ```json
 {
   "success": false,
@@ -382,6 +400,7 @@ Every driver-returning endpoint (`POST /driver`, `GET /driver/{userId}`, `GET /d
 GET /driver/{userId}
 Authorization: Bearer <accessToken>
 ```
+
 Returns the same `{ driver: {...} }` shape as above. A driver can always read their own profile; reading someone else's needs `users: read`.
 
 ```http
@@ -394,6 +413,7 @@ Content-Type: application/json
   "autoAcceptBookings": false
 }
 ```
+
 All fields optional (`ghanaCardNumber`, `address`, `isOnline`, `autoAcceptBookings`), at least one required. Same `{ driver: {...} }` response shape.
 
 ### 4. Register a Vehicle
@@ -415,6 +435,7 @@ Content-Type: application/json
 ```
 
 **Response (201):**
+
 ```json
 {
   "success": true,
@@ -472,6 +493,7 @@ Authorization: Bearer <accessToken>
 ```
 
 **Response (200):**
+
 ```json
 {
   "success": true,
@@ -508,6 +530,7 @@ file: <binary>
 - Field name **must be `file`**
 
 **Response (201):**
+
 ```json
 {
   "success": true,
@@ -531,14 +554,20 @@ file: <binary>
 ```
 
 **Response (400):**
+
 ```json
 { "success": false, "error": "Invalid document type, missing/unsupported file, or file too large" }
 ```
 
 **Response (409) — already submitted:**
+
 ```json
-{ "success": false, "error": "You already submitted a Driver's License. Delete it first to submit a new one." }
+{
+  "success": false,
+  "error": "You already submitted a Driver's License. Delete it first to submit a new one."
+}
 ```
+
 If the existing document was already deleted (see below), uploading again **replaces** it instead of conflicting — same document `id`, fresh content, full history preserved.
 
 ### Get Driver's Own Documents
@@ -549,6 +578,7 @@ Authorization: Bearer <accessToken>
 ```
 
 **Response (200):** array of documents, each with its `history` (status change log) nested in:
+
 ```json
 {
   "success": true,
@@ -599,13 +629,13 @@ Only **non-deleted** documents are returned here — a deleted document simply d
 
 **Document Status Reference:**
 
-| Status | Meaning | Driver Action |
-|--------|---------|----------------|
-| `PENDING` | Just uploaded, awaiting review | Wait |
-| `UNDER_REVIEW` | Admin is actively reviewing | Wait |
-| `VERIFIED` | ✅ Accepted | None — done, unless it expires |
-| `REJECTED` | ❌ Rejected — reason is in `notes` | Delete, fix the issue, re-upload |
-| `EXPIRED` | Passed its `expiresAt` date | Delete and upload a fresh copy |
+| Status         | Meaning                            | Driver Action                    |
+| -------------- | ---------------------------------- | -------------------------------- |
+| `PENDING`      | Just uploaded, awaiting review     | Wait                             |
+| `UNDER_REVIEW` | Admin is actively reviewing        | Wait                             |
+| `VERIFIED`     | ✅ Accepted                        | None — done, unless it expires   |
+| `REJECTED`     | ❌ Rejected — reason is in `notes` | Delete, fix the issue, re-upload |
+| `EXPIRED`      | Passed its `expiresAt` date        | Delete and upload a fresh copy   |
 
 ### Get a Document's History
 
@@ -613,11 +643,13 @@ Only **non-deleted** documents are returned here — a deleted document simply d
 GET /verification/{documentId}/history
 Authorization: Bearer <accessToken>
 ```
+
 The document's own driver can always see it; anyone else needs `verification: read`.
 
 **Response (200):** array of history entries (same shape as the `history` field above), newest first.
 
 **Response (404):**
+
 ```json
 { "success": false, "error": "Document not found: {documentId}" }
 ```
@@ -634,16 +666,19 @@ Authorization: Bearer <accessToken>
 The document's own driver can delete it; an admin with `verification: delete` can delete any driver's document.
 
 **Response (200):**
+
 ```json
 { "success": true, "message": "Document deleted successfully", "data": null }
 ```
 
 **Response (404):**
+
 ```json
 { "success": false, "error": "Document not found: {documentId}" }
 ```
 
 **Response (409) — already deleted:**
+
 ```json
 { "success": false, "error": "Document is already deleted" }
 ```
@@ -654,13 +689,13 @@ The document's own driver can delete it; an admin with `verification: delete` ca
 
 ### Verification Status Values
 
-| Status | Meaning |
-|--------|---------|
-| `unverified` | No documents submitted yet |
-| `pending` | Documents awaiting/under review, **or** every document is verified and the driver is waiting for an admin to approve them |
-| `approved` | ✅ An admin has approved the driver — the only way this status is ever set |
-| `rejected` | At least one document was rejected |
-| `expiring` | Was approved, but a document is now expired |
+| Status       | Meaning                                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `unverified` | No documents submitted yet                                                                                                |
+| `pending`    | Documents awaiting/under review, **or** every document is verified and the driver is waiting for an admin to approve them |
+| `approved`   | ✅ An admin has approved the driver — the only way this status is ever set                                                |
+| `rejected`   | At least one document was rejected                                                                                        |
+| `expiring`   | Was approved, but a document is now expired                                                                               |
 
 **Approval is never automatic.** Even once every required document type is submitted and verified, the driver stays `pending` until an admin explicitly approves them via the admin endpoint below. Show this clearly in the UI — "all documents verified, waiting on final approval" is a distinct, expected state.
 
@@ -678,7 +713,55 @@ If any of these fail, the admin's approval attempt is rejected with a message na
 GET /driver/{userId}
 Authorization: Bearer <accessToken>
 ```
-Returns the full `{ driver: {...} }` shape from earlier, including `verificationStatus` and the nested `documents` array — poll this (or `GET /driver/verification`) to reflect status changes in the UI.
+
+Returns the full `{ driver: {...} }` shape from earlier, including `verificationStatus` and the nested `documents` array — poll this (or `GET /driver/verification`) to reflect status changes in the UI, or use the `driver:verification_status_changed` socket event below to avoid polling entirely.
+
+---
+
+## Real-Time Events (Socket.IO)
+
+The backend accepts Socket.IO connections on the same host as the REST API (no separate URL — just drop any path segment like `/v1` from your API base URL). Connections must authenticate the same way REST does, using the **same access token**.
+
+### Connecting
+
+```js
+import { io } from "socket.io-client";
+
+const socket = io(baseUrl, {
+  auth: { token: accessToken },
+  transports: ["websocket"],
+});
+```
+
+The token goes in the `auth` payload of the handshake — **not** a header, **not** a query string. An access token expires after 15 minutes same as on REST; there's currently no automatic reconnect-with-refreshed-token behavior, so a long-lived connection should reconnect with a fresh token after refreshing it via `POST /auth/refresh`.
+
+**Connection rejected** (`connect_error` fires) if the token is missing, invalid, or expired — same failure modes as a REST 401.
+
+Every authenticated connection is placed in a room private to that account (`user:{yourUserId}`) — you don't join anything yourself, and you'll only ever receive events addressed to your own account.
+
+### `user:suspended`
+
+Fired when an admin suspends the connected account (`PATCH /users/{id}/status` with `status: "suspended"`). Not fired on reactivation.
+
+```json
+{ "reason": "Repeated ride cancellations" }
+```
+
+`reason` is whatever the admin entered when suspending (nullable — an admin can suspend without giving one). Treat receipt of this event as a forced sign-out: the account's sessions are already revoked server-side, so any subsequent REST call will start failing once the current access token expires.
+
+### `driver:verification_status_changed`
+
+Fired whenever a driver's overall `verificationStatus` changes — either automatically (a document gets reviewed) or from an admin's explicit approval/rejection (`PATCH /admin/driver/{userId}/verification`). Only fires on an actual change, never redundantly.
+
+```json
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "verificationStatus": "approved",
+  "previousStatus": "pending"
+}
+```
+
+Both `verificationStatus` and `previousStatus` are one of the [verification status values](#verification-status-values) above. This is a direct replacement for polling `GET /driver/{userId}` — **note**: the current driver app polls `pending-review.tsx` every 30 seconds for this exact information; switching that screen to listen for this event instead of polling is separate, not-yet-done frontend work that this event enables.
 
 ---
 
@@ -692,6 +775,7 @@ Returns the full `{ driver: {...} }` shape from earlier, including `verification
 GET /admin/driver/verification/pending
 Authorization: Bearer <accessToken>
 ```
+
 Requires `verification: read`. Returns every `PENDING`/`UNDER_REVIEW` document across all drivers, each with the submitting driver's name, email and phone attached.
 
 ### Review a Document
@@ -706,6 +790,7 @@ Content-Type: application/json
   "notes": "Clear and valid"
 }
 ```
+
 `status` is one of `PENDING`, `UNDER_REVIEW`, `VERIFIED`, `REJECTED`. Requires `verification: update`. Updating a document's status also recalculates the driver's overall `verificationStatus` automatically (see above) — but never sets it to `approved`.
 
 ### Approve/Change a Driver's Overall Status
@@ -720,27 +805,32 @@ Content-Type: application/json
   "notes": "All documents verified, approved for service"
 }
 ```
+
 Requires `verification: update`. This is the **only** endpoint that can set a driver to `approved` — see [requirements above](#requirements-to-become-approved). Returns the full `{ driver: {...} }` shape.
 
 **Response (400) — not ready for approval:**
+
 ```json
-{ "success": false, "error": "Cannot approve driver: missing required document(s): National ID, Driver's License" }
+{
+  "success": false,
+  "error": "Cannot approve driver: missing required document(s): National ID, Driver's License"
+}
 ```
 
 ---
 
 ## Error Codes & Handling
 
-| Code | Meaning | Retry? | Action |
-|------|---------|--------|--------|
-| 200 / 201 | Success | — | Use `data` |
-| 400 | Validation error | No | Fix the request |
-| 401 | Missing/invalid/expired access token | Refresh, then retry | Call `/auth/refresh`; if that fails, send to sign-in |
-| 403 | Forbidden, or account suspended/deleted | No | Show the error message; sign out if the account is blocked |
-| 404 | Not found | No | Check the ID being used |
-| 409 | Conflict (duplicate, already exists/deleted) | No | Show the message, adjust the request |
-| 429 | Rate limited | Yes, after waiting | See [Rate Limiting](#rate-limiting) |
-| 500 | Server error | Yes, with backoff | Retry a couple of times, then surface a generic error |
+| Code      | Meaning                                      | Retry?              | Action                                                     |
+| --------- | -------------------------------------------- | ------------------- | ---------------------------------------------------------- |
+| 200 / 201 | Success                                      | —                   | Use `data`                                                 |
+| 400       | Validation error                             | No                  | Fix the request                                            |
+| 401       | Missing/invalid/expired access token         | Refresh, then retry | Call `/auth/refresh`; if that fails, send to sign-in       |
+| 403       | Forbidden, or account suspended/deleted      | No                  | Show the error message; sign out if the account is blocked |
+| 404       | Not found                                    | No                  | Check the ID being used                                    |
+| 409       | Conflict (duplicate, already exists/deleted) | No                  | Show the message, adjust the request                       |
+| 429       | Rate limited                                 | Yes, after waiting  | See [Rate Limiting](#rate-limiting)                        |
+| 500       | Server error                                 | Yes, with backoff   | Retry a couple of times, then surface a generic error      |
 
 ---
 
@@ -748,55 +838,57 @@ Requires `verification: update`. This is the **only** endpoint that can set a dr
 
 All limits are **per 15-minute window** and apply in addition to a generous per-IP flood guard (100 requests/IP on most auth endpoints, 300/IP on refresh — these exist mainly to stop abuse, not to affect normal use).
 
-| Endpoint | Limit | Counts |
-|----------|-------|--------|
-| `POST /auth/login/otp` | 5 per phone/email | Every request |
-| `POST /auth/login/verify` | 10 per phone/email | Failed attempts only |
-| `POST /auth/login` | 10 per email | Failed attempts only |
-| `POST /auth/password/forgot` | 5 per email | Every request |
-| `POST /auth/password/reset` | 10 per email | Failed attempts only |
-| `POST /auth/password/change` | 5 per account | Failed attempts only |
-| `POST /auth/refresh` | 300 per IP | Every request |
+| Endpoint                     | Limit              | Counts               |
+| ---------------------------- | ------------------ | -------------------- |
+| `POST /auth/login/otp`       | 5 per phone/email  | Every request        |
+| `POST /auth/login/verify`    | 10 per phone/email | Failed attempts only |
+| `POST /auth/login`           | 10 per email       | Failed attempts only |
+| `POST /auth/password/forgot` | 5 per email        | Every request        |
+| `POST /auth/password/reset`  | 10 per email       | Failed attempts only |
+| `POST /auth/password/change` | 5 per account      | Failed attempts only |
+| `POST /auth/refresh`         | 300 per IP         | Every request        |
 
 **Response (429):**
+
 ```json
 {
   "success": false,
   "error": "Too many requests — try again later (see the RateLimit headers for when)"
 }
 ```
+
 Standard `RateLimit` / `RateLimit-Policy` response headers (draft-8 format) tell you the limit and reset time — read those rather than hardcoding the table above, in case limits change server-side.
 
 ---
 
 ## Quick Reference: All Endpoints Used Above
 
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| POST | `/auth/login/otp` | — | Request a sign-up/sign-in code |
-| POST | `/auth/login/verify` | — | Verify code, get tokens (creates account if new) |
-| POST | `/auth/login` | — | Email + password sign-in (accounts with a password) |
-| POST | `/auth/refresh` | — | Exchange refresh token for a new pair |
-| GET | `/auth/me` | ✓ | Get the signed-in account |
-| POST | `/auth/logout` | — | Revoke a refresh token |
-| POST | `/auth/password/forgot` | — | Email a reset code |
-| POST | `/auth/password/reset` | — | Set new password with the reset code |
-| POST | `/auth/password/change` | ✓ | Change password while signed in |
-| POST | `/rider` | ✓ | Create rider profile |
-| GET | `/rider/{userId}` | ✓ | Get rider profile |
-| POST | `/driver` | ✓ | Create driver profile |
-| GET | `/driver/{userId}` | ✓ | Get driver profile (with vehicles/documents) |
-| PATCH | `/driver/{userId}` | ✓ | Update driver profile / go online |
-| POST | `/vehicles` | ✓ | Register a vehicle |
-| PATCH | `/users/{id}` | ✓ | Update account details (fullName, dateOfBirth, etc) |
-| GET | `/document-types` | ✓ | List document types to upload |
-| POST | `/driver/verification/{documentTypeId}` | ✓ | Upload a document |
-| GET | `/driver/verification` | ✓ | Get own documents with history |
-| GET | `/verification/{documentId}/history` | ✓ | Get one document's history |
-| DELETE | `/verification/{documentId}` | ✓ | Delete (soft) a document |
-| GET | `/admin/driver/verification/pending` | ✓ (admin) | List documents awaiting review |
-| PATCH | `/admin/verification/document/{documentId}` | ✓ (admin) | Review a document |
-| PATCH | `/admin/driver/{userId}/verification` | ✓ (admin) | Approve/change driver status |
+| Method | Path                                        | Auth      | Purpose                                             |
+| ------ | ------------------------------------------- | --------- | --------------------------------------------------- |
+| POST   | `/auth/login/otp`                           | —         | Request a sign-up/sign-in code                      |
+| POST   | `/auth/login/verify`                        | —         | Verify code, get tokens (creates account if new)    |
+| POST   | `/auth/login`                               | —         | Email + password sign-in (accounts with a password) |
+| POST   | `/auth/refresh`                             | —         | Exchange refresh token for a new pair               |
+| GET    | `/auth/me`                                  | ✓         | Get the signed-in account                           |
+| POST   | `/auth/logout`                              | —         | Revoke a refresh token                              |
+| POST   | `/auth/password/forgot`                     | —         | Email a reset code                                  |
+| POST   | `/auth/password/reset`                      | —         | Set new password with the reset code                |
+| POST   | `/auth/password/change`                     | ✓         | Change password while signed in                     |
+| POST   | `/rider`                                    | ✓         | Create rider profile                                |
+| GET    | `/rider/{userId}`                           | ✓         | Get rider profile                                   |
+| POST   | `/driver`                                   | ✓         | Create driver profile                               |
+| GET    | `/driver/{userId}`                          | ✓         | Get driver profile (with vehicles/documents)        |
+| PATCH  | `/driver/{userId}`                          | ✓         | Update driver profile / go online                   |
+| POST   | `/vehicles`                                 | ✓         | Register a vehicle                                  |
+| PATCH  | `/users/{id}`                               | ✓         | Update account details (fullName, dateOfBirth, etc) |
+| GET    | `/document-types`                           | ✓         | List document types to upload                       |
+| POST   | `/driver/verification/{documentTypeId}`     | ✓         | Upload a document                                   |
+| GET    | `/driver/verification`                      | ✓         | Get own documents with history                      |
+| GET    | `/verification/{documentId}/history`        | ✓         | Get one document's history                          |
+| DELETE | `/verification/{documentId}`                | ✓         | Delete (soft) a document                            |
+| GET    | `/admin/driver/verification/pending`        | ✓ (admin) | List documents awaiting review                      |
+| PATCH  | `/admin/verification/document/{documentId}` | ✓ (admin) | Review a document                                   |
+| PATCH  | `/admin/driver/{userId}/verification`       | ✓ (admin) | Approve/change driver status                        |
 
 ---
 

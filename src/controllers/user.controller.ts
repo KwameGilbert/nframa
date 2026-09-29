@@ -7,6 +7,7 @@ import { userStatusHistoryModel } from "../models/userStatusHistory.model.js";
 import { activityLogModel } from "../models/activityLog.model.js";
 import { assertPermission, assertSelfOrPermission } from "../middlewares/authorize.js";
 import { logActivity } from "../services/activityLog.service.js";
+import { emitToUser } from "../services/socket.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 import type {
@@ -167,7 +168,6 @@ export async function updateUser(req: Request, res: Response) {
   });
 }
 
-
 // Suspending is a distinct moderation action, not a routine profile edit — kept off PATCH /users/:id so
 // it gets its own permission check, self-lockout guard, and activity log action (mirrors PATCH
 // /admin/:userId's status field for admins, but as its own endpoint here since updateUserSchema is mostly
@@ -209,6 +209,10 @@ export async function updateUserStatus(req: Request, res: Response) {
   );
 
   sendSuccess(res, `Account ${status} successfully`, user);
+
+  if (status === "suspended") {
+    emitToUser(id, "user:suspended", { reason: reason ?? null });
+  }
 
   logActivity(req, {
     ...USER_ACTIVITY,
@@ -257,7 +261,12 @@ export async function getUserActivityLogs(req: Request, res: Response) {
 
   sendSuccess(res, "User activity logs retrieved successfully", {
     items,
-    pagination: { page, limit, totalItems: stats.total, totalPages: Math.ceil(stats.total / limit) },
+    pagination: {
+      page,
+      limit,
+      totalItems: stats.total,
+      totalPages: Math.ceil(stats.total / limit),
+    },
     stats,
   });
 

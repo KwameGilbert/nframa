@@ -22,6 +22,13 @@ vi.mock("../src/services/storage.service.js", () => ({
   deleteFile: vi.fn(async () => undefined),
 }));
 
+// No test boots a real Socket.IO server (src/index.ts never runs — tests call app.ts directly), so
+// emitToUser is mocked the same way, letting tests assert on what would have been broadcast.
+vi.mock("../src/services/socket.service.js", () => ({
+  initSocketService: vi.fn(),
+  emitToUser: vi.fn(),
+}));
+
 beforeAll(async () => {
   // Run any pending migrations before tests start
   await db.migrate.latest();

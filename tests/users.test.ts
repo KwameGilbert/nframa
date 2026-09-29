@@ -13,6 +13,7 @@ import * as data from "./helpers/data.js";
 import { newEmail, newPhone } from "./helpers/unique.js";
 import { trackForCleanup } from "./helpers/cleanup.js";
 import { flushActivityLogs } from "../src/services/activityLog.service.js";
+import { emitToUser } from "../src/services/socket.service.js";
 import db from "../src/database/knex.js";
 
 type SignedInAdmin = Awaited<ReturnType<typeof createSignedInAdmin>>;
@@ -417,10 +418,13 @@ describe("PATCH /users/:id", () => {
     trackForCleanup("carOwnerProfiles", { userId: target.id });
     const { fullName } = data.person();
 
-    const res = await api.patch(`/users/${target.id}`).set(auth(userManager.token)).send({
-      fullName,
-      profile: { ghanaCardNumber: "GHA-555555555-0", isOnline: true },
-    });
+    const res = await api
+      .patch(`/users/${target.id}`)
+      .set(auth(userManager.token))
+      .send({
+        fullName,
+        profile: { ghanaCardNumber: "GHA-555555555-0", isOnline: true },
+      });
 
     expectStatus(res, 200);
     expect(res.body.data).toMatchObject({ fullName });
@@ -472,6 +476,7 @@ describe("PATCH /users/:id/status", () => {
     expectStatus(res, 200);
     expect(res.body.message).toBe("Account suspended successfully");
     expect(res.body.data.status).toBe("suspended");
+    expect(emitToUser).toHaveBeenCalledWith(target.id, "user:suspended", { reason: null });
     const otp = await api.post("/auth/login/otp").send({
       phoneCountryCode: data.GHANA_COUNTRY_CODE,
       phoneNumber: target.phoneNumber,
@@ -549,14 +554,11 @@ describe("PATCH /users/:id/status", () => {
   it("records the reason and notes on a status history entry, not on the user record", async () => {
     const target = await createPhoneAccount(userManager.token, "rider");
 
-    const res = await api
-      .patch(`/users/${target.id}/status`)
-      .set(auth(userManager.token))
-      .send({
-        status: "suspended",
-        reason: "Repeated ride cancellations",
-        notes: "Third warning this month, see ticket #482",
-      });
+    const res = await api.patch(`/users/${target.id}/status`).set(auth(userManager.token)).send({
+      status: "suspended",
+      reason: "Repeated ride cancellations",
+      notes: "Third warning this month, see ticket #482",
+    });
 
     expectStatus(res, 200);
     expect(res.body.data).not.toHaveProperty("reason");
@@ -590,9 +592,7 @@ describe("GET /users/:id/status-history", () => {
       .set(auth(userManager.token))
       .send({ status: "active" });
 
-    const res = await api
-      .get(`/users/${target.id}/status-history`)
-      .set(auth(userManager.token));
+    const res = await api.get(`/users/${target.id}/status-history`).set(auth(userManager.token));
 
     expectStatus(res, 200);
     expect(res.body.data).toHaveLength(2);
@@ -626,9 +626,7 @@ describe("GET /users/:id/activity-logs", () => {
     );
     await flushActivityLogs();
 
-    const res = await api
-      .get(`/users/${target.userId}/activity-logs`)
-      .set(auth(superAdmin.token));
+    const res = await api.get(`/users/${target.userId}/activity-logs`).set(auth(superAdmin.token));
 
     expectStatus(res, 200);
     const actions = res.body.data.items.map((item: { action: string }) => item.action);
@@ -640,9 +638,7 @@ describe("GET /users/:id/activity-logs", () => {
   it("needs activityLogs: read — users: read alone isn't enough", async () => {
     const target = await createPhoneAccount(userManager.token, "rider");
 
-    const res = await api
-      .get(`/users/${target.id}/activity-logs`)
-      .set(auth(supportAgent.token));
+    const res = await api.get(`/users/${target.id}/activity-logs`).set(auth(supportAgent.token));
 
     expectStatus(res, 403);
     expect(res.body.error).toBe("Missing permission: read on activityLogs");

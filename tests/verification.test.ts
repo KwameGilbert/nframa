@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { api, auth, expectStatus } from "./helpers/api.js";
 import { createSignedInAdmin, loginAsSuperAdmin, signUpByPhone } from "./helpers/actors.js";
 import { trackForCleanup } from "./helpers/cleanup.js";
+import { emitToUser } from "../src/services/socket.service.js";
 import db from "../src/database/knex.js";
 
 let superAdmin: Awaited<ReturnType<typeof loginAsSuperAdmin>>;
@@ -306,6 +307,11 @@ describe("PATCH /admin/verification/document/:documentId", () => {
     });
     const profile = await api.get(`/driver/${driver.userId}`).set(auth(superAdmin.token));
     expect(profile.body.data.driver.verificationStatus).toBe("rejected");
+    expect(emitToUser).toHaveBeenCalledWith(driver.userId, "driver:verification_status_changed", {
+      userId: driver.userId,
+      verificationStatus: "rejected",
+      previousStatus: "unverified",
+    });
   });
 
   it("needs verification: update", async () => {
@@ -400,6 +406,11 @@ describe("PATCH /admin/driver/:userId/verification", () => {
     expectStatus(res, 200);
     expect(res.body.message).toBe("Driver verification status updated successfully");
     expect(res.body.data.driver.verificationStatus).toBe("approved");
+    expect(emitToUser).toHaveBeenCalledWith(driver.userId, "driver:verification_status_changed", {
+      userId: driver.userId,
+      verificationStatus: "approved",
+      previousStatus: "pending",
+    });
   });
 
   it("refuses approval while a required document type is missing, naming it", async () => {

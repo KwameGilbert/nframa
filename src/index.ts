@@ -3,6 +3,8 @@ import { createServer } from "node:http";
 import { Server } from "socket.io";
 import { createLogger } from "./config/logger.js";
 import { app } from "./app.js";
+import { socketAuthenticate, type SocketData } from "./middlewares/socketAuthenticate.js";
+import { initSocketService } from "./services/socket.service.js";
 
 config({ path: `.env.${process.env.NODE_ENV ?? "development"}` });
 
@@ -21,18 +23,31 @@ process.on("unhandledRejection", (reason) => {
 
 // Create HTTP server and Socket.IO server
 const httpServer = createServer(app);
-const io = new Server(httpServer);
+const io = new Server<
+  Record<string, never>,
+  Record<string, never>,
+  Record<string, never>,
+  SocketData
+>(httpServer);
 const socketLogger = createLogger("socket");
 const appLogger = createLogger("app");
 
-// Handle Socket.IO connections
-io.on("connection", (socket) => {
-  socketLogger.info({ socketId: socket.id }, "Socket connected");
+io.use(socketAuthenticate);
 
-  socket.on("disconnect", () => {
-    socketLogger.info({ socketId: socket.id }, "Socket disconnected");
+// Handle Socket.IO connections — every socket that reaches here has already been authenticated by
+// socketAuthenticate above, so socket.data is populated. Each account gets one room (see socket.service.ts's
+// emitToUser), joined here rather than in the middleware so auth and room-membership stay separate concerns.
+io.on("connection", (socket) => {
+  const { userId, userType, role } = socket.data;
+  socket.join(`user:${userId}`);
+  socketLogger.info({ socketId: socket.id, userId, userType, role }, "Socket connected");
+
+  socket.on("disconnect", (reason) => {
+    socketLogger.info({ socketId: socket.id, userId, reason }, "Socket disconnected");
   });
 });
+
+initSocketService(io);
 
 const PORT = Number(process.env.PORT) || 3000;
 

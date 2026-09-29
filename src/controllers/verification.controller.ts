@@ -6,6 +6,7 @@ import { driverProfileModel } from "../models/driverProfile.model.js";
 import { uploadFile, deleteFile } from "../services/storage.service.js";
 import { assertSelfOrPermission } from "../middlewares/authorize.js";
 import { logActivity } from "../services/activityLog.service.js";
+import { emitToUser } from "../services/socket.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendSuccess, sendCreated } from "../utils/response.js";
 import type {
@@ -271,6 +272,14 @@ export async function updateDriverVerificationStatus(req: Request, res: Response
 
   sendSuccess(res, "Driver verification status updated successfully", result);
 
+  if (existing.driver.verificationStatus !== input.verificationStatus) {
+    emitToUser(userId, "driver:verification_status_changed", {
+      userId,
+      verificationStatus: input.verificationStatus,
+      previousStatus: existing.driver.verificationStatus,
+    });
+  }
+
   logActivity(req, {
     ...DRIVER_ACTIVITY,
     action: "verification.driver.update",
@@ -355,6 +364,13 @@ async function recalculateDriverVerificationStatus(req: Request, userId: string)
 
   if (driverProfile.verificationStatus !== newStatus) {
     await driverProfileModel.updateVerificationStatus(userId, newStatus);
+
+    emitToUser(userId, "driver:verification_status_changed", {
+      userId,
+      verificationStatus: newStatus,
+      previousStatus: driverProfile.verificationStatus,
+    });
+
     // Its own entry: the admin reviewed one document, but this changed the driver as a whole.
     logActivity(req, {
       ...DRIVER_ACTIVITY,
