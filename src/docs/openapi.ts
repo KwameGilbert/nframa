@@ -30,6 +30,8 @@ export const openApiDocument = generator.generateDocument({
       "**Rate limits:** auth endpoints return `429` when a limit is hit; the `RateLimit` / `RateLimit-Policy` response headers show the limit and when it resets.",
       "",
       "**Emails** are case-insensitive — they're lowercased on the way in.",
+      "",
+      "**Real-time:** the API also accepts Socket.IO connections (same host, same access token passed via the connection's `auth.token`) for a small set of push events — not represented here since they aren't REST endpoints. See `MOBILE_INTEGRATION_GUIDE.md`'s \"Real-Time Events\" section for the connection handshake and event payloads.",
     ].join("\n"),
   },
 });
