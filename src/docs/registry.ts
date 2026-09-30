@@ -79,6 +79,7 @@ const RESOURCES: Record<string, { table?: string; module?: string }> = {
   "/rider": { table: "riderProfiles", module: "users" },
   "/roles": { table: "roles", module: "roles" },
   "/settings": { table: "settings", module: "settings" },
+  "/trips": { module: "trips" },
   "/users": { table: "users", module: "users" },
   "/vehicles": { table: "vehicles", module: "users" },
   "/verification": { module: "verification" },

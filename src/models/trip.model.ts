@@ -1,6 +1,11 @@
 import type { Knex } from "knex";
 import db from "../database/knex.js";
 import { BaseModel } from "./BaseModel.js";
+import { walletModel } from "./wallet.model.js";
+import { EARTH_RADIUS_METERS, type Point } from "../services/geo.js";
+import { AppError } from "../utils/AppError.js";
+import { generateCode } from "../utils/code.js";
+import { departureAt, isoWeekday } from "../utils/tripTime.js";
 
 export const TRIP_STATUSES = [
   "pending",
@@ -17,6 +22,10 @@ export type TripStatus = (typeof TRIP_STATUSES)[number];
 
 // A seat is used only once the trip is accepted; a pending request doesn't take one.
 const SEAT_STATUSES: TripStatus[] = ["accepted", "boarded", "completed"];
+// Trips still in play: at most one per rider, commute and date (trips_one_active_per_rider).
+const ACTIVE_STATUSES: TripStatus[] = ["pending", "accepted", "boarded"];
+// Riders who hold a seat and haven't been dropped off yet: they're the stops on a run.
+const ON_BOARD_STATUSES: TripStatus[] = ["accepted", "boarded"];
 
 export interface Trip {
   id: string;
@@ -82,6 +91,196 @@ const NUMERIC_COLUMNS = [
 ] as const;
 const NULLABLE_NUMERIC_COLUMNS = ["riderLat", "riderLng", "boardingLat", "boardingLng"] as const;
 
+// What the request handler works out before a trip exists; the model adds the code, status and hold.
+export type NewTrip = Pick<
+  Trip,
+  | "commuteId"
+  | "riderUserId"
+  | "driverUserId"
+  | "tripDate"
+  | "pickupAddress"
+  | "pickupLat"
+  | "pickupLng"
+  | "dropoffAddress"
+  | "dropoffLat"
+  | "dropoffLng"
+  | "pickupProgress"
+  | "dropoffProgress"
+  | "distanceMeters"
+  | "durationSeconds"
+  | "scheduledPickupAt"
+  | "scheduledDropoffAt"
+  | "expiresAt"
+  | "fare"
+  | "platformFee"
+  | "bookingFee"
+  | "totalAmount"
+  | "driverEarnings"
+  | "fareBreakdown"
+>;
+
+interface Page {
+  page: number;
+  limit: number;
+}
+
+export interface AvailableSearch extends Point, Page {
+  date: string;
+  radiusMeters: number;
+  excludeUserId: string;
+  // HH:MM:SS, set when date is today: commutes that already left are hidden.
+  departsAfter?: string;
+}
+
+export interface TripListFilter extends Page {
+  userId: string;
+  as: "rider" | "driver";
+  when: "upcoming" | "past";
+  status?: TripStatus;
+}
+
+const COMMUTE_UNAVAILABLE = "This commute is not taking bookings";
+const DUPLICATE_TRIP = "You already have a trip on this commute for that date";
+
+function firstName(fullName: string | null): string | null {
+  return fullName?.trim().split(/\s+/)[0] || null;
+}
+
+// The trip as clients see it: pickup and drop-off grouped, without the boarding code (the controller adds it
+// for the rider only) or the location and scan fields used for boarding.
+export function publicTrip(t: Trip) {
+  return {
+    id: t.id,
+    commuteId: t.commuteId,
+    riderUserId: t.riderUserId,
+    driverUserId: t.driverUserId,
+    tripDate: t.tripDate,
+    status: t.status,
+    pickup: { address: t.pickupAddress, lat: t.pickupLat, lng: t.pickupLng },
+    dropoff: { address: t.dropoffAddress, lat: t.dropoffLat, lng: t.dropoffLng },
+    pickupProgress: t.pickupProgress,
+    dropoffProgress: t.dropoffProgress,
+    distanceMeters: t.distanceMeters,
+    durationSeconds: t.durationSeconds,
+    scheduledPickupAt: t.scheduledPickupAt,
+    scheduledDropoffAt: t.scheduledDropoffAt,
+    expiresAt: t.expiresAt,
+    fare: t.fare,
+    platformFee: t.platformFee,
+    bookingFee: t.bookingFee,
+    totalAmount: t.totalAmount,
+    driverEarnings: t.driverEarnings,
+    waitCharge: t.waitCharge,
+    waitMinutes: t.waitMinutes,
+    heldAmount: t.heldAmount,
+    fareBreakdown: t.fareBreakdown,
+    acceptedAt: t.acceptedAt,
+    arrivedAt: t.arrivedAt,
+    boardedAt: t.boardedAt,
+    completedAt: t.completedAt,
+    cancelledAt: t.cancelledAt,
+    cancelledBy: t.cancelledBy,
+    cancellationReason: t.cancellationReason,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+  };
+}
+
+const sqlList = (statuses: TripStatus[]) => statuses.map((status) => `'${status}'`).join(", ");
+
+// Great-circle distance in meters from the row's coordinates to point, in SQL (the same formula as
+// haversineMeters), as the column alias.
+function distanceSql(latColumn: string, lngColumn: string, point: Point, alias: string) {
+  return db.raw(
+    `2 * ${EARTH_RADIUS_METERS} * asin(least(1, sqrt(
+      power(sin(radians(??::float8 - ?) / 2), 2)
+      + cos(radians(?)) * cos(radians(??::float8)) * power(sin(radians(??::float8 - ?) / 2), 2)
+    ))) as ??`,
+    [latColumn, point.lat, point.lat, latColumn, lngColumn, point.lng, alias],
+  );
+}
+
+// The vehicle shown for a driver: commutes don't name one yet, so it's their newest active vehicle, verified
+// ones first. Joined as "v".
+function joinDriverVehicle(query: Knex.QueryBuilder, driverColumn: string) {
+  return query.joinRaw(
+    `left join lateral (
+      select "make", "model", "color", "plate" from "vehicles"
+      where "carOwnerUserId" = ?? and "status" = 'active'
+      order by "isVerified" desc, "createdAt" desc limit 1
+    ) as "v" on true`,
+    [driverColumn],
+  );
+}
+
+const VEHICLE_COLUMNS = [
+  "v.make as vehicleMake",
+  "v.model as vehicleModel",
+  "v.color as vehicleColor",
+  "v.plate as vehiclePlate",
+];
+
+interface VehicleColumns {
+  vehicleMake: string | null;
+  vehicleModel: string | null;
+  vehicleColor: string | null;
+  vehiclePlate: string | null;
+}
+
+interface AvailableRow extends VehicleColumns {
+  id: string;
+  userId: string;
+  driverFullName: string | null;
+  driverProfilePicture: string | null;
+  startAddress: string;
+  startLat: string;
+  startLng: string;
+  endAddress: string;
+  endLat: string;
+  endLng: string;
+  departureTime: string;
+  seatsLeft: number;
+  distanceToStartMeters: number;
+  distanceMeters: number | null;
+  durationSeconds: number | null;
+}
+
+interface TripListRow extends Trip {
+  commuteStartAddress: string;
+  commuteEndAddress: string;
+  commuteDepartureTime: string;
+  driverFullName: string | null;
+  driverProfilePicture: string | null;
+  riderFullName: string | null;
+  riderProfilePicture: string | null;
+}
+
+function vehicleOf(row: VehicleColumns) {
+  return row.vehicleMake === null
+    ? null
+    : {
+        make: row.vehicleMake,
+        model: row.vehicleModel as string,
+        color: row.vehicleColor as string,
+        plate: row.vehiclePlate as string,
+      };
+}
+
+function isUniqueViolation(err: unknown, constraint: string) {
+  const { code, constraint: name } = err as { code?: string; constraint?: string };
+  return code === "23505" && name === constraint;
+}
+
+// Locks the commute row for the rest of the transaction: the first lock wherever a seat is given (see the
+// lock order in walletModel), so two accepts on one commute run one after the other.
+async function lockBookableCommute(trx: Knex.Transaction, commuteId: string) {
+  const commute = await trx("driverCommutes")
+    .where({ id: commuteId })
+    .forUpdate()
+    .first("isActive");
+  if (!commute?.isActive) throw AppError.conflict(COMMUTE_UNAVAILABLE);
+}
+
 class TripModel extends BaseModel<Trip> {
   protected readonly tableName = "trips";
 
@@ -118,6 +317,375 @@ class TripModel extends BaseModel<Trip> {
       .where({ ...criteria, status: "pending" })
       .where("expiresAt", "<=", db.fn.now())
       .update({ status: "expired", expiresAt: null, updatedAt: new Date() });
+  }
+
+  // Commutes a rider can request on a date, nearest start first: active, running that weekday, driver approved
+  // and active, not the rider's own, not yet departed, with a seat left, and starting within the radius (a
+  // bounding box on the indexed coordinates first, then the exact distance).
+  async listAvailable(search: AvailableSearch) {
+    const { lat, lng, date, radiusMeters, page, limit } = search;
+    const dLat = radiusMeters / 111_320;
+    const dLng = radiusMeters / (111_320 * Math.cos((lat * Math.PI) / 180));
+
+    const matching = () => {
+      const commutes = db("driverCommutes as c")
+        .join("carOwnerProfiles as p", "p.userId", "c.userId")
+        .join("users as u", "u.id", "c.userId")
+        .where({ "c.isActive": true, "p.verificationStatus": "approved", "u.status": "active" })
+        .whereNull("u.deletedAt")
+        .whereNot("c.userId", search.excludeUserId)
+        .whereRaw(`? = any(c."recurrenceDays")`, [isoWeekday(date)])
+        .whereBetween("c.startLat", [lat - dLat, lat + dLat])
+        .whereBetween("c.startLng", [lng - dLng, lng + dLng])
+        .modify((query) => {
+          if (search.departsAfter) query.where("c.departureTime", ">", search.departsAfter);
+        })
+        .select(
+          "c.*",
+          "u.fullName as driverFullName",
+          "u.profilePicture as driverProfilePicture",
+          distanceSql("c.startLat", "c.startLng", { lat, lng }, "distanceToStartMeters"),
+          db.raw(
+            `c."capacity" - (select count(*)::int from "trips" t where t."commuteId" = c."id" and t."tripDate" = ? and t."status" in (${sqlList(SEAT_STATUSES)})) as "seatsLeft"`,
+            [date],
+          ),
+        );
+      return db
+        .from(commutes.as("a"))
+        .where("a.distanceToStartMeters", "<=", radiusMeters)
+        .where("a.seatsLeft", ">", 0);
+    };
+
+    const [counted, rows] = await Promise.all([
+      matching().first(db.raw("count(*)::int as total")) as Promise<{ total: number }>,
+      joinDriverVehicle(matching(), "a.userId")
+        .select("a.*", ...VEHICLE_COLUMNS)
+        .orderBy([
+          { column: "a.distanceToStartMeters", order: "asc" },
+          { column: "a.departureTime", order: "asc" },
+          { column: "a.id", order: "asc" },
+        ])
+        .limit(limit)
+        .offset((page - 1) * limit) as Promise<AvailableRow[]>,
+    ]);
+
+    return {
+      totalItems: counted.total,
+      items: rows.map((row) => {
+        const vehicle = vehicleOf(row);
+        return {
+          commuteId: row.id,
+          driver: {
+            id: row.userId,
+            firstName: firstName(row.driverFullName),
+            profilePicture: row.driverProfilePicture,
+          },
+          vehicle: vehicle && { make: vehicle.make, model: vehicle.model, color: vehicle.color },
+          startAddress: row.startAddress,
+          startLat: Number(row.startLat),
+          startLng: Number(row.startLng),
+          endAddress: row.endAddress,
+          endLat: Number(row.endLat),
+          endLng: Number(row.endLng),
+          departureAt: departureAt(date, row.departureTime),
+          seatsLeft: row.seatsLeft,
+          distanceToStartMeters: Math.round(row.distanceToStartMeters),
+          distanceMeters: row.distanceMeters,
+          durationSeconds: row.durationSeconds,
+        };
+      }),
+    };
+  }
+
+  // Whether the rider has another trip in play whose pickup-to-drop-off window overlaps (from, to); back-to-back
+  // trips are fine. The same commute is left out: trips_one_active_per_rider refuses that one with its own
+  // message. Best effort: two simultaneous requests on different commutes can both pass.
+  async hasOverlappingTrip(
+    riderUserId: string,
+    { commuteId, from, to }: { commuteId: string; from: Date; to: Date },
+  ) {
+    const row = await this.table
+      .where({ riderUserId })
+      .whereNot({ commuteId })
+      .whereIn("status", ACTIVE_STATUSES)
+      .where("scheduledPickupAt", "<", to)
+      .where("scheduledDropoffAt", ">", from)
+      .first("id");
+    return row !== undefined;
+  }
+
+  // A new request: pending (no seat, no money), or accepted straight away when the driver auto-accepts, in
+  // which case the seat and the hold are taken in the same transaction as the insert (commute lock first).
+  async createTrip(fields: NewTrip, { autoAccept }: { autoAccept: boolean }): Promise<Trip> {
+    // Boarding codes are random, so a clash is rare but possible: retry with a new one.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await db.transaction(async (trx) => {
+          const row = { ...fields, boardingCode: generateCode("TR") };
+          if (!autoAccept) return this.insertIn(trx, { ...row, status: "pending" });
+
+          await lockBookableCommute(trx, fields.commuteId);
+          await this.assertSeatLeft(trx, fields.commuteId, fields.tripDate);
+          const trip = await this.insertIn(trx, {
+            ...row,
+            status: "accepted",
+            acceptedAt: new Date(),
+            heldAmount: fields.totalAmount,
+            expiresAt: null,
+          });
+          await walletModel.hold(trx, fields.riderUserId, fields.totalAmount);
+          return trip;
+        });
+      } catch (err) {
+        if (isUniqueViolation(err, "trips_boardingcode_unique") && attempt < 3) continue;
+        if (isUniqueViolation(err, "trips_one_active_per_rider")) {
+          throw AppError.conflict(DUPLICATE_TRIP);
+        }
+        throw err;
+      }
+    }
+  }
+
+  // Accepts a pending request: gives it a seat and holds its total in the rider's wallet, in one transaction
+  // taking the locks in order (commute, trip, then the rider's wallet inside hold), so two accepts can never
+  // hand out the same seat or the same money.
+  async acceptWithHold(tripId: string): Promise<Trip> {
+    const found = await this.findById(tripId);
+    if (!found) throw AppError.notFound(`Trip not found: ${tripId}`);
+
+    return db.transaction(async (trx) => {
+      await lockBookableCommute(trx, found.commuteId);
+      const trip = await this.lockIn(trx, tripId);
+      if (trip.status !== "pending")
+        throw AppError.conflict(`Can't accept a trip that is ${trip.status}`);
+      if (trip.expiresAt && trip.expiresAt <= new Date()) {
+        throw AppError.conflict("This trip request has expired");
+      }
+      await this.assertSeatLeft(trx, trip.commuteId, trip.tripDate);
+      await walletModel.hold(trx, trip.riderUserId, trip.totalAmount);
+      return this.updateIn(trx, tripId, {
+        status: "accepted",
+        acceptedAt: new Date(),
+        heldAmount: trip.totalAmount,
+        expiresAt: null,
+      });
+    });
+  }
+
+  // Riders cancel pending or accepted trips; drivers only accepted ones (a pending request is declined). The
+  // status is re-checked under the row lock, and an accepted trip's hold goes back to the rider with it.
+  async cancelTrip(
+    tripId: string,
+    { by, reason }: { by: "rider" | "driver"; reason?: string },
+  ): Promise<Trip> {
+    return db.transaction(async (trx) => {
+      const trip = await this.lockIn(trx, tripId);
+      const cancellable: TripStatus[] = by === "driver" ? ["accepted"] : ["pending", "accepted"];
+      if (!cancellable.includes(trip.status)) {
+        throw AppError.conflict(`Can't cancel a trip that is ${trip.status}`);
+      }
+      if (trip.heldAmount > 0) await walletModel.release(trx, trip.riderUserId, trip.heldAmount);
+      return this.updateIn(trx, tripId, {
+        status: "cancelled",
+        heldAmount: 0,
+        expiresAt: null,
+        cancelledAt: new Date(),
+        cancelledBy: by,
+        cancellationReason: reason ?? null,
+      });
+    });
+  }
+
+  // Everything GET /trips/:id shows, before it's narrowed to what the viewer may see.
+  async findDetail(id: string) {
+    const trip = await this.findById(id);
+    if (!trip) return undefined;
+
+    const [context, riders, seatsLeft] = await Promise.all([
+      joinDriverVehicle(
+        db("driverCommutes as c").join("users as d", "d.id", "c.userId"),
+        "c.userId",
+      )
+        .where("c.id", trip.commuteId)
+        .first(
+          "c.startAddress",
+          "c.startLat",
+          "c.startLng",
+          "c.endAddress",
+          "c.endLat",
+          "c.endLng",
+          "c.departureTime",
+          "d.fullName",
+          "d.profilePicture",
+          "d.phoneCountryCode",
+          "d.phoneNumber",
+          ...VEHICLE_COLUMNS,
+        ),
+      this.ridersOnRun(trip.commuteId, trip.tripDate),
+      this.seatsLeft(trip.commuteId, trip.tripDate),
+    ]);
+
+    return {
+      trip,
+      commute: {
+        startAddress: context.startAddress as string,
+        startLat: Number(context.startLat),
+        startLng: Number(context.startLng),
+        endAddress: context.endAddress as string,
+        endLat: Number(context.endLat),
+        endLng: Number(context.endLng),
+        departureAt: departureAt(trip.tripDate, context.departureTime),
+      },
+      driver: {
+        fullName: context.fullName as string | null,
+        profilePicture: context.profilePicture as string | null,
+        phone: context.phoneNumber
+          ? `${context.phoneCountryCode ?? ""}${context.phoneNumber}`
+          : null,
+      },
+      vehicle: vehicleOf(context),
+      seatsLeft,
+      riders,
+    };
+  }
+
+  // The riders holding a seat on one date's run (accepted or boarded), with their pickup and drop-off.
+  private async ridersOnRun(commuteId: string, tripDate: string) {
+    const rows = await db("trips as t")
+      .join("users as r", "r.id", "t.riderUserId")
+      .where({ "t.commuteId": commuteId, "t.tripDate": tripDate })
+      .whereIn("t.status", ON_BOARD_STATUSES)
+      .orderBy([
+        { column: "t.createdAt", order: "asc" },
+        { column: "t.id", order: "asc" },
+      ])
+      .select(
+        "t.id",
+        "r.fullName",
+        "r.profilePicture",
+        "t.pickupAddress",
+        "t.pickupLat",
+        "t.pickupLng",
+        "t.pickupProgress",
+        "t.scheduledPickupAt",
+        "t.dropoffAddress",
+        "t.dropoffLat",
+        "t.dropoffLng",
+        "t.dropoffProgress",
+        "t.scheduledDropoffAt",
+      );
+    return rows.map((row) => ({
+      tripId: row.id as string,
+      firstName: firstName(row.fullName),
+      profilePicture: row.profilePicture as string | null,
+      pickup: {
+        address: row.pickupAddress as string,
+        lat: Number(row.pickupLat),
+        lng: Number(row.pickupLng),
+        progress: Number(row.pickupProgress),
+        scheduledAt: row.scheduledPickupAt as Date,
+      },
+      dropoff: {
+        address: row.dropoffAddress as string,
+        lat: Number(row.dropoffLat),
+        lng: Number(row.dropoffLng),
+        progress: Number(row.dropoffProgress),
+        scheduledAt: row.scheduledDropoffAt as Date,
+      },
+    }));
+  }
+
+  // A rider's own trips, or the trips on a driver's commutes. upcoming: in play (pending, accepted or boarded) and
+  // not over yet (boarded, or drop-off still ahead), soonest first; past: everything else, newest first.
+  async listForUser({ userId, as, when, status, page, limit }: TripListFilter) {
+    const matching = () =>
+      db("trips as t")
+        .where(as === "rider" ? "t.riderUserId" : "t.driverUserId", userId)
+        .modify((query) => {
+          const upcoming = (q: Knex.QueryBuilder) =>
+            q
+              .whereIn("t.status", ACTIVE_STATUSES)
+              .where((ahead) =>
+                ahead
+                  .where("t.status", "boarded")
+                  .orWhere("t.scheduledDropoffAt", ">=", db.fn.now()),
+              );
+          if (when === "upcoming") upcoming(query);
+          else query.whereNot(upcoming);
+          if (status) query.where("t.status", status);
+        });
+    const order = when === "upcoming" ? "asc" : "desc";
+
+    const [counted, rows] = await Promise.all([
+      matching().first(db.raw("count(*)::int as total")) as Promise<{ total: number }>,
+      matching()
+        .join("driverCommutes as c", "c.id", "t.commuteId")
+        .join("users as d", "d.id", "t.driverUserId")
+        .join("users as r", "r.id", "t.riderUserId")
+        .select(
+          "t.*",
+          "c.startAddress as commuteStartAddress",
+          "c.endAddress as commuteEndAddress",
+          "c.departureTime as commuteDepartureTime",
+          "d.fullName as driverFullName",
+          "d.profilePicture as driverProfilePicture",
+          "r.fullName as riderFullName",
+          "r.profilePicture as riderProfilePicture",
+        )
+        .orderBy([
+          { column: "t.scheduledPickupAt", order },
+          { column: "t.id", order },
+        ])
+        .limit(limit)
+        .offset((page - 1) * limit) as Promise<TripListRow[]>,
+    ]);
+
+    return {
+      totalItems: counted.total,
+      items: rows.map((row) => {
+        const trip = this.sanitize(row);
+        return {
+          ...publicTrip(trip),
+          commute: {
+            startAddress: row.commuteStartAddress,
+            endAddress: row.commuteEndAddress,
+            departureAt: departureAt(trip.tripDate, row.commuteDepartureTime),
+          },
+          driver: { fullName: row.driverFullName, profilePicture: row.driverProfilePicture },
+          rider: {
+            firstName: firstName(row.riderFullName),
+            profilePicture: row.riderProfilePicture,
+          },
+        };
+      }),
+    };
+  }
+
+  private async assertSeatLeft(trx: Knex.Transaction, commuteId: string, tripDate: string) {
+    if ((await this.seatsLeft(commuteId, tripDate, trx)) === 0) {
+      throw AppError.conflict("This commute is full");
+    }
+  }
+
+  private async insertIn(trx: Knex.Transaction, row: Partial<Trip>): Promise<Trip> {
+    const [inserted] = await trx("trips")
+      .insert({ ...row, fareBreakdown: JSON.stringify(row.fareBreakdown) })
+      .returning("*");
+    return this.sanitize(inserted);
+  }
+
+  private async lockIn(trx: Knex.Transaction, id: string): Promise<Trip> {
+    const row = await trx("trips").where({ id }).forUpdate().first();
+    if (!row) throw AppError.notFound(`Trip not found: ${id}`);
+    return this.sanitize(row);
+  }
+
+  private async updateIn(trx: Knex.Transaction, id: string, fields: Partial<Trip>): Promise<Trip> {
+    const [row] = await trx("trips")
+      .where({ id })
+      .update({ ...fields, updatedAt: new Date() })
+      .returning("*");
+    return this.sanitize(row);
   }
 }
 

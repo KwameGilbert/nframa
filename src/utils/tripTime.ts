@@ -18,3 +18,15 @@ export function isoWeekday(date: string): number {
 export function departureAt(date: string, time: string): Date {
   return new Date(`${date}T${time}Z`);
 }
+
+// The date `days` after a YYYY-MM-DD date (negative goes back).
+export function addDays(date: string, days: number): string {
+  const day = new Date(`${date}T00:00:00Z`);
+  day.setUTCDate(day.getUTCDate() + days);
+  return today(day);
+}
+
+// HH:MM:SS in service time, comparable with a commute's departureTime.
+export function timeOfDay(now = new Date()): string {
+  return now.toISOString().slice(11, 19);
+}

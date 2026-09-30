@@ -1,6 +1,6 @@
 # Mobile App Integration Guide
 
-**Last Updated:** 2026-09-28
+**Last Updated:** 2026-09-30
 **API Docs:** `/docs` (Swagger UI, generated from the same code this guide is based on — treat it as the source of truth if anything here ever looks stale)
 
 Every response has the shape `{ "success": true, "message": "...", "data": ... }` on success, or `{ "success": false, "error": "..." }` on failure. `data` is `null` when there's nothing to return (e.g. delete, logout).
@@ -14,10 +14,11 @@ Every response has the shape `{ "success": true, "message": "...", "data": ... }
 3. [Driver Sign-Up & Sign-In](#driver-signup--signin)
 4. [Driver Verification Documents](#driver-verification-documents)
 5. [Driver Approval & Verification Status](#driver-approval--verification-status)
-6. [Real-Time Events (Socket.IO)](#real-time-events-socketio)
-7. [Admin Document Review](#admin-document-review)
-8. [Error Codes & Handling](#error-codes--handling)
-9. [Rate Limiting](#rate-limiting)
+6. [Trips (Rider Booking)](#trips-rider-booking)
+7. [Real-Time Events (Socket.IO)](#real-time-events-socketio)
+8. [Admin Document Review](#admin-document-review)
+9. [Error Codes & Handling](#error-codes--handling)
+10. [Rate Limiting](#rate-limiting)
 
 ---
 
@@ -721,6 +722,255 @@ Returns the full `{ driver: {...} }` shape from earlier, including `verification
 
 ---
 
+## Trips (Rider Booking)
+
+A trip is one rider's seat on one date's run of a driver's commute. Riders find commutes near them, request a seat from a pickup to a drop-off along the commute's route, and pay from their wallet. All dates are service dates in Ghana time (UTC+0), `YYYY-MM-DD`.
+
+### Trip Statuses
+
+| Status      | Meaning                                                                                              |
+| ----------- | ---------------------------------------------------------------------------------------------------- |
+| `pending`   | Requested, waiting for the driver. Takes no seat and holds no money. Expires at `expiresAt`.         |
+| `accepted`  | Seat confirmed. The trip's `totalAmount` is **held** in the rider's wallet (not charged yet).        |
+| `boarded`   | The driver scanned the rider on board; the hold became the charge.                                   |
+| `completed` | Trip finished.                                                                                       |
+| `declined`  | The driver said no. Nothing was held.                                                                |
+| `cancelled` | Cancelled by the rider or driver (`cancelledBy`). Any hold is released; nobody is charged.           |
+| `no_show`   | The rider didn't turn up. The hold is released.                                                      |
+| `expired`   | The driver didn't answer a pending request in time (`trips.requestExpiryMinutes`, or by the pickup). |
+
+**Holds:** while a trip is `accepted`, its total is reserved: `GET /wallet` shows it in `heldAmount`, and `availableBalance` (`balance - heldAmount`) is what the rider can still spend. The `balance` itself only drops when the rider boards. A request needs `availableBalance` at least the trip's total.
+
+### 1. Find Commutes
+
+**Riders only.**
+
+```http
+GET /trips/available?lat=5.6224&lng=-0.1737&date=2026-10-01&page=1&limit=20
+Authorization: Bearer <accessToken>
+```
+
+Returns commutes whose start is within `trips.availabilityRadiusKm` (default 5 km) of `lat`/`lng`, running on `date`'s weekday, with an approved driver, a seat left, and (for today) not yet departed. `date` must be from today to `trips.bookingWindowDays` (default 7) ahead, or you get `400`. Nearest start first.
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "message": "Available trips retrieved successfully",
+  "data": {
+    "items": [
+      {
+        "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+        "driver": { "id": "550e8400-...", "firstName": "Kwame", "profilePicture": null },
+        "vehicle": { "make": "Toyota", "model": "Corolla", "color": "Silver" },
+        "startAddress": "Accra Mall, Tetteh Quarshie, Accra",
+        "startLat": 5.6224,
+        "startLng": -0.1737,
+        "endAddress": "Oxford Street, Osu, Accra",
+        "endLat": 5.556,
+        "endLng": -0.182,
+        "departureAt": "2026-10-01T07:30:00.000Z",
+        "seatsLeft": 2,
+        "distanceToStartMeters": 850,
+        "distanceMeters": 9620,
+        "durationSeconds": 962
+      }
+    ],
+    "pagination": { "page": 1, "limit": 20, "totalItems": 1, "totalPages": 1 }
+  }
+}
+```
+
+No price per commute: once the rider picks a pickup and drop-off, call `POST /fares/estimate` with them.
+
+### 2. Request a Seat
+
+**Riders only** (with a rider profile).
+
+```http
+POST /trips
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{
+  "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+  "tripDate": "2026-10-01",
+  "pickup": { "address": "Airport Junction, Accra", "lat": 5.6051, "lng": -0.1757 },
+  "dropoff": { "address": "Danquah Circle, Osu, Accra", "lat": 5.5635, "lng": -0.1806 }
+}
+```
+
+The pickup and drop-off must each be within `trips.routeToleranceKm` (default 1 km) of the line from the commute's start to its end, with the pickup first in the direction of travel. The pickup time is worked out from the commute's departure (`scheduledPickupAt`); it must still be ahead. The price comes from the driving route between pickup and drop-off: `fare` (what the driver earns) plus `platformFee` and `bookingFee` makes `totalAmount`.
+
+- If the driver accepts bookings automatically, the trip comes back `accepted` ("Trip booked successfully"): the seat is taken and `totalAmount` is held.
+- Otherwise it comes back `pending` ("Trip requested successfully") until the driver answers, or it expires at `expiresAt`.
+
+**Response (201):** the trip, in the same shape as `GET /trips/{id}` below.
+
+**Errors:**
+
+| Status | `error`                                                                      |
+| ------ | ---------------------------------------------------------------------------- |
+| 400    | `Create your rider profile before requesting trips`                          |
+| 400    | `You can't book your own commute`                                            |
+| 400    | `This commute doesn't run on 2026-10-01`                                     |
+| 400    | `The date can't be in the past` / `Trips can be booked at most 7 days ahead` |
+| 400    | `Pickup is more than 1 km from the commute's route` (or `Drop-off is ...`)   |
+| 400    | `Drop-off must come after pickup in the commute's direction of travel`       |
+| 400    | `This trip's pickup time has already passed`                                 |
+| 403    | `Only riders can request trips`                                              |
+| 404    | `Commute not found: <id>`                                                    |
+| 409    | `This commute is not taking bookings` (paused, or the driver isn't approved) |
+| 409    | `Insufficient wallet balance` — top up first                                 |
+| 409    | `You already have a trip at that time` (another commute overlapping in time) |
+| 409    | `You already have a trip on this commute for that date`                      |
+| 409    | `This commute is full` (no seat left on that date)                           |
+| 503    | `Fares are not configured`                                                   |
+
+### 3. List My Trips
+
+```http
+GET /trips?when=upcoming&status=accepted&page=1&limit=20
+Authorization: Bearer <accessToken>
+```
+
+Riders get their own trips; drivers get the trips on their commutes. `when=upcoming` (default): `pending`, `accepted` or `boarded` and not over yet (boarded, or the drop-off still ahead), soonest first. `when=past`: everything else, newest first. `status` is optional. Each item is the trip plus `commute` (`startAddress`, `endAddress`, `departureAt`), `driver` (`fullName`, `profilePicture`) and `rider` (`firstName`, `profilePicture`); the boarding code is only in `GET /trips/{id}`.
+
+### 4. Get a Trip
+
+```http
+GET /trips/{id}
+Authorization: Bearer <accessToken>
+```
+
+For the trip's rider or driver.
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "message": "Trip retrieved successfully",
+  "data": {
+    "id": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
+    "commuteId": "3f2b8c1e-...",
+    "riderUserId": "4d1a55bb-...",
+    "driverUserId": "550e8400-...",
+    "tripDate": "2026-10-01",
+    "status": "accepted",
+    "pickup": { "address": "Airport Junction, Accra", "lat": 5.6051, "lng": -0.1757 },
+    "dropoff": { "address": "Danquah Circle, Osu, Accra", "lat": 5.5635, "lng": -0.1806 },
+    "pickupProgress": 0.25,
+    "dropoffProgress": 0.9,
+    "distanceMeters": 6000,
+    "durationSeconds": 600,
+    "scheduledPickupAt": "2026-10-01T07:34:00.000Z",
+    "scheduledDropoffAt": "2026-10-01T07:44:26.000Z",
+    "expiresAt": null,
+    "fare": 22,
+    "platformFee": 2.2,
+    "bookingFee": 1,
+    "totalAmount": 25.2,
+    "driverEarnings": 22,
+    "waitCharge": 0,
+    "waitMinutes": null,
+    "heldAmount": 25.2,
+    "fareBreakdown": {
+      "currency": "GHS",
+      "base": 5,
+      "distance": 12,
+      "time": 5,
+      "wait": 0,
+      "fare": 22,
+      "platformFee": 2.2,
+      "bookingFee": 1,
+      "total": 25.2,
+      "driverEarnings": 22
+    },
+    "boardingCode": "TR-7KQ2MX",
+    "acceptedAt": "2026-09-30T13:02:11.000Z",
+    "arrivedAt": null,
+    "boardedAt": null,
+    "completedAt": null,
+    "cancelledAt": null,
+    "cancelledBy": null,
+    "cancellationReason": null,
+    "createdAt": "2026-09-30T13:02:11.000Z",
+    "updatedAt": "2026-09-30T13:02:11.000Z",
+    "commute": {
+      "startAddress": "Accra Mall, Tetteh Quarshie, Accra",
+      "startLat": 5.6224,
+      "startLng": -0.1737,
+      "endAddress": "Oxford Street, Osu, Accra",
+      "endLat": 5.556,
+      "endLng": -0.182,
+      "departureAt": "2026-10-01T07:30:00.000Z"
+    },
+    "driver": { "fullName": "Kwame Mensah", "profilePicture": null, "phone": "+233241234567" },
+    "vehicle": { "make": "Toyota", "model": "Corolla", "color": "Silver", "plate": "GR 1234-21" },
+    "seatsLeft": 1,
+    "otherCommuters": [{ "firstName": "Kofi", "profilePicture": null }],
+    "stops": [
+      {
+        "type": "pickup",
+        "address": "Airport Junction, Accra",
+        "lat": 5.6051,
+        "lng": -0.1757,
+        "scheduledAt": "2026-10-01T07:34:00.000Z",
+        "isYou": true
+      },
+      {
+        "type": "pickup",
+        "address": "37 Military Hospital",
+        "lat": 5.588,
+        "lng": -0.178,
+        "scheduledAt": "2026-10-01T07:38:00.000Z",
+        "isYou": false
+      },
+      {
+        "type": "dropoff",
+        "address": "Danquah Circle, Osu, Accra",
+        "lat": 5.5635,
+        "lng": -0.1806,
+        "scheduledAt": "2026-10-01T07:44:26.000Z",
+        "isYou": true
+      },
+      {
+        "type": "dropoff",
+        "address": "Oxford Street, Osu, Accra",
+        "lat": 5.556,
+        "lng": -0.182,
+        "scheduledAt": "2026-10-01T07:46:00.000Z",
+        "isYou": false
+      }
+    ]
+  }
+}
+```
+
+What each viewer sees:
+
+- `boardingCode` — the rider only (show it as a QR/code for the driver to scan). `null` for the driver.
+- `driver.phone` — the rider only, once the trip is `accepted` (or later). `vehicle.plate` — once `accepted`.
+- `otherCommuters` — the other riders with a confirmed seat on this run: first name and photo only.
+- `stops` — every confirmed rider's pickup and drop-off in route order, without names; `isYou` marks this trip's own.
+- Until the rider's own trip is `accepted`, the rider sees no other riders: `otherCommuters` is empty and `stops` holds only their own pickup and drop-off.
+
+### 5. Cancel a Trip
+
+```http
+POST /trips/{id}/cancel
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{ "reason": "Plans changed" }
+```
+
+`reason` is optional (the body can be empty). The rider can cancel a `pending` or `accepted` trip; the driver can cancel an `accepted` one. Cancelling an accepted trip frees the seat and releases the hold: nothing is charged. Returns the updated trip (`200`). Other statuses answer `409` (`Can't cancel a trip that is boarded`, `... that is cancelled`, ...); anyone else gets `403` (`Only the trip's rider or driver can cancel it`).
+
+---
+
 ## Real-Time Events (Socket.IO)
 
 The backend accepts Socket.IO connections on the same host as the REST API (no separate URL — just drop any path segment like `/v1` from your API base URL). Connections must authenticate the same way REST does, using the **same access token**.
@@ -765,6 +1015,36 @@ Fired whenever a driver's overall `verificationStatus` changes — either automa
 ```
 
 Both `verificationStatus` and `previousStatus` are one of the [verification status values](#verification-status-values) above. This is a direct replacement for polling `GET /driver/{userId}` — **note**: the current driver app polls `pending-review.tsx` every 30 seconds for this exact information; switching that screen to listen for this event instead of polling is separate, not-yet-done frontend work that this event enables.
+
+### `trip:requested`
+
+Sent to the **driver** when a rider requests a seat on one of their commutes (`POST /trips`). `status` is `pending` when the driver still has to answer, or `accepted` if they accept bookings automatically.
+
+```json
+{
+  "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
+  "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+  "tripDate": "2026-10-01",
+  "status": "pending"
+}
+```
+
+### `trip:cancelled`
+
+Sent to the **other party** when a trip is cancelled (`POST /trips/{id}/cancel`): to the driver when the rider cancels, to the rider when the driver cancels.
+
+```json
+{
+  "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
+  "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+  "tripDate": "2026-10-01",
+  "status": "cancelled",
+  "cancelledBy": "rider",
+  "reason": "Plans changed"
+}
+```
+
+`reason` is `null` when none was given. Refetch `GET /trips/{id}` for the full trip.
 
 ---
 
@@ -841,15 +1121,17 @@ Requires `verification: update`. This is the **only** endpoint that can set a dr
 
 All limits are **per 15-minute window** and apply in addition to a generous per-IP flood guard (100 requests/IP on most auth endpoints, 300/IP on refresh — these exist mainly to stop abuse, not to affect normal use).
 
-| Endpoint                     | Limit              | Counts               |
-| ---------------------------- | ------------------ | -------------------- |
-| `POST /auth/login/otp`       | 5 per phone/email  | Every request        |
-| `POST /auth/login/verify`    | 10 per phone/email | Failed attempts only |
-| `POST /auth/login`           | 10 per email       | Failed attempts only |
-| `POST /auth/password/forgot` | 5 per email        | Every request        |
-| `POST /auth/password/reset`  | 10 per email       | Failed attempts only |
-| `POST /auth/password/change` | 5 per account      | Failed attempts only |
-| `POST /auth/refresh`         | 300 per IP         | Every request        |
+| Endpoint                             | Limit              | Counts               |
+| ------------------------------------ | ------------------ | -------------------- |
+| `POST /auth/login/otp`               | 5 per phone/email  | Every request        |
+| `POST /auth/login/verify`            | 10 per phone/email | Failed attempts only |
+| `POST /auth/login`                   | 10 per email       | Failed attempts only |
+| `POST /auth/password/forgot`         | 5 per email        | Every request        |
+| `POST /auth/password/reset`          | 10 per email       | Failed attempts only |
+| `POST /auth/password/change`         | 5 per account      | Failed attempts only |
+| `POST /auth/refresh`                 | 300 per IP         | Every request        |
+| `POST /trips`                        | 30 per account     | Every request        |
+| `GET /trips`, `GET /trips/available` | 300 per account    | Every request        |
 
 **Response (429):**
 
@@ -866,32 +1148,37 @@ Standard `RateLimit` / `RateLimit-Policy` response headers (draft-8 format) tell
 
 ## Quick Reference: All Endpoints Used Above
 
-| Method | Path                                        | Auth      | Purpose                                             |
-| ------ | ------------------------------------------- | --------- | --------------------------------------------------- |
-| POST   | `/auth/login/otp`                           | —         | Request a sign-up/sign-in code                      |
-| POST   | `/auth/login/verify`                        | —         | Verify code, get tokens (creates account if new)    |
-| POST   | `/auth/login`                               | —         | Email + password sign-in (accounts with a password) |
-| POST   | `/auth/refresh`                             | —         | Exchange refresh token for a new pair               |
-| GET    | `/auth/me`                                  | ✓         | Get the signed-in account                           |
-| POST   | `/auth/logout`                              | —         | Revoke a refresh token                              |
-| POST   | `/auth/password/forgot`                     | —         | Email a reset code                                  |
-| POST   | `/auth/password/reset`                      | —         | Set new password with the reset code                |
-| POST   | `/auth/password/change`                     | ✓         | Change password while signed in                     |
-| POST   | `/rider`                                    | ✓         | Create rider profile                                |
-| GET    | `/rider/{userId}`                           | ✓         | Get rider profile                                   |
-| POST   | `/driver`                                   | ✓         | Create driver profile                               |
-| GET    | `/driver/{userId}`                          | ✓         | Get driver profile (with vehicles/documents)        |
-| PATCH  | `/driver/{userId}`                          | ✓         | Update driver profile / go online                   |
-| POST   | `/vehicles`                                 | ✓         | Register a vehicle                                  |
-| PATCH  | `/users/{id}`                               | ✓         | Update account details (fullName, dateOfBirth, etc) |
-| GET    | `/document-types`                           | ✓         | List document types to upload                       |
-| POST   | `/driver/verification/{documentTypeId}`     | ✓         | Upload a document                                   |
-| GET    | `/driver/verification`                      | ✓         | Get own documents with history                      |
-| GET    | `/verification/{documentId}/history`        | ✓         | Get one document's history                          |
-| DELETE | `/verification/{documentId}`                | ✓         | Delete (soft) a document                            |
-| GET    | `/admin/driver/verification/pending`        | ✓ (admin) | List documents awaiting review                      |
-| PATCH  | `/admin/verification/document/{documentId}` | ✓ (admin) | Review a document                                   |
-| PATCH  | `/admin/driver/{userId}/verification`       | ✓ (admin) | Approve/change driver status                        |
+| Method | Path                                        | Auth      | Purpose                                              |
+| ------ | ------------------------------------------- | --------- | ---------------------------------------------------- |
+| POST   | `/auth/login/otp`                           | —         | Request a sign-up/sign-in code                       |
+| POST   | `/auth/login/verify`                        | —         | Verify code, get tokens (creates account if new)     |
+| POST   | `/auth/login`                               | —         | Email + password sign-in (accounts with a password)  |
+| POST   | `/auth/refresh`                             | —         | Exchange refresh token for a new pair                |
+| GET    | `/auth/me`                                  | ✓         | Get the signed-in account                            |
+| POST   | `/auth/logout`                              | —         | Revoke a refresh token                               |
+| POST   | `/auth/password/forgot`                     | —         | Email a reset code                                   |
+| POST   | `/auth/password/reset`                      | —         | Set new password with the reset code                 |
+| POST   | `/auth/password/change`                     | ✓         | Change password while signed in                      |
+| POST   | `/rider`                                    | ✓         | Create rider profile                                 |
+| GET    | `/rider/{userId}`                           | ✓         | Get rider profile                                    |
+| POST   | `/driver`                                   | ✓         | Create driver profile                                |
+| GET    | `/driver/{userId}`                          | ✓         | Get driver profile (with vehicles/documents)         |
+| PATCH  | `/driver/{userId}`                          | ✓         | Update driver profile / go online                    |
+| POST   | `/vehicles`                                 | ✓         | Register a vehicle                                   |
+| PATCH  | `/users/{id}`                               | ✓         | Update account details (fullName, dateOfBirth, etc)  |
+| GET    | `/trips/available`                          | ✓ (rider) | Find commutes near a point on a date                 |
+| POST   | `/trips`                                    | ✓ (rider) | Request a seat on a commute                          |
+| GET    | `/trips`                                    | ✓         | List my trips (rider) or my commutes' trips (driver) |
+| GET    | `/trips/{id}`                               | ✓         | Get a trip                                           |
+| POST   | `/trips/{id}/cancel`                        | ✓         | Cancel a trip                                        |
+| GET    | `/document-types`                           | ✓         | List document types to upload                        |
+| POST   | `/driver/verification/{documentTypeId}`     | ✓         | Upload a document                                    |
+| GET    | `/driver/verification`                      | ✓         | Get own documents with history                       |
+| GET    | `/verification/{documentId}/history`        | ✓         | Get one document's history                           |
+| DELETE | `/verification/{documentId}`                | ✓         | Delete (soft) a document                             |
+| GET    | `/admin/driver/verification/pending`        | ✓ (admin) | List documents awaiting review                       |
+| PATCH  | `/admin/verification/document/{documentId}` | ✓ (admin) | Review a document                                    |
+| PATCH  | `/admin/driver/{userId}/verification`       | ✓ (admin) | Approve/change driver status                         |
 
 ---
 
