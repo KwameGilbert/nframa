@@ -128,6 +128,12 @@ Two events exist today, both documented for API consumers in `MOBILE_INTEGRATION
 
 No CORS config exists for the socket server (`new Server(httpServer)`, no options) — fine for the React Native driver app (CORS is browser-enforced, RN doesn't apply it), but the moment a browser-based client needs to connect, `{ cors: { origin: [...] } }` will need adding to that `new Server(...)` call — `app.use(cors())` in `app.ts` does not cover it, since Socket.IO's engine handles its own request listener separately from Express's middleware chain.
 
+### Fares and maps
+
+Every fare/trip setting is defined once in `src/config/tripSettings.ts` (key, type, default, description); `settingModel.getValue(key)` / `getValues(keys)` (one query) return the stored value, or the default when the row is missing or its value doesn't match the type. `src/database/seeds/002_default_settings.ts` inserts them idempotently (`pnpm seed`; existing rows are never overwritten). Keys: `fares.baseFare`, `fares.perKmRate`, `fares.perMinuteRate`, `fares.waitPerMinuteRate` (GHS), `fares.waitGraceMinutes` (free wait), `fees.platformFeeType`/`fees.bookingFeeType` (`fixed` amount or `percent` of the fare) with `…FeeValue`, `trips.availabilityRadiusKm`, `trips.routeToleranceKm`, `trips.boardingRadiusMeters`, `trips.locationMaxAgeSeconds`, `trips.requestExpiryMinutes`, `trips.fallbackSpeedKmh`.
+
+`fare.service.ts` `calculateFare` is pure: fare = base + km rate + minute rate + wait beyond the grace; the rider pays fare + platform fee + booking fee, the driver earns the fare; money is rounded to 2 decimals. `POST /fares/estimate` is open to any signed-in user (`authenticate` only, it exposes no data). `maps.service.ts` `getRoute` uses Google Directions (`google.service.ts`, the only file that knows Google's API) when `GOOGLE_MAPS_API_KEY` is set and the call succeeds, otherwise haversine distance (`geo.ts`) at `trips.fallbackSpeedKmh`, logging a warning if Google failed. The key is optional (not in CI); tests mock `google.service.js`. Commutes store the start-to-end `distanceMeters`/`durationSeconds`, computed on create and when a start/end coordinate changes.
+
 ### Environment
 
 `.env.${NODE_ENV}` is loaded explicitly (via `dotenv`'s `config({ path: ... })`), not a bare `.env` — `NODE_ENV` itself is set by the `dev`/`start` npm scripts via `cross-env` (needed for Windows compatibility). `.env.example` is intentionally the only `.env*` file not gitignored.

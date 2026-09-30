@@ -28,7 +28,7 @@ registry.registerPath({
   tags: ["Driver Commutes"],
   summary: "Create a commute (for yourself, or anyone with commutes: create)",
   description:
-    "The commute is for the caller unless userId is set; setting it to someone else needs commutes: create. The owner must already have a driver profile. New commutes start active.",
+    "The commute is for the caller unless userId is set; setting it to someone else needs commutes: create. The owner must already have a driver profile. New commutes start active. The route (distanceMeters, durationSeconds) between start and end is computed and saved on the commute.",
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -67,7 +67,7 @@ registry.registerPath({
   tags: ["Driver Commutes"],
   summary: "Update a commute, or pause it with isActive: false (its driver, or commutes: update)",
   description:
-    "The owner can't be changed — delete the commute and create it for the other driver.",
+    "The owner can't be changed — delete the commute and create it for the other driver. Changing any start or end coordinate recomputes distanceMeters and durationSeconds.",
   security: [{ bearerAuth: [] }],
   request: {
     params: driverCommuteParamsSchema,

@@ -11,6 +11,7 @@ import { adminUserRouter } from "./adminUser.routes.js";
 import { settingRouter } from "./setting.routes.js";
 import { authRouter } from "./auth.routes.js";
 import { verificationRouter } from "./verification.routes.js";
+import { fareRouter } from "./fare.routes.js";
 import { docsRouter } from "./docs.routes.js";
 import { activityLogRouter } from "./activityLog.routes.js";
 
@@ -31,5 +32,6 @@ router.use(roleRouter);
 router.use(rolePermissionRouter);
 router.use(adminUserRouter);
 router.use(settingRouter);
+router.use(fareRouter);
 router.use(authRouter);
 router.use(docsRouter);

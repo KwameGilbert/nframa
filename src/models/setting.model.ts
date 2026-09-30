@@ -1,9 +1,16 @@
 import { BaseModel } from "./BaseModel.js";
-import type {
-  CreateSettingInput,
-  SettingType,
-  UpdateSettingInput,
+import {
+  isValidSettingValue,
+  type CreateSettingInput,
+  type SettingType,
+  type UpdateSettingInput,
 } from "../schemas/setting.schema.js";
+import {
+  TRIP_SETTINGS,
+  type TripSettingSpec,
+  type TripSettingKey,
+  type TripSettingValue,
+} from "../config/tripSettings.js";
 
 export interface Setting {
   key: string;
@@ -23,6 +30,34 @@ class SettingModel extends BaseModel<Setting> {
 
   list(): Promise<Setting[]> {
     return this.table.orderBy("key");
+  }
+
+  // The stored value of each key, or its default when the setting is missing or its value doesn't match the
+  // type or its bounds (min, oneOf). One query for all of them.
+  async getValues<K extends TripSettingKey>(
+    keys: readonly K[],
+  ): Promise<{ [P in K]: TripSettingValue<P> }> {
+    const rows: Pick<Setting, "key" | "value">[] = await this.table
+      .whereIn("key", [...keys])
+      .select("key", "value");
+    const stored = new Map(rows.map((row) => [row.key, row.value]));
+
+    return Object.fromEntries(
+      keys.map((key) => {
+        const spec: TripSettingSpec = TRIP_SETTINGS[key];
+        const value = stored.get(key);
+        const valid =
+          value !== undefined &&
+          isValidSettingValue(spec.type, value) &&
+          (spec.min === undefined || (value as number) >= spec.min) &&
+          (spec.oneOf === undefined || spec.oneOf.includes(value as string));
+        return [key, valid ? value : spec.default];
+      }),
+    ) as { [P in K]: TripSettingValue<P> };
+  }
+
+  async getValue<K extends TripSettingKey>(key: K): Promise<TripSettingValue<K>> {
+    return (await this.getValues([key]))[key];
   }
 
   createSetting({ value, ...fields }: CreateSettingInput, updatedBy: string) {
