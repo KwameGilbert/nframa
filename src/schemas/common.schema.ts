@@ -29,6 +29,8 @@ export const phoneCountryCodeSchema = z
 export const errorResponseSchema = z
   .object({
     success: z.literal(false),
-    error: z.string().meta({ example: "email: Invalid email address" }),
+    error: z.string().meta({
+      description: "Human-readable message; validation errors are `field: message` joined by `; `",
+    }),
   })
   .meta({ id: "Error" });

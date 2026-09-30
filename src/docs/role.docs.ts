@@ -6,6 +6,7 @@ const unauthorized = errorResponse("Missing or invalid access token");
 const missingPermission = (action: string) => errorResponse(`Caller lacks roles: ${action}`);
 const systemRole = errorResponse(
   `Caller lacks the permission, or the role is a system role (can't be edited or deleted)`,
+  "Super Admin is a system role and can't be edited or deleted",
 );
 
 registry.registerPath({
@@ -60,7 +61,7 @@ registry.registerPath({
     400: errorResponse("Validation error"),
     401: unauthorized,
     403: missingPermission("read"),
-    404: errorResponse("Role not found"),
+    404: errorResponse("Role not found", "Role not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34"),
   },
 });
 
@@ -83,7 +84,7 @@ registry.registerPath({
     400: errorResponse("Validation error"),
     401: unauthorized,
     403: systemRole,
-    404: errorResponse("Role not found"),
+    404: errorResponse("Role not found", "Role not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34"),
     409: errorResponse("Another role already has this slug or name"),
   },
 });
@@ -104,7 +105,10 @@ registry.registerPath({
     400: errorResponse("Validation error"),
     401: unauthorized,
     403: systemRole,
-    404: errorResponse("Role not found"),
-    409: errorResponse("Admin accounts are still assigned to this role (deleted ones count too)"),
+    404: errorResponse("Role not found", "Role not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34"),
+    409: errorResponse(
+      "Admin accounts are still assigned to this role (deleted ones count too)",
+      "Support Agent is still assigned to 2 admin account(s), including any deleted ones — move them to another role first",
+    ),
   },
 });

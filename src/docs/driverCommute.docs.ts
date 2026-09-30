@@ -57,7 +57,10 @@ registry.registerPath({
     400: errorResponse("Invalid commute id"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Not the commute's driver and lacking commutes: read"),
-    404: errorResponse("Commute not found"),
+    404: errorResponse(
+      "Commute not found",
+      "Commute not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+    ),
   },
 });
 
@@ -80,7 +83,10 @@ registry.registerPath({
     400: errorResponse("Validation error, or no fields provided"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Not the commute's driver and lacking commutes: update"),
-    404: errorResponse("Commute not found"),
+    404: errorResponse(
+      "Commute not found",
+      "Commute not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+    ),
   },
 });
 
@@ -98,6 +104,9 @@ registry.registerPath({
     400: errorResponse("Invalid commute id"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Not the commute's driver and lacking commutes: delete"),
-    404: errorResponse("Commute not found"),
+    404: errorResponse(
+      "Commute not found",
+      "Commute not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+    ),
   },
 });

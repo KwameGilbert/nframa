@@ -55,7 +55,10 @@ registry.registerPath({
     201: successResponse("Document uploaded successfully", verificationDocumentResponseSchema),
     400: errorResponse("Invalid document type, missing/unsupported file, or file too large"),
     401: errorResponse("Missing or invalid access token"),
-    409: errorResponse("Document of this type already submitted"),
+    409: errorResponse(
+      "Document of this type already submitted",
+      "You already submitted a Ghana Card. Delete it first to submit a new one.",
+    ),
   },
 });
 
@@ -98,7 +101,10 @@ registry.registerPath({
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Missing permission: update on verification"),
-    404: errorResponse("Document not found"),
+    404: errorResponse(
+      "Document not found",
+      "Document not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+    ),
   },
 });
 
@@ -138,7 +144,10 @@ registry.registerPath({
     ),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Missing permission: read on verification"),
-    404: errorResponse("Document not found"),
+    404: errorResponse(
+      "Document not found",
+      "Document not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+    ),
   },
 });
 
@@ -157,8 +166,11 @@ registry.registerPath({
     200: successResponse("Document deleted successfully"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller is neither the document's owner nor has verification: delete"),
-    404: errorResponse("Document not found"),
-    409: errorResponse("Document is already deleted"),
+    404: errorResponse(
+      "Document not found",
+      "Document not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+    ),
+    409: errorResponse("Document is already deleted", "Document is already deleted"),
   },
 });
 
@@ -186,6 +198,9 @@ registry.registerPath({
     ),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Missing permission: update on verification"),
-    404: errorResponse("Driver profile not found"),
+    404: errorResponse(
+      "Driver profile not found",
+      "Driver profile not found for user: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+    ),
   },
 });

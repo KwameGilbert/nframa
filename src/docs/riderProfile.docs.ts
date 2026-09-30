@@ -40,6 +40,9 @@ registry.registerPath({
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller isn't this rider and lacks users: read"),
-    404: errorResponse("Rider profile not found"),
+    404: errorResponse(
+      "Rider profile not found",
+      "Rider profile not found for user: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+    ),
   },
 });

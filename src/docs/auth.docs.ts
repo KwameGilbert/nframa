@@ -17,6 +17,7 @@ const loginResponseDescription =
 
 const accountBlocked = errorResponse(
   "Account is suspended or deleted, or the admin account is not active",
+  "Account is not active",
 );
 
 registry.registerPath({
@@ -33,7 +34,7 @@ registry.registerPath({
   responses: {
     200: successResponse("Login successful", loginResponseSchema),
     400: errorResponse("Validation error"),
-    401: errorResponse("Invalid email or password"),
+    401: errorResponse("Invalid email or password", "Invalid email or password"),
     403: accountBlocked,
     429: rateLimitedResponse,
   },
@@ -73,7 +74,10 @@ registry.registerPath({
     200: successResponse("Verification code sent"),
     400: errorResponse("Validation error, or role missing when signing up"),
     403: accountBlocked,
-    404: errorResponse("No account found for this identifier (email identifiers only)"),
+    404: errorResponse(
+      "No account found for this identifier (email identifiers only)",
+      "No account found for this identifier",
+    ),
     429: rateLimitedResponse,
   },
 });
@@ -118,7 +122,10 @@ registry.registerPath({
       "Validation error, or the code is missing, expired, wrong, or out of attempts",
     ),
     403: accountBlocked,
-    404: errorResponse("No account found for this identifier (email identifiers only)"),
+    404: errorResponse(
+      "No account found for this identifier (email identifiers only)",
+      "No account found for this identifier",
+    ),
     429: rateLimitedResponse,
   },
 });
@@ -138,9 +145,13 @@ registry.registerPath({
   responses: {
     200: successResponse("Tokens refreshed successfully", authTokensResponseSchema),
     400: errorResponse("Validation error"),
-    401: errorResponse("Invalid, expired, or already-used refresh token"),
+    401: errorResponse(
+      "Invalid, expired, or already-used refresh token",
+      "Invalid or expired refresh token",
+    ),
     403: errorResponse(
       "Account is suspended or deleted, or the admin account is not active — the session is revoked",
+      "Account is not active",
     ),
     429: rateLimitedResponse,
   },
@@ -214,7 +225,7 @@ registry.registerPath({
     400: errorResponse(
       "Validation error, or the code is missing, expired, wrong, or out of attempts",
     ),
-    404: errorResponse("No account found for this email"),
+    404: errorResponse("No account found for this email", "No account found for this email"),
     429: rateLimitedResponse,
   },
 });
