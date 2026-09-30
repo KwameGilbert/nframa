@@ -99,6 +99,26 @@ export const TRIP_SETTINGS = {
     default: 30,
     description: "Minutes a pending trip request waits for the driver before it expires",
   },
+  "trips.bookingWindowDays": {
+    type: "number",
+    min: 1,
+    default: 7,
+    description: "How many days ahead a rider can book a trip",
+  },
+  "trips.boardingEarlyMinutes": {
+    type: "number",
+    min: 0,
+    default: 30,
+    description:
+      "How many minutes before the scheduled pickup the driver can scan the rider on board",
+  },
+  "trips.boardingLateMinutes": {
+    type: "number",
+    min: 0,
+    default: 60,
+    description:
+      "How many minutes after the scheduled pickup the driver can still scan the rider on board",
+  },
   "trips.fallbackSpeedKmh": {
     type: "number",
     min: 1,

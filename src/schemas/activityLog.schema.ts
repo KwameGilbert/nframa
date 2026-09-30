@@ -13,6 +13,7 @@ export const ACTIVITY_MODULES = [
   "riders",
   "vehicles",
   "commutes",
+  "trips",
   "wallets",
   "activityLogs",
 ] as const;
@@ -21,7 +22,7 @@ export type ActivityModule = (typeof ACTIVITY_MODULES)[number];
 
 export const activityModuleSchema = z.enum(ACTIVITY_MODULES).meta({
   description:
-    "Area of the app the action belongs to: auth (sign-up, sign-in, sign-out, passwords), users (rider/driver/admin accounts), admin (admin records), roles (roles and their permissions), settings, verification (documents and driver verification status), drivers, riders, vehicles, commutes (driver commutes), wallets (wallet top-ups and other money movements), activityLogs (audit trail views)",
+    "Area of the app the action belongs to: auth (sign-up, sign-in, sign-out, passwords), users (rider/driver/admin accounts), admin (admin records), roles (roles and their permissions), settings, verification (documents and driver verification status), drivers, riders, vehicles, commutes (driver commutes), trips (rider trips on a commute), wallets (wallet top-ups and other money movements), activityLogs (audit trail views)",
   example: "settings",
 });
 
@@ -124,7 +125,7 @@ export const activityLogResponseSchema = z.object({
   description: z.string().meta({ example: "Updated a setting" }),
   targetType: z.string().nullable().meta({
     description:
-      "Kind of record acted on: setting, role, user, adminUser, driver, rider, vehicle, commute, verificationDocument, transaction (wallet money). Sign-in and password activity targets the account (user)",
+      "Kind of record acted on: setting, role, user, adminUser, driver, rider, vehicle, commute, trip, verificationDocument, transaction (wallet money). Sign-in and password activity targets the account (user)",
     example: "setting",
   }),
   targetId: z
