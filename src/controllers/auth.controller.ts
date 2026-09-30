@@ -99,9 +99,14 @@ async function resolveOtpTarget(input: Identifier) {
           phoneNumber: input.phoneNumber,
         });
 
-  if (user) {
+  // A deleted rider or driver signing up again by phone re-registers: the row is reactivated on verify. A
+  // suspended one isn't — it falls through to assertAccountActive and is refused like any inactive account.
+  const reRegistering =
+    !!user?.deletedAt && !("email" in input) && user.role !== "admin" && user.status === "active";
+
+  if (user && !reRegistering) {
     await assertAccountActive(user);
-    return { user, identifier, channel, role: user.role };
+    return { user, identifier, channel, role: user.role, isNewUser: false };
   }
 
   // No account yet — email never self-signs-up (admins are provisioned, not registered).
@@ -112,7 +117,7 @@ async function resolveOtpTarget(input: Identifier) {
     throw AppError.badRequest("role is required to sign up");
   }
 
-  return { user: undefined, identifier, channel, role: input.role };
+  return { user, identifier, channel, role: input.role, isNewUser: true };
 }
 
 async function sendOtp(
@@ -157,7 +162,10 @@ async function consumeOtp(identifier: string, purpose: string, code: string) {
     throw AppError.badRequest("Invalid verification code");
   }
 
-  await otpCodeModel.consumeAllPending(identifier, purpose);
+  // Zero rows means a simultaneous request with the same code consumed it first — only one may use it.
+  if ((await otpCodeModel.consumeAllPending(identifier, purpose)) === 0) {
+    throw AppError.badRequest("No pending verification code for this identifier");
+  }
 }
 
 async function fetchProfile(account: User) {
@@ -252,7 +260,7 @@ async function checkPassword(user: User | undefined, password: string) {
     await hashPassword(password);
     throw AppError.unauthorized("Invalid email or password");
   }
-  
+
   if (!(await verifyPassword(password, user.passwordHash))) {
     throw AppError.unauthorized("Invalid email or password");
   }
@@ -306,8 +314,8 @@ export async function requestLoginOtp(req: Request, res: Response) {
 
 export async function verifyLoginOtp(req: Request, res: Response) {
   const input = req.validated.body as VerifyOtpInput;
-  const { user, identifier, role } = await resolveOtpTarget(input);
-  const isNewUser = !user; // true only when no account existed yet for this identifier
+  // isNewUser: no account existed for this phone, or it belongs to a deleted rider/driver signing up again.
+  const { user, identifier, role, isNewUser } = await resolveOtpTarget(input);
 
   await consumeOtp(identifier, toPurpose(role), input.code).catch(
     recordRefusal(req, {
@@ -319,15 +327,23 @@ export async function verifyLoginOtp(req: Request, res: Response) {
 
   // Passing the OTP proves the person owns this phone, so it counts as verified from here on.
   let account = user;
-  if (!account && !("email" in input)) {
-    account = await userModel.createUser({
-      phoneCountryCode: input.phoneCountryCode,
-      phoneNumber: input.phoneNumber,
-      role: role as "rider" | "driver",
-      isPhoneVerified: true,
-    });
-  } else if (account && !("email" in input) && !account.isPhoneVerified) {
-    account = (await userModel.markVerified(account.id, { isPhoneVerified: true })) ?? account;
+  if (!("email" in input)) {
+    if (!user) {
+      account = await userModel.createUser({
+        phoneCountryCode: input.phoneCountryCode,
+        phoneNumber: input.phoneNumber,
+        role: role as "rider" | "driver",
+        isPhoneVerified: true,
+      });
+    } else if (isNewUser) {
+      account = await userModel.reactivate(user.id, role as "rider" | "driver");
+      // Only if the account was suspended after resolveOtpTarget checked it.
+      if (!account) {
+        throw AppError.forbidden("Account is not active");
+      }
+    } else if (!user.isPhoneVerified) {
+      account = (await userModel.markVerified(user.id, { isPhoneVerified: true })) ?? user;
+    }
   }
   if (!account) {
     throw AppError.notFound("No account found for this identifier");
@@ -340,9 +356,12 @@ export async function verifyLoginOtp(req: Request, res: Response) {
     isNewUser
       ? {
           action: "auth.signup",
-          description: `Signed up as a ${account.role} with a verification code`,
+          description: user
+            ? `Re-registered a deleted account as a ${account.role} with a verification code`
+            : `Signed up as a ${account.role} with a verification code`,
           actorId: account.id,
           targetId: account.id,
+          before: user,
           after: account,
         }
       : {

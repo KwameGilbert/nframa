@@ -25,6 +25,8 @@ Every response has the shape `{ "success": true, "message": "...", "data": ... }
 
 **There is no separate "sign up" endpoint.** Riders and drivers sign up and sign in through the same two-step phone OTP flow: `POST /auth/login/otp` (send a code) then `POST /auth/login/verify` (verify it). If no account exists yet for that phone number, verifying the code **creates the account automatically** — the response tells you this happened via `isNewUser: true`.
 
+**A deleted rider or driver account can sign up again** with the same phone number, exactly like a new number (`role` required). Verifying the code brings back the same account (same `id`) as the role chosen now, with a clean profile — `fullName`, `email`, `dateOfBirth`, `profilePicture` and any password are cleared — and `isNewUser: true`, so show onboarding. Every session from before the deletion is signed out. Any earlier driver profile is reset — back to `verificationStatus: "unverified"` with no Ghana card number or address — its verification documents are deleted, its commutes paused and its vehicles retired, so a driver goes through onboarding and verification again. The wallet balance, transactions and trips stay with the account. `user.profile` can still be non-null (the reset driver profile, or an earlier rider profile), so check it rather than assuming `null`. A suspended account stays suspended (403) even after deletion.
+
 Email + password login (`POST /auth/login`) only works for accounts that already have a password set. Riders/drivers never get one automatically — this path is mainly for admins (who are provisioned with a password) or any account that has gone through `/auth/password/forgot` to set one.
 
 ### Token Management
@@ -122,6 +124,7 @@ Request OTP (phone)
   ↓
 Verify OTP
   ├─ No account existed → account created automatically, isNewUser: true
+  ├─ Deleted rider/driver account → same account reactivated with a clean profile, isNewUser: true
   └─ Account existed → isNewUser: false
   ↓
 Store accessToken + refreshToken
@@ -146,7 +149,7 @@ Content-Type: application/json
 }
 ```
 
-**`role` is required only when this phone number has no account yet** (i.e. this will be a signup). Omit it for an existing account — it's ignored if present.
+**`role` is required only when this phone number has no account yet, or its rider/driver account was deleted** (i.e. this will be a signup). Omit it for an existing account — it's ignored if present.
 
 **Response (200):**
 
@@ -230,7 +233,7 @@ Content-Type: application/json
 }
 ```
 
-**`isNewUser: true`** only when this call just created the account. **`user.profile` is `null`** until a rider profile has been created (step 3) — use this, not `isNewUser`, to decide whether to show the "complete profile" flow, since a returning user who never finished onboarding will also have `profile: null`.
+**`isNewUser: true`** only when this call just created the account (or re-registered a deleted one). **`user.profile` is `null`** until a rider profile has been created (step 3) — use this, not `isNewUser`, to decide whether to show the "complete profile" flow, since a returning user who never finished onboarding will also have `profile: null`.
 
 **Response (400) — bad/expired code:**
 
@@ -241,7 +244,7 @@ Content-Type: application/json
 }
 ```
 
-Other possible messages: `"No pending verification code for this identifier"`, `"Verification code has expired"`, `"Too many attempts, request a new code"`.
+Other possible messages: `"No pending verification code for this identifier"` (also what the second of two simultaneous verifies with the same code gets — each code works once), `"Verification code has expired"`, `"Too many attempts, request a new code"`.
 
 **Response (403):**
 

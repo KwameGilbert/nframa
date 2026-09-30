@@ -1,3 +1,5 @@
+import type { Knex } from "knex";
+import db from "../database/knex.js";
 import { BaseModel } from "./BaseModel.js";
 
 export interface AuthSession {
@@ -46,8 +48,11 @@ class AuthSessionModel extends BaseModel<AuthSession> {
     return this.updateById(id, { revokedAt: new Date() });
   }
 
-  revokeAllForUser(userId: string) {
-    return this.table.where({ userId }).whereNull("revokedAt").update({ revokedAt: new Date() });
+  revokeAllForUser(userId: string, trx: Knex = db) {
+    return trx(this.tableName)
+      .where({ userId })
+      .whereNull("revokedAt")
+      .update({ revokedAt: new Date() });
   }
 }
 
