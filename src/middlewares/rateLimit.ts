@@ -58,3 +58,8 @@ export const walletPaymentLimit = limitBy(byUser, 60);
 // Every request counts — each one sends an SMS or email.
 export const otpSendLimit = limitBy(byIdentifier, 5);
 export const passwordForgotLimit = limitBy(byIdentifier, 5);
+
+// Per account. Every trip request counts: each one asks Google for the rider's route. Browsing and listing
+// only read the database, so their limit is just a flood guard.
+export const tripRequestLimit = limitBy(byUser, 30);
+export const tripBrowseLimit = limitBy(byUser, 300);

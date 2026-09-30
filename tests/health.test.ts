@@ -30,10 +30,10 @@ describe("GET /", () => {
 
 describe("Error responses", () => {
   it("returns 404 in the error shape for an unknown route", async () => {
-    const res = await api.get("/trips/upcoming");
+    const res = await api.get("/no-such-route");
 
     expectStatus(res, 404);
-    expect(res.body).toEqual({ success: false, error: "Route not found: GET /trips/upcoming" });
+    expect(res.body).toEqual({ success: false, error: "Route not found: GET /no-such-route" });
   });
 
   it("returns 400 for a body that isn't valid JSON", async () => {

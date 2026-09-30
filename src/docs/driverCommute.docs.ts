@@ -108,5 +108,9 @@ registry.registerPath({
       "Commute not found",
       "Commute not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
     ),
+    409: errorResponse(
+      "The commute has trips (of any status): pause it with isActive: false instead",
+      "This commute has trips: pause it instead of deleting it",
+    ),
   },
 });

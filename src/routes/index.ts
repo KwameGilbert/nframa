@@ -13,6 +13,7 @@ import { authRouter } from "./auth.routes.js";
 import { verificationRouter } from "./verification.routes.js";
 import { fareRouter } from "./fare.routes.js";
 import { walletRouter } from "./wallet.routes.js";
+import { tripRouter } from "./trip.routes.js";
 import { docsRouter } from "./docs.routes.js";
 import { activityLogRouter } from "./activityLog.routes.js";
 
@@ -35,5 +36,6 @@ router.use(adminUserRouter);
 router.use(settingRouter);
 router.use(fareRouter);
 router.use(walletRouter);
+router.use(tripRouter);
 router.use(authRouter);
 router.use(docsRouter);

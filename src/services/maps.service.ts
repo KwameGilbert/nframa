@@ -31,3 +31,18 @@ export async function getRoute(origin: Point, destination: Point): Promise<Route
     source: "haversine",
   };
 }
+
+// The driving route from a commute's start to its end, as the two columns the commute stores.
+export async function commuteRoute(c: {
+  startLat: number;
+  startLng: number;
+  endLat: number;
+  endLng: number;
+}) {
+  const { distanceMeters, durationSeconds } = await getRoute(
+    { lat: c.startLat, lng: c.startLng },
+    { lat: c.endLat, lng: c.endLng },
+  );
+
+  return { distanceMeters, durationSeconds };
+}

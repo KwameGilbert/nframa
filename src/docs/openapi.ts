@@ -11,6 +11,7 @@ import "./riderProfile.docs.js";
 import "./role.docs.js";
 import "./rolePermission.docs.js";
 import "./setting.docs.js";
+import "./trip.docs.js";
 import "./user.docs.js";
 import "./vehicle.docs.js";
 import "./verification.docs.js";

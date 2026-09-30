@@ -30,3 +30,9 @@ export function auth(token: string) {
 export function expectStatus(res: Response, status: number) {
   expect(res.status, JSON.stringify(res.body)).toBe(status);
 }
+
+// expectStatus plus the exact error message.
+export function expectError(res: Response, status: number, error: string) {
+  expectStatus(res, status);
+  expect(res.body.error).toBe(error);
+}

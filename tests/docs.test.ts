@@ -67,6 +67,9 @@ describe("OpenAPI error examples", () => {
     expect(example("post", "/auth/login", 429)?.error).toBe("Too many requests, try again later");
     expect(example("get", "/users", 403)?.error).toMatch(/^Missing permission: /);
     expect(example("get", "/users/{id}", 404)?.error).toMatch(/^User not found: /);
+    expect(example("post", "/trips", 403)?.error).toBe("Only riders can request trips");
+    expect(example("get", "/trips/{id}", 403)?.error).toBe("Missing permission: read on trips");
+    expect(example("get", "/trips/{id}", 404)?.error).toMatch(/^Trip not found: /);
   });
 
   it("derives 400 and 409 examples per endpoint, and they match what the app returns", async () => {

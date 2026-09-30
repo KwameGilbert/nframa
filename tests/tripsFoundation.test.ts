@@ -4,25 +4,20 @@ import db from "../src/database/knex.js";
 import { walletModel } from "../src/models/wallet.model.js";
 import { tripModel } from "../src/models/trip.model.js";
 import { AppError } from "../src/utils/AppError.js";
-import { today } from "../src/utils/tripTime.js";
-import { insertTrip, newCommute, newRider } from "./helpers/trips.js";
+import { addDays, today } from "../src/utils/tripTime.js";
+import {
+  expectHoldsMatchTrips,
+  insertTrip,
+  newCommute,
+  newRider,
+  walletOf,
+} from "./helpers/trips.js";
 
 const UNIQUE_VIOLATION = { code: "23505" };
 const CHECK_VIOLATION = { code: "23514" };
 
-function addDays(date: string, days: number) {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
 function inTrx<T>(work: (trx: Knex.Transaction) => Promise<T>) {
   return db.transaction(work);
-}
-
-async function walletOf(userId: string) {
-  const wallet = await db("wallets").where({ userId }).first();
-  return { balance: Number(wallet.balance), heldAmount: Number(wallet.heldAmount) };
 }
 
 async function ledgerSum(userId: string) {
@@ -34,14 +29,6 @@ async function ledgerSum(userId: string) {
       ),
     );
   return Number(sum);
-}
-
-// The invariant hold/capture/release keep: what a rider's wallet holds is exactly what their accepted trips hold.
-async function expectHoldsMatchTrips(userId: string) {
-  const [{ sum }] = await db("trips")
-    .where({ riderUserId: userId, status: "accepted" })
-    .select(db.raw(`coalesce(sum("heldAmount"), 0) as sum`));
-  expect((await walletOf(userId)).heldAmount).toBe(Number(sum));
 }
 
 describe("walletModel.hold", () => {

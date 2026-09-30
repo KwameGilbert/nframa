@@ -3,7 +3,7 @@ export interface Point {
   lng: number;
 }
 
-const EARTH_RADIUS_METERS = 6_371_000;
+export const EARTH_RADIUS_METERS = 6_371_000;
 const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
 
 // Great-circle distance in meters.

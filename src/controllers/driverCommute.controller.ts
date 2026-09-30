@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { driverCommuteModel } from "../models/driverCommute.model.js";
 import { driverProfileModel } from "../models/driverProfile.model.js";
 import { assertPermission, assertSelfOrPermission } from "../middlewares/authorize.js";
-import { getRoute } from "../services/maps.service.js";
+import { commuteRoute } from "../services/maps.service.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
@@ -34,16 +34,6 @@ async function findCommuteFor(req: Request, id: string, action: "read" | "update
   return commute;
 }
 
-// The driving route from a commute's start to its end, as the two columns the commute stores.
-async function routeFor(c: { startLat: number; startLng: number; endLat: number; endLng: number }) {
-  const { distanceMeters, durationSeconds } = await getRoute(
-    { lat: c.startLat, lng: c.startLng },
-    { lat: c.endLat, lng: c.endLng },
-  );
-
-  return { distanceMeters, durationSeconds };
-}
-
 export async function listDriverCommutes(req: Request, res: Response) {
   const userId = callerId(req);
 
@@ -67,7 +57,7 @@ export async function createDriverCommute(req: Request, res: Response) {
     throw AppError.badRequest(`No driver profile for user: ${ownerId}`);
   }
 
-  const commute = await driverCommuteModel.createCommute(input, ownerId, await routeFor(input));
+  const commute = await driverCommuteModel.createCommute(input, ownerId, await commuteRoute(input));
 
   sendCreated(res, "Commute created successfully", commute);
 
@@ -97,7 +87,7 @@ export async function updateDriverCommute(req: Request, res: Response) {
   const commute = await driverCommuteModel.updateCommute(
     id,
     input,
-    moved ? await routeFor({ ...existing, ...input }) : {},
+    moved ? await commuteRoute({ ...existing, ...input }) : {},
   );
 
   if (!commute) {
@@ -120,7 +110,7 @@ export async function deleteDriverCommute(req: Request, res: Response) {
   const { id } = req.validated.params as { id: string };
 
   const existing = await findCommuteFor(req, id, "delete");
-  await driverCommuteModel.deleteById(id);
+  await driverCommuteModel.deleteCommute(id);
 
   sendSuccess(res, "Commute deleted successfully");
 

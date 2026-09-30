@@ -1,4 +1,5 @@
 import { BaseModel } from "./BaseModel.js";
+import { AppError } from "../utils/AppError.js";
 import type {
   CreateDriverCommuteInput,
   UpdateDriverCommuteInput,
@@ -51,6 +52,19 @@ class DriverCommuteModel extends BaseModel<DriverCommute> {
       ...route,
       updatedAt: new Date(),
     } as unknown as Partial<DriverCommute>);
+  }
+
+  // Trips reference their commute (ON DELETE RESTRICT), so a commute that was ever booked stays; the database
+  // refusing it is the check, so there's no window between a trip count and the delete.
+  async deleteCommute(id: string) {
+    try {
+      return await this.deleteById(id);
+    } catch (err) {
+      if ((err as { code?: string }).code === "23503") {
+        throw AppError.conflict("This commute has trips: pause it instead of deleting it");
+      }
+      throw err;
+    }
   }
 
   // No userId lists every driver's commutes.
