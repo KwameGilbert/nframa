@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import db from "../database/knex.js";
 import { BaseModel } from "./BaseModel.js";
 import type {
@@ -8,6 +7,7 @@ import type {
 import { userModel } from "./user.model.js";
 import { vehicleModel } from "./vehicle.model.js";
 import { verificationDocumentModel } from "./verificationDocument.model.js";
+import { generateCode } from "../utils/code.js";
 
 export interface DriverProfile {
   userId: string;
@@ -20,17 +20,6 @@ export interface DriverProfile {
   termsAcceptedAt: Date | null;
 }
 
-const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-function generateDriverCode(): string {
-  const bytes = randomBytes(6);
-  let code = "";
-  for (const byte of bytes) {
-    code += CODE_CHARS[byte % CODE_CHARS.length];
-  }
-  return `DR-${code}`;
-}
-
 class DriverProfileModel extends BaseModel<DriverProfile> {
   protected readonly tableName = "carOwnerProfiles";
   protected readonly primaryKey = "userId";
@@ -38,7 +27,7 @@ class DriverProfileModel extends BaseModel<DriverProfile> {
   async createProfile(input: CreateDriverProfileInput) {
     const profile = await this.insert({
       ...input,
-      code: generateDriverCode(),
+      code: generateCode("DR"),
     } as unknown as Partial<DriverProfile>);
     // A brand-new profile has no vehicles or documents yet, but the response still matches every other
     // driver endpoint's shape (see findByIdWithRelations) rather than being a special case.

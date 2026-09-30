@@ -6,6 +6,7 @@ export const MODULES = [
   "commutes",
   "roles",
   "settings",
+  "trips",
   "users",
   "verification",
 ] as const;

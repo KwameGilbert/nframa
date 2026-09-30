@@ -3,6 +3,7 @@ import db from "../database/knex.js";
 import { BaseModel } from "./BaseModel.js";
 import { toTransaction, type Transaction } from "./transaction.model.js";
 import { roundMoney } from "../utils/money.js";
+import { AppError } from "../utils/AppError.js";
 import type { TransactionDirection, TransactionType } from "../schemas/wallet.schema.js";
 
 export interface Wallet {
@@ -48,7 +49,14 @@ async function applyToBalance(
   return Number(row.balance);
 }
 
-// The only code that changes a wallet balance. Every change locks the wallet and writes its ledger row
+// A zero or negative hold/release would silently move other trips' held money: that's a caller bug.
+function positiveMoney(amount: number): number {
+  const rounded = roundMoney(amount);
+  if (!(rounded > 0)) throw new Error(`Trip money amounts must be positive, got ${amount}`);
+  return rounded;
+}
+
+// The only code that changes a wallet balance or hold. Every balance change locks the wallet and writes its ledger row
 // (transactions) in the same database transaction, so the balance always equals the ledger's sum.
 class WalletModel extends BaseModel<Wallet> {
   protected readonly tableName = "wallets";
@@ -70,25 +78,66 @@ class WalletModel extends BaseModel<Wallet> {
     return (await this.getWallet(userId)).availableBalance;
   }
 
-  // Credits or debits a wallet and records it as a successful transaction. A debit may take the balance
-  // below zero on purpose (a wait charge after boarding); callers that must not overdraw check
-  // getAvailableBalance first.
-  async record({ metadata, ...entry }: LedgerEntry): Promise<Transaction> {
+  // Credits or debits a wallet and records it as a successful transaction, in its own database transaction or
+  // in trx. A debit may take the balance below zero on purpose (a wait charge after boarding); callers that must
+  // not overdraw check getAvailableBalance first, or hold the money.
+  record(entry: LedgerEntry, trx?: Knex.Transaction): Promise<Transaction> {
+    return trx ? this.recordIn(trx, entry) : db.transaction((t) => this.recordIn(t, entry));
+  }
+
+  async recordIn(trx: Knex.Transaction, { metadata, ...entry }: LedgerEntry): Promise<Transaction> {
     const amount = roundMoney(entry.amount);
-    return db.transaction(async (trx) => {
-      await lockWallet(trx, entry.userId);
-      const balanceAfter = await applyToBalance(trx, entry.userId, entry.direction, amount);
-      const [row] = await trx("transactions")
-        .insert({
-          ...entry,
-          amount,
-          status: "success",
-          balanceAfter,
-          metadata: metadata ? JSON.stringify(metadata) : null,
-        })
-        .returning("*");
-      return toTransaction(row);
-    });
+    await lockWallet(trx, entry.userId);
+    const balanceAfter = await applyToBalance(trx, entry.userId, entry.direction, amount);
+    const [row] = await trx("transactions")
+      .insert({
+        ...entry,
+        amount,
+        status: "success",
+        balanceAfter,
+        metadata: metadata ? JSON.stringify(metadata) : null,
+      })
+      .returning("*");
+    return toTransaction(row);
+  }
+
+  // Trip money: hold on accept, then capture at boarding or release on cancel/decline/no-show. Each takes the
+  // caller's trx so the trip's own update commits with it, and the rider's heldAmount always equals the sum of
+  // heldAmount on their accepted trips.
+  // Lock order, everywhere trip money moves: the commute row, then the trip row, then the rider's wallet, then
+  // the driver's wallet. Taking locks in one fixed order means two transactions can never deadlock.
+
+  // Reserves amount out of what the rider can spend. The check and the reservation are one UPDATE, so
+  // simultaneous holds can't reserve the same money twice. No wallet yet means nothing to hold.
+  async hold(trx: Knex.Transaction, userId: string, amount: number): Promise<void> {
+    const rounded = positiveMoney(amount);
+    await trx("wallets").where({ userId }).forUpdate().first();
+    const updated = await trx("wallets")
+      .where({ userId })
+      .andWhereRaw(`"balance" - "heldAmount" >= ?`, [rounded])
+      .update({ heldAmount: trx.raw(`"heldAmount" + ?`, [rounded]), updatedAt: new Date() });
+    if (updated === 0) throw AppError.conflict("Insufficient wallet balance");
+  }
+
+  // Gives held money back to the rider's available balance. No ledger row: the balance itself doesn't change.
+  // Releasing more than is held breaks wallets_held_amount_check and rolls the caller back: a double release is a
+  // bug to surface, not to paper over.
+  async release(trx: Knex.Transaction, userId: string, amount: number): Promise<void> {
+    await trx("wallets")
+      .where({ userId })
+      .update({
+        heldAmount: trx.raw(`"heldAmount" - ?`, [positiveMoney(amount)]),
+        updatedAt: new Date(),
+      });
+  }
+
+  // Turns a trip's hold into its charge: releases amount and debits the same amount as the trip_charge.
+  async capture(
+    trx: Knex.Transaction,
+    { userId, tripId, amount }: { userId: string; tripId: string; amount: number },
+  ): Promise<Transaction> {
+    await this.release(trx, userId, amount);
+    return this.recordIn(trx, { userId, tripId, type: "trip_charge", direction: "debit", amount });
   }
 
   // Credits a pending top-up once its payment is confirmed. Idempotent: the transaction row is locked first,
