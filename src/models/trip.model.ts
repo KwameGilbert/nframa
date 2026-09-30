@@ -139,6 +139,34 @@ export interface TripListFilter extends Page {
   status?: TripStatus;
 }
 
+export interface ManifestFilter extends Page {
+  commuteId: string;
+  tripDate: string;
+  status?: TripStatus;
+  // Riders' phones are for the driver alone, not for an admin reading the manifest.
+  showPhones: boolean;
+}
+
+interface ManifestRow extends PhoneColumns {
+  id: string;
+  status: TripStatus;
+  tripDate: string;
+  riderUserId: string;
+  riderFullName: string | null;
+  riderProfilePicture: string | null;
+  pickupAddress: string;
+  pickupLat: string;
+  pickupLng: string;
+  dropoffAddress: string;
+  dropoffLat: string;
+  dropoffLng: string;
+  scheduledPickupAt: Date;
+  scheduledDropoffAt: Date;
+  totalAmount: string;
+  driverEarnings: string;
+  heldAmount: string;
+}
+
 const COMMUTE_UNAVAILABLE = "This commute is not taking bookings";
 const DUPLICATE_TRIP = "You already have a trip on this commute for that date";
 
@@ -266,19 +294,36 @@ function vehicleOf(row: VehicleColumns) {
       };
 }
 
+interface PhoneColumns {
+  phoneCountryCode: string | null;
+  phoneNumber: string | null;
+}
+
+function phoneOf(row: PhoneColumns) {
+  return row.phoneNumber ? `${row.phoneCountryCode ?? ""}${row.phoneNumber}` : null;
+}
+
 function isUniqueViolation(err: unknown, constraint: string) {
   const { code, constraint: name } = err as { code?: string; constraint?: string };
   return code === "23505" && name === constraint;
 }
 
 // Locks the commute row for the rest of the transaction: the first lock wherever a seat is given (see the
-// lock order in walletModel), so two accepts on one commute run one after the other.
+// lock order in walletModel), so two accepts on one commute run one after the other. The driver is re-checked
+// too: one whose approval was revoked, or who was suspended or deleted, still holds a working token for a while.
 async function lockBookableCommute(trx: Knex.Transaction, commuteId: string) {
-  const commute = await trx("driverCommutes")
-    .where({ id: commuteId })
-    .forUpdate()
-    .first("isActive");
-  if (!commute?.isActive) throw AppError.conflict(COMMUTE_UNAVAILABLE);
+  const commute = await trx("driverCommutes as c")
+    .join("carOwnerProfiles as p", "p.userId", "c.userId")
+    .join("users as u", "u.id", "c.userId")
+    .where("c.id", commuteId)
+    .forUpdate("c")
+    .first("c.isActive", "p.verificationStatus", "u.status", "u.deletedAt");
+  const bookable =
+    commute?.isActive &&
+    commute.verificationStatus === "approved" &&
+    commute.status === "active" &&
+    commute.deletedAt === null;
+  if (!bookable) throw AppError.conflict(COMMUTE_UNAVAILABLE);
 }
 
 class TripModel extends BaseModel<Trip> {
@@ -459,10 +504,18 @@ class TripModel extends BaseModel<Trip> {
       if (trip.status !== "pending")
         throw AppError.conflict(`Can't accept a trip that is ${trip.status}`);
       if (trip.expiresAt && trip.expiresAt <= new Date()) {
-        throw AppError.conflict("This trip request has expired");
+        throw AppError.conflict("Can't accept a trip that is expired");
       }
       await this.assertSeatLeft(trx, trip.commuteId, trip.tripDate);
-      await walletModel.hold(trx, trip.riderUserId, trip.totalAmount);
+      try {
+        await walletModel.hold(trx, trip.riderUserId, trip.totalAmount);
+      } catch (err) {
+        // The request passed the balance check when made, but the rider may have spent the money since.
+        if (err instanceof AppError && err.statusCode === 409) {
+          throw AppError.conflict("The rider's wallet no longer covers this trip");
+        }
+        throw err;
+      }
       return this.updateIn(trx, tripId, {
         status: "accepted",
         acceptedAt: new Date(),
@@ -472,26 +525,48 @@ class TripModel extends BaseModel<Trip> {
     });
   }
 
-  // Riders cancel pending or accepted trips; drivers only accepted ones (a pending request is declined). The
-  // status is re-checked under the row lock, and an accepted trip's hold goes back to the rider with it.
-  async cancelTrip(
+  // Riders cancel pending or accepted trips; drivers only accepted ones (a pending request is declined).
+  cancelTrip(tripId: string, { by, reason }: { by: "rider" | "driver"; reason?: string }) {
+    const from: TripStatus[] = by === "driver" ? ["accepted"] : ["pending", "accepted"];
+    return this.closeTrip(tripId, { status: "cancelled", verb: "cancel", from, by, reason });
+  }
+
+  // The driver says no to a pending request. It holds no money, so nothing moves.
+  declineTrip(tripId: string, reason?: string) {
+    return this.closeTrip(tripId, {
+      status: "declined",
+      verb: "decline",
+      from: ["pending"],
+      by: "driver",
+      reason,
+    });
+  }
+
+  // Ends a trip before boarding. The status is re-checked under the row lock, and an accepted trip's hold goes
+  // back to the rider with it.
+  private async closeTrip(
     tripId: string,
-    { by, reason }: { by: "rider" | "driver"; reason?: string },
+    close: {
+      status: "cancelled" | "declined";
+      verb: string;
+      from: TripStatus[];
+      by: "rider" | "driver";
+      reason?: string;
+    },
   ): Promise<Trip> {
     return db.transaction(async (trx) => {
       const trip = await this.lockIn(trx, tripId);
-      const cancellable: TripStatus[] = by === "driver" ? ["accepted"] : ["pending", "accepted"];
-      if (!cancellable.includes(trip.status)) {
-        throw AppError.conflict(`Can't cancel a trip that is ${trip.status}`);
+      if (!close.from.includes(trip.status)) {
+        throw AppError.conflict(`Can't ${close.verb} a trip that is ${trip.status}`);
       }
       if (trip.heldAmount > 0) await walletModel.release(trx, trip.riderUserId, trip.heldAmount);
       return this.updateIn(trx, tripId, {
-        status: "cancelled",
+        status: close.status,
         heldAmount: 0,
         expiresAt: null,
         cancelledAt: new Date(),
-        cancelledBy: by,
-        cancellationReason: reason ?? null,
+        cancelledBy: close.by,
+        cancellationReason: close.reason ?? null,
       });
     });
   }
@@ -501,7 +576,7 @@ class TripModel extends BaseModel<Trip> {
     const trip = await this.findById(id);
     if (!trip) return undefined;
 
-    const [context, riders, seatsLeft] = await Promise.all([
+    const [context, rider, riders, seatsLeft] = await Promise.all([
       joinDriverVehicle(
         db("driverCommutes as c").join("users as d", "d.id", "c.userId"),
         "c.userId",
@@ -521,6 +596,9 @@ class TripModel extends BaseModel<Trip> {
           "d.phoneNumber",
           ...VEHICLE_COLUMNS,
         ),
+      db("users")
+        .where({ id: trip.riderUserId })
+        .first("fullName", "profilePicture", "phoneCountryCode", "phoneNumber"),
       this.ridersOnRun(trip.commuteId, trip.tripDate),
       this.seatsLeft(trip.commuteId, trip.tripDate),
     ]);
@@ -539,9 +617,12 @@ class TripModel extends BaseModel<Trip> {
       driver: {
         fullName: context.fullName as string | null,
         profilePicture: context.profilePicture as string | null,
-        phone: context.phoneNumber
-          ? `${context.phoneCountryCode ?? ""}${context.phoneNumber}`
-          : null,
+        phone: phoneOf(context),
+      },
+      rider: {
+        fullName: rider.fullName as string | null,
+        profilePicture: rider.profilePicture as string | null,
+        phone: phoneOf(rider),
       },
       vehicle: vehicleOf(context),
       seatsLeft,
@@ -550,7 +631,7 @@ class TripModel extends BaseModel<Trip> {
   }
 
   // The riders holding a seat on one date's run (accepted or boarded), with their pickup and drop-off.
-  private async ridersOnRun(commuteId: string, tripDate: string) {
+  async ridersOnRun(commuteId: string, tripDate: string) {
     const rows = await db("trips as t")
       .join("users as r", "r.id", "t.riderUserId")
       .where({ "t.commuteId": commuteId, "t.tripDate": tripDate })
@@ -658,6 +739,90 @@ class TripModel extends BaseModel<Trip> {
           },
         };
       }),
+    };
+  }
+
+  // Whether a commute has trips still in play (pending, accepted or boarded) from date on.
+  async hasActiveTripsFrom(commuteId: string, date: string) {
+    const row = await this.table
+      .where({ commuteId })
+      .where("tripDate", ">=", date)
+      .whereIn("status", ACTIVE_STATUSES)
+      .first("id");
+    return row !== undefined;
+  }
+
+  // Every trip on one date's run of a commute, soonest pickup first: the driver's manifest. Never the boarding
+  // code, and a rider's phone only once their seat is confirmed (and only when showPhones).
+  async listManifest({ commuteId, tripDate, status, showPhones, page, limit }: ManifestFilter) {
+    const matching = () =>
+      db("trips as t")
+        .where({ "t.commuteId": commuteId, "t.tripDate": tripDate })
+        .modify((query) => {
+          if (status) query.where("t.status", status);
+        });
+
+    const [counted, rows] = await Promise.all([
+      matching().first(db.raw("count(*)::int as total")) as Promise<{ total: number }>,
+      matching()
+        .join("users as r", "r.id", "t.riderUserId")
+        .select(
+          "t.id",
+          "t.status",
+          "t.tripDate",
+          "t.riderUserId",
+          "r.fullName as riderFullName",
+          "r.profilePicture as riderProfilePicture",
+          "r.phoneCountryCode",
+          "r.phoneNumber",
+          "t.pickupAddress",
+          "t.pickupLat",
+          "t.pickupLng",
+          "t.dropoffAddress",
+          "t.dropoffLat",
+          "t.dropoffLng",
+          "t.scheduledPickupAt",
+          "t.scheduledDropoffAt",
+          "t.totalAmount",
+          "t.driverEarnings",
+          "t.heldAmount",
+        )
+        .orderBy([
+          { column: "t.scheduledPickupAt", order: "asc" },
+          { column: "t.id", order: "asc" },
+        ])
+        .limit(limit)
+        .offset((page - 1) * limit) as Promise<ManifestRow[]>,
+    ]);
+
+    return {
+      totalItems: counted.total,
+      items: rows.map((row) => ({
+        tripId: row.id,
+        status: row.status,
+        tripDate: row.tripDate,
+        rider: {
+          id: row.riderUserId,
+          fullName: row.riderFullName,
+          profilePicture: row.riderProfilePicture,
+          phone: showPhones && SEAT_STATUSES.includes(row.status) ? phoneOf(row) : null,
+        },
+        pickup: {
+          address: row.pickupAddress,
+          lat: Number(row.pickupLat),
+          lng: Number(row.pickupLng),
+        },
+        dropoff: {
+          address: row.dropoffAddress,
+          lat: Number(row.dropoffLat),
+          lng: Number(row.dropoffLng),
+        },
+        scheduledPickupAt: row.scheduledPickupAt,
+        scheduledDropoffAt: row.scheduledDropoffAt,
+        totalAmount: Number(row.totalAmount),
+        driverEarnings: Number(row.driverEarnings),
+        heldAmount: Number(row.heldAmount),
+      })),
     };
   }
 

@@ -7,6 +7,7 @@ import { settingModel } from "../models/setting.model.js";
 import { userModel } from "../models/user.model.js";
 import { walletModel } from "../models/wallet.model.js";
 import { assertPermission } from "../middlewares/authorize.js";
+import { findCommuteFor } from "./driverCommute.controller.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { calculateFare, getFareSettings } from "../services/fare.service.js";
 import { distanceToSegmentMeters, progressAlong } from "../services/geo.js";
@@ -18,7 +19,9 @@ import { addDays, departureAt, isoWeekday, timeOfDay, today } from "../utils/tri
 import type {
   AvailableTripsQuery,
   CancelTripInput,
+  CommuteTripsQuery,
   CreateTripInput,
+  DeclineTripInput,
   ListTripsQuery,
 } from "../schemas/trip.schema.js";
 
@@ -59,29 +62,27 @@ function paginated<T>(
 
 const toProgress = (value: number) => Math.round(value * 10_000) / 10_000;
 
-// What viewerId may see of a trip: the boarding code is the rider's alone, and the driver's phone (to the rider)
-// and the plate only show once the seat is confirmed. Until then the rider sees only their own stops, not who else
-// rides or where they're picked up, so a request can't be used to look at other riders. viewerId null is the
-// audit-trail copy, with neither code nor phone.
-function tripView(detail: TripDetail, viewerId: string | null) {
-  const { trip, commute, driver, vehicle, seatsLeft } = detail;
-  const isRider = viewerId === trip.riderUserId;
-  const confirmed = CONFIRMED_STATUSES.has(trip.status);
-  const riders = isRider && !confirmed ? [ownRun(trip)] : detail.riders;
+type RunRider = TripDetail["riders"][number];
 
-  const stops = riders
+// Each rider's pickup and drop-off, in route order (stored progress along the commute).
+function stopsOf(riders: RunRider[]) {
+  return riders
     .flatMap((rider) =>
       (["pickup", "dropoff"] as const).map((type) => ({ type, rider, point: rider[type] })),
     )
-    .sort((a, b) => a.point.progress - b.point.progress)
-    .map(({ type, rider, point }) => ({
-      type,
-      address: point.address,
-      lat: point.lat,
-      lng: point.lng,
-      scheduledAt: point.scheduledAt,
-      isYou: rider.tripId === trip.id,
-    }));
+    .sort((a, b) => a.point.progress - b.point.progress);
+}
+
+// What viewerId may see of a trip: the boarding code is the rider's alone, and the phones (the driver's to the
+// rider, the rider's to the driver) and the plate only show once the seat is confirmed. Until then the rider sees
+// only their own stops, not who else rides or where they're picked up, so a request can't be used to look at other
+// riders. viewerId null is the audit-trail copy, with neither code nor phone.
+function tripView(detail: TripDetail, viewerId: string | null) {
+  const { trip, commute, driver, rider, vehicle, seatsLeft } = detail;
+  const isRider = viewerId === trip.riderUserId;
+  const isDriver = viewerId === trip.driverUserId;
+  const confirmed = CONFIRMED_STATUSES.has(trip.status);
+  const riders = isRider && !confirmed ? [ownRun(trip)] : detail.riders;
 
   return {
     ...publicTrip(trip),
@@ -92,17 +93,25 @@ function tripView(detail: TripDetail, viewerId: string | null) {
       profilePicture: driver.profilePicture,
       phone: isRider && confirmed ? driver.phone : null,
     },
+    rider: { ...rider, phone: isDriver && confirmed ? rider.phone : null },
     vehicle: vehicle && { ...vehicle, plate: confirmed ? vehicle.plate : null },
     seatsLeft,
     otherCommuters: riders
-      .filter((rider) => rider.tripId !== trip.id)
+      .filter((other) => other.tripId !== trip.id)
       .map(({ firstName, profilePicture }) => ({ firstName, profilePicture })),
-    stops,
+    stops: stopsOf(riders).map(({ type, rider: stopRider, point }) => ({
+      type,
+      address: point.address,
+      lat: point.lat,
+      lng: point.lng,
+      scheduledAt: point.scheduledAt,
+      isYou: stopRider.tripId === trip.id,
+    })),
   };
 }
 
 // The trip's own pickup and drop-off, shaped like one of findDetail's riders.
-function ownRun(trip: TripDetail["trip"]): TripDetail["riders"][number] {
+function ownRun(trip: TripDetail["trip"]): RunRider {
   return {
     tripId: trip.id,
     firstName: null,
@@ -138,6 +147,27 @@ async function findTripFor(req: Request, id: string): Promise<TripDetail> {
   }
   return detail;
 }
+
+// Loads a trip for its driver to answer. A stale pending request is then expired, so the locked re-check in the
+// model refuses it by its status.
+async function findTripForDriver(req: Request, id: string, action: string): Promise<TripDetail> {
+  const detail = await tripModel.findDetail(id);
+  if (!detail) {
+    throw AppError.notFound(`Trip not found: ${id}`);
+  }
+  if (req.auth?.role !== "driver" || req.auth.id !== detail.trip.driverUserId) {
+    throw AppError.forbidden(`Only the trip's driver can ${action} it`);
+  }
+  await tripModel.expireStale({ id });
+  return detail;
+}
+
+const tripEvent = ({ trip }: TripDetail) => ({
+  tripId: trip.id,
+  commuteId: trip.commuteId,
+  tripDate: trip.tripDate,
+  status: trip.status,
+});
 
 export async function listAvailableTrips(req: Request, res: Response) {
   const riderId = riderOnly(req, "browse trips");
@@ -305,12 +335,7 @@ export async function requestTrip(req: Request, res: Response) {
     tripView(detail, riderId),
   );
 
-  emitToUser(commute.userId, "trip:requested", {
-    tripId: created.id,
-    commuteId: commute.id,
-    tripDate: created.tripDate,
-    status: created.status,
-  });
+  emitToUser(commute.userId, "trip:requested", tripEvent(detail));
   logActivity(req, {
     ...TRIP_ACTIVITY,
     action: "trip.request",
@@ -366,10 +391,7 @@ export async function cancelTrip(req: Request, res: Response) {
   sendSuccess(res, "Trip cancelled successfully", tripView(after, callerId ?? null));
 
   emitToUser(by === "rider" ? driverUserId : riderUserId, "trip:cancelled", {
-    tripId: id,
-    commuteId: after.trip.commuteId,
-    tripDate: after.trip.tripDate,
-    status: after.trip.status,
+    ...tripEvent(after),
     cancelledBy: by,
     reason: after.trip.cancellationReason,
   });
@@ -380,5 +402,87 @@ export async function cancelTrip(req: Request, res: Response) {
     targetId: id,
     before: tripView(before, null),
     after: tripView(after, null),
+  });
+}
+
+export async function acceptTrip(req: Request, res: Response) {
+  const { id } = req.validated.params as { id: string };
+
+  const before = await findTripForDriver(req, id, "accept");
+  await tripModel.acceptWithHold(id);
+  const after = (await tripModel.findDetail(id)) as TripDetail;
+
+  sendSuccess(res, "Trip accepted successfully", tripView(after, before.trip.driverUserId));
+
+  emitToUser(after.trip.riderUserId, "trip:accepted", tripEvent(after));
+  logActivity(req, {
+    ...TRIP_ACTIVITY,
+    action: "trip.accept",
+    description: "Accepted a trip request",
+    targetId: id,
+    before: tripView(before, null),
+    after: tripView(after, null),
+  });
+}
+
+export async function declineTrip(req: Request, res: Response) {
+  const { id } = req.validated.params as { id: string };
+  const { reason } = req.validated.body as DeclineTripInput;
+
+  const before = await findTripForDriver(req, id, "decline");
+  await tripModel.declineTrip(id, reason);
+  const after = (await tripModel.findDetail(id)) as TripDetail;
+
+  sendSuccess(res, "Trip declined successfully", tripView(after, before.trip.driverUserId));
+
+  emitToUser(after.trip.riderUserId, "trip:declined", {
+    ...tripEvent(after),
+    reason: after.trip.cancellationReason,
+  });
+  logActivity(req, {
+    ...TRIP_ACTIVITY,
+    action: "trip.decline",
+    description: "Declined a trip request",
+    targetId: id,
+    before: tripView(before, null),
+    after: tripView(after, null),
+  });
+}
+
+// The driver's manifest for one date's run: every trip on it, plus the seats and the route sheet of confirmed
+// stops (with first names, since the driver has to find each rider).
+export async function listCommuteTrips(req: Request, res: Response) {
+  const { id } = req.validated.params as { id: string };
+  const { date = today(), ...query } = req.validated.query as CommuteTripsQuery;
+
+  const commute = await findCommuteFor(req, id, "read");
+  await tripModel.expireStale({ commuteId: id });
+  const [{ items, totalItems }, riders, seatsLeft] = await Promise.all([
+    tripModel.listManifest({
+      ...query,
+      commuteId: id,
+      tripDate: date,
+      showPhones: req.auth?.id === commute.userId,
+    }),
+    tripModel.ridersOnRun(id, date),
+    tripModel.seatsLeft(id, date),
+  ]);
+
+  sendSuccess(res, "Commute trips retrieved successfully", {
+    commuteId: id,
+    date,
+    departureAt: departureAt(date, commute.departureTime),
+    capacity: commute.capacity,
+    seatsLeft,
+    stops: stopsOf(riders).map(({ type, rider, point }) => ({
+      type,
+      tripId: rider.tripId,
+      firstName: rider.firstName,
+      address: point.address,
+      lat: point.lat,
+      lng: point.lng,
+      scheduledAt: point.scheduledAt,
+    })),
+    ...paginated(items, totalItems, query),
   });
 }

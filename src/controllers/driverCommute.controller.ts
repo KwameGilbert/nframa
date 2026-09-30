@@ -1,11 +1,13 @@
 import type { Request, Response } from "express";
-import { driverCommuteModel } from "../models/driverCommute.model.js";
+import { driverCommuteModel, type DriverCommute } from "../models/driverCommute.model.js";
 import { driverProfileModel } from "../models/driverProfile.model.js";
+import { tripModel } from "../models/trip.model.js";
 import { assertPermission, assertSelfOrPermission } from "../middlewares/authorize.js";
 import { commuteRoute } from "../services/maps.service.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
+import { today } from "../utils/tripTime.js";
 import type {
   CreateDriverCommuteInput,
   UpdateDriverCommuteInput,
@@ -23,7 +25,11 @@ function callerId(req: Request) {
 
 // Loads the commute and checks the caller owns it (or has the admin permission) — the owner isn't in the
 // request, so this can't be done in route middleware.
-async function findCommuteFor(req: Request, id: string, action: "read" | "update" | "delete") {
+export async function findCommuteFor(
+  req: Request,
+  id: string,
+  action: "read" | "update" | "delete",
+) {
   const commute = await driverCommuteModel.findById(id);
 
   if (!commute) {
@@ -32,6 +38,24 @@ async function findCommuteFor(req: Request, id: string, action: "read" | "update
   await assertSelfOrPermission(req, commute.userId, "commutes", action);
 
   return commute;
+}
+
+const COORDINATES = ["startLat", "startLng", "endLat", "endLng"] as const;
+
+// Whether the update moves the route or the schedule booked trips were priced and timed on. Same values (in any
+// day order, HH:MM or HH:MM:SS) don't count, so a client resending the whole form isn't refused.
+function changesRouteOrSchedule(existing: DriverCommute, input: UpdateDriverCommuteInput) {
+  const days = (list: number[]) => [...list].sort((a, b) => a - b).join(",");
+  return (
+    // Stored as decimal(9,6): extra decimals a client sends aren't a change.
+    COORDINATES.some(
+      (field) => input[field] !== undefined && Number(input[field].toFixed(6)) !== existing[field],
+    ) ||
+    (input.departureTime !== undefined &&
+      input.departureTime !== existing.departureTime.slice(0, 5)) ||
+    (input.recurrenceDays !== undefined &&
+      days(input.recurrenceDays) !== days(existing.recurrenceDays))
+  );
 }
 
 export async function listDriverCommutes(req: Request, res: Response) {
@@ -83,7 +107,15 @@ export async function updateDriverCommute(req: Request, res: Response) {
   const input = req.validated.body as UpdateDriverCommuteInput;
 
   const existing = await findCommuteFor(req, id, "update");
-  const moved = ["startLat", "startLng", "endLat", "endLng"].some((field) => field in input);
+  const guarded = changesRouteOrSchedule(existing, input);
+  // Overdue requests expire first, so they don't block the edit.
+  if (guarded) await tripModel.expireStale({ commuteId: id });
+  if (guarded && (await tripModel.hasActiveTripsFrom(id, today()))) {
+    throw AppError.conflict(
+      "This commute has upcoming trips: pause it or cancel them before changing its route or schedule",
+    );
+  }
+  const moved = COORDINATES.some((field) => field in input);
   const commute = await driverCommuteModel.updateCommute(
     id,
     input,

@@ -63,3 +63,5 @@ export const passwordForgotLimit = limitBy(byIdentifier, 5);
 // only read the database, so their limit is just a flood guard.
 export const tripRequestLimit = limitBy(byUser, 30);
 export const tripBrowseLimit = limitBy(byUser, 300);
+// Drivers answering requests and reading their manifests: a flood guard, well above a busy morning's use.
+export const tripActionLimit = limitBy(byUser, 120);

@@ -70,7 +70,7 @@ registry.registerPath({
   tags: ["Driver Commutes"],
   summary: "Update a commute, or pause it with isActive: false (its driver, or commutes: update)",
   description:
-    "The owner can't be changed — delete the commute and create it for the other driver. Changing any start or end coordinate recomputes distanceMeters and durationSeconds.",
+    "The owner can't be changed — delete the commute and create it for the other driver. Changing any start or end coordinate recomputes distanceMeters and durationSeconds. While the commute has trips from today on that are pending, accepted or boarded, its coordinates, departureTime and recurrenceDays can't change (409; resending the current values is fine): pause it with isActive: false, or cancel those trips, first. Address text, capacity and isActive can always change. Accepted trips keep their seats if the capacity is lowered below them; seats left then reads 0 until enough are freed.",
   security: [{ bearerAuth: [] }],
   request: {
     params: driverCommuteParamsSchema,
@@ -86,6 +86,10 @@ registry.registerPath({
     404: errorResponse(
       "Commute not found",
       "Commute not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+    ),
+    409: errorResponse(
+      "The update changes the route, departure time or weekdays while trips from today on are pending, accepted or boarded",
+      "This commute has upcoming trips: pause it or cancel them before changing its route or schedule",
     ),
   },
 });
