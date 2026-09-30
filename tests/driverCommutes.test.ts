@@ -9,6 +9,7 @@ import {
 } from "./helpers/actors.js";
 import * as data from "./helpers/data.js";
 import { trackForCleanup } from "./helpers/cleanup.js";
+import { haversineMeters } from "../src/services/geo.js";
 import { flushActivityLogs } from "../src/services/activityLog.service.js";
 
 let superAdmin: Awaited<ReturnType<typeof loginAsSuperAdmin>>;
@@ -117,6 +118,55 @@ describe("POST /commutes", () => {
       .send({ ...data.commute(), ...override });
 
     expectStatus(res, 400);
+  });
+});
+
+// The global Google mock in tests/setup.ts: 1.3x the straight line, at 10 m/s.
+function mockedRoute(c: { startLat: number; startLng: number; endLat: number; endLng: number }) {
+  const distanceMeters = Math.round(
+    haversineMeters({ lat: c.startLat, lng: c.startLng }, { lat: c.endLat, lng: c.endLng }) * 1.3,
+  );
+  return { distanceMeters, durationSeconds: Math.round(distanceMeters / 10) };
+}
+
+describe("commute route snapshot", () => {
+  it("is saved on create", async () => {
+    const commute = data.commute();
+
+    const res = await api.post("/commutes").set(auth(driver.token)).send(commute);
+
+    expectStatus(res, 201);
+    trackForCleanup("driverCommutes", { id: res.body.data.id });
+    expect(res.body.data).toMatchObject(mockedRoute(commute));
+    expect(res.body.data.distanceMeters).toBeGreaterThan(0);
+  });
+
+  it("is recomputed from the merged coordinates when a coordinate changes", async () => {
+    const created = await addCommute(driver);
+    const before = (await api.get(`/commutes/${created.id}`).set(auth(driver.token))).body.data;
+    const endLat = before.endLat + 0.1;
+
+    const res = await api.patch(`/commutes/${created.id}`).set(auth(driver.token)).send({ endLat });
+
+    expectStatus(res, 200);
+    expect(res.body.data).toMatchObject(mockedRoute({ ...before, endLat }));
+    expect(res.body.data.distanceMeters).not.toBe(before.distanceMeters);
+  });
+
+  it("is left alone when the update doesn't move the start or end", async () => {
+    const created = await addCommute(driver);
+    const before = (await api.get(`/commutes/${created.id}`).set(auth(driver.token))).body.data;
+
+    const res = await api
+      .patch(`/commutes/${created.id}`)
+      .set(auth(driver.token))
+      .send({ capacity: 2 });
+
+    expectStatus(res, 200);
+    expect(res.body.data).toMatchObject({
+      distanceMeters: before.distanceMeters,
+      durationSeconds: before.durationSeconds,
+    });
   });
 });
 
@@ -341,7 +391,8 @@ describe("DELETE /commutes/:id", () => {
 
 describe("activity log", () => {
   it("records a commute's creation, change and deletion", async () => {
-    const commute = await addCommute(driver);
+    // Not 2 seats, which is what the update below sets: an unchanged value wouldn't be a changed field.
+    const commute = await addCommute(driver, { ...data.commute(), capacity: 4 });
     expectStatus(
       await api.patch(`/commutes/${commute.id}`).set(auth(driver.token)).send({ capacity: 2 }),
       200,

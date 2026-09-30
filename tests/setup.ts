@@ -29,6 +29,22 @@ vi.mock("../src/services/socket.service.js", () => ({
   emitToUser: vi.fn(),
 }));
 
+// No test calls Google: getGoogleRoute returns a deterministic route (1.3x the straight line, 10 m/s) and the
+// key is forced on, so every test takes the Google path whatever a developer's env file says. Tests of the
+// fallback unset the key themselves.
+process.env.GOOGLE_MAPS_API_KEY = "test-google-key";
+vi.mock("../src/services/google.service.js", async () => {
+  const { haversineMeters } = await import("../src/services/geo.js");
+  return {
+    getGoogleRoute: vi.fn(
+      async (origin: { lat: number; lng: number }, destination: { lat: number; lng: number }) => {
+        const distanceMeters = Math.round(haversineMeters(origin, destination) * 1.3);
+        return { distanceMeters, durationSeconds: Math.round(distanceMeters / 10) };
+      },
+    ),
+  };
+});
+
 beforeAll(async () => {
   // Run any pending migrations before tests start
   await db.migrate.latest();

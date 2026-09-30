@@ -17,9 +17,14 @@ export interface DriverCommute {
   recurrenceDays: number[];
   capacity: number;
   isActive: boolean;
+  distanceMeters: number | null;
+  durationSeconds: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
+
+// The driving distance and time between a commute's start and end, saved when it is created or moved.
+export type CommuteRoute = Pick<DriverCommute, "distanceMeters" | "durationSeconds">;
 
 class DriverCommuteModel extends BaseModel<DriverCommute> {
   protected readonly tableName = "driverCommutes";
@@ -35,13 +40,15 @@ class DriverCommuteModel extends BaseModel<DriverCommute> {
     };
   }
 
-  createCommute(input: CreateDriverCommuteInput, userId: string) {
-    return this.insert({ ...input, userId } as unknown as Partial<DriverCommute>);
+  createCommute(input: CreateDriverCommuteInput, userId: string, route: CommuteRoute) {
+    return this.insert({ ...input, ...route, userId } as unknown as Partial<DriverCommute>);
   }
 
-  updateCommute(id: string, input: UpdateDriverCommuteInput) {
+  // route is only passed when the start or end moved.
+  updateCommute(id: string, input: UpdateDriverCommuteInput, route: Partial<CommuteRoute> = {}) {
     return this.updateById(id, {
       ...input,
+      ...route,
       updatedAt: new Date(),
     } as unknown as Partial<DriverCommute>);
   }

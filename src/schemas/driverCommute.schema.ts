@@ -72,6 +72,15 @@ export const driverCommuteResponseSchema = commuteFieldsSchema.extend({
     .string()
     .meta({ description: "Departure time of day, HH:MM:SS", example: "07:30:00" }),
   isActive: z.boolean(),
+  distanceMeters: z.number().int().nullable().meta({
+    description:
+      "Driving distance from start to end in meters, saved when the commute is created or its start/end changes. Null for commutes created before this was recorded",
+    example: 9200,
+  }),
+  durationSeconds: z.number().int().nullable().meta({
+    description: "Driving time from start to end in seconds; null like distanceMeters",
+    example: 1080,
+  }),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });

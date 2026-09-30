@@ -6,6 +6,7 @@ import "./adminUser.docs.js";
 import "./auth.docs.js";
 import "./driverCommute.docs.js";
 import "./driverProfile.docs.js";
+import "./fare.docs.js";
 import "./riderProfile.docs.js";
 import "./role.docs.js";
 import "./rolePermission.docs.js";

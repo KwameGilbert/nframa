@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { driverCommuteModel } from "../models/driverCommute.model.js";
 import { driverProfileModel } from "../models/driverProfile.model.js";
 import { assertPermission, assertSelfOrPermission } from "../middlewares/authorize.js";
+import { getRoute } from "../services/maps.service.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
@@ -33,6 +34,16 @@ async function findCommuteFor(req: Request, id: string, action: "read" | "update
   return commute;
 }
 
+// The driving route from a commute's start to its end, as the two columns the commute stores.
+async function routeFor(c: { startLat: number; startLng: number; endLat: number; endLng: number }) {
+  const { distanceMeters, durationSeconds } = await getRoute(
+    { lat: c.startLat, lng: c.startLng },
+    { lat: c.endLat, lng: c.endLng },
+  );
+
+  return { distanceMeters, durationSeconds };
+}
+
 export async function listDriverCommutes(req: Request, res: Response) {
   const userId = callerId(req);
 
@@ -56,7 +67,7 @@ export async function createDriverCommute(req: Request, res: Response) {
     throw AppError.badRequest(`No driver profile for user: ${ownerId}`);
   }
 
-  const commute = await driverCommuteModel.createCommute(input, ownerId);
+  const commute = await driverCommuteModel.createCommute(input, ownerId, await routeFor(input));
 
   sendCreated(res, "Commute created successfully", commute);
 
@@ -82,7 +93,12 @@ export async function updateDriverCommute(req: Request, res: Response) {
   const input = req.validated.body as UpdateDriverCommuteInput;
 
   const existing = await findCommuteFor(req, id, "update");
-  const commute = await driverCommuteModel.updateCommute(id, input);
+  const moved = ["startLat", "startLng", "endLat", "endLng"].some((field) => field in input);
+  const commute = await driverCommuteModel.updateCommute(
+    id,
+    input,
+    moved ? await routeFor({ ...existing, ...input }) : {},
+  );
 
   if (!commute) {
     throw AppError.notFound(`Commute not found: ${id}`);
