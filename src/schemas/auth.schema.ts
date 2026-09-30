@@ -26,7 +26,7 @@ const phoneIdentifier = z.object({
     .meta({ description: "Phone number without the country code", example: "541436414" }),
   role: z.enum(["rider", "driver"]).optional().meta({
     description:
-      "Required only when signing up a phone number that has no account yet; ignored for existing accounts. Valid values: rider (customer), driver (service provider)",
+      "Required only when signing up: a phone number that has no account yet, or one whose rider/driver account was deleted (it re-registers as this role). Ignored for existing accounts. Valid values: rider (customer), driver (service provider)",
     example: "rider",
   }),
 });
@@ -120,6 +120,6 @@ export const loginResponseSchema = authTokensResponseSchema.extend({
   user: accountResponseSchema,
   isNewUser: z.boolean().meta({
     description:
-      "True only when this call just created the account (phone OTP signup). Always false for password login and email-OTP login.",
+      "True only when this call just signed up the account (phone OTP signup, including a deleted rider/driver re-registering the same number with a clean profile). Always false for password login and email-OTP login.",
   }),
 });

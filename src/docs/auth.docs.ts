@@ -13,7 +13,10 @@ import {
 } from "../schemas/auth.schema.js";
 
 const loginResponseDescription =
-  "Returns the token pair along with the account, including its role-specific profile at user.profile (driver/rider/admin extension record). user.profile is null if the account hasn't completed that step yet (e.g. a brand-new signup with no driver profile created yet). For admins, user.adminRole and user.permissions say what they can access. isNewUser is true only when this call just created the account (phone OTP signup); it's always false for password login and email-OTP login.";
+  "Returns the token pair along with the account, including its role-specific profile at user.profile (driver/rider/admin extension record). user.profile is null if the account hasn't completed that step yet (e.g. a brand-new signup with no driver profile created yet). For admins, user.adminRole and user.permissions say what they can access. isNewUser is true only when this call just signed up the account (phone OTP signup, including a deleted account re-registering); it's always false for password login and email-OTP login.";
+
+const reRegistration =
+  "A deleted rider or driver account can sign up again with the same phone number: role is required as for a new number, and on verify the same account (same id, since the number is unique) is reactivated with the role chosen now and a clean profile (name, email, date of birth, picture and password cleared), every old session is revoked, and the driver side is reset (driver profile back to unverified with no Ghana card number, address or terms acceptance; verification documents deleted; commutes paused; vehicles retired). The wallet balance, transactions and trips stay with the account. A suspended account stays suspended (403) even if it was deleted, and deleted admin accounts or email identifiers are never reactivated (403).";
 
 const accountBlocked = errorResponse(
   "Account is suspended or deleted, or the admin account is not active",
@@ -45,8 +48,7 @@ registry.registerPath({
   path: "/auth/login/otp",
   tags: ["Auth"],
   summary: "Send a login OTP code (step 1 of OTP login)",
-  description:
-    "For phone identifiers, if no account exists yet, role is required and this becomes a signup attempt (the account is created on successful verify). Email identifiers are login-only — admin accounts are provisioned via POST /admin, never self-signed-up. The code expires after 5 minutes. Rate limited to 5 codes per phone/email per 15 minutes.",
+  description: `For phone identifiers, if no account exists yet, role is required and this becomes a signup attempt (the account is created on successful verify). ${reRegistration} Email identifiers are login-only — admin accounts are provisioned via POST /admin, never self-signed-up. The code expires after 5 minutes. Rate limited to 5 codes per phone/email per 15 minutes.`,
   request: {
     body: {
       content: {
@@ -72,7 +74,10 @@ registry.registerPath({
   },
   responses: {
     200: successResponse("Verification code sent"),
-    400: errorResponse("Validation error, or role missing when signing up"),
+    400: errorResponse(
+      "Validation error, or role missing when signing up (a new or deleted rider/driver number)",
+      "role is required to sign up",
+    ),
     403: accountBlocked,
     404: errorResponse(
       "No account found for this identifier (email identifiers only)",
@@ -87,7 +92,7 @@ registry.registerPath({
   path: "/auth/login/verify",
   tags: ["Auth"],
   summary: "Verify a login OTP code and get tokens (step 2 of OTP login)",
-  description: `Send the same identifier used for /auth/login/otp, plus the code. Creates the account first if this was a phone signup. Each code allows 5 wrong attempts; rate limited to 10 failed attempts per phone/email per 15 minutes. ${loginResponseDescription}`,
+  description: `Send the same identifier used for /auth/login/otp, plus the code. Creates the account first if this was a phone signup (or reactivates a deleted rider/driver account — see POST /auth/login/otp). Each code allows 5 wrong attempts; rate limited to 10 failed attempts per phone/email per 15 minutes. ${loginResponseDescription}`,
   request: {
     body: {
       content: {
@@ -119,7 +124,8 @@ registry.registerPath({
   responses: {
     200: successResponse("Login successful", loginResponseSchema),
     400: errorResponse(
-      "Validation error, or the code is missing, expired, wrong, or out of attempts",
+      "Validation error, role missing when signing up, or the code is missing, expired, wrong, already used, or out of attempts",
+      "Invalid verification code",
     ),
     403: accountBlocked,
     404: errorResponse(
@@ -223,7 +229,8 @@ registry.registerPath({
   responses: {
     200: successResponse("Password reset successfully. Sign in with your new password."),
     400: errorResponse(
-      "Validation error, or the code is missing, expired, wrong, or out of attempts",
+      "Validation error, or the code is missing, expired, wrong, already used, or out of attempts",
+      "Invalid verification code",
     ),
     404: errorResponse("No account found for this email", "No account found for this email"),
     429: rateLimitedResponse,

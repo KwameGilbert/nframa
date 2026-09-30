@@ -507,14 +507,15 @@ describe("Deleted accounts", () => {
     const rider = await signUpByPhone("rider");
     expectStatus(await api.delete(`/users/${rider.userId}`).set(auth(rider.token)), 200);
 
+    // Signing in by phone is signing up again: it needs a role (see reRegistration.test.ts).
     const otp = await api
       .post("/auth/login/otp")
       .send({ phoneCountryCode: rider.phoneCountryCode, phoneNumber: rider.phoneNumber });
     const refresh = await api.post("/auth/refresh").send({ refreshToken: rider.refreshToken });
     const me = await api.get("/auth/me").set(auth(rider.token));
 
-    expectStatus(otp, 403);
-    expect(otp.body.error).toBe("Account is not active");
+    expectStatus(otp, 400);
+    expect(otp.body.error).toBe("role is required to sign up");
     expectStatus(refresh, 401);
     expectStatus(me, 403);
     expect(me.body.error).toBe("Account is not active");

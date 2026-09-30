@@ -184,7 +184,7 @@ registry.registerPath({
   tags: ["Users"],
   summary: "Delete a user (soft delete)",
   description:
-    "Marks the account deleted (deletedAt is set; the row is kept) and signs it out of every session — it can no longer log in or refresh, and any access token it holds stops working within 15 minutes. Its email and phone number stay reserved, so they can't be used for a new account.\n\nRiders and drivers can delete their own account. Deleting anyone else needs users: delete, or admin: delete for an admin account. Admins can't delete their own account, and only an admin with a system role (superadmin) can delete another system-role admin.",
+    "Marks the account deleted (deletedAt is set; the row is kept) and signs it out of every session — it can no longer log in or refresh, and any access token it holds stops working within 15 minutes. Its email and phone number stay reserved, so they can't be used for a different account — but a deleted rider or driver can sign up again with the same phone number, which reactivates this account with a clean profile (see POST /auth/login/otp).\n\nRiders and drivers can delete their own account. Deleting anyone else needs users: delete, or admin: delete for an admin account. Admins can't delete their own account, and only an admin with a system role (superadmin) can delete another system-role admin.",
   security: [{ bearerAuth: [] }],
   request: {
     params: userIdParamsSchema,
