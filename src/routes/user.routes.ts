@@ -2,6 +2,7 @@ import { Router } from "express";
 import { validate } from "../middlewares/validate.js";
 import { authenticate } from "../middlewares/authenticate.js";
 import { requirePermission } from "../middlewares/authorize.js";
+import { uploadSingleFile } from "../middlewares/upload.js";
 import {
   createUserSchema,
   updateUserSchema,
@@ -31,9 +32,13 @@ userRouter.post("/users", authenticate, validate({ body: createUserSchema }), cr
 
 userRouter.get("/users/:id", authenticate, validate({ params: userIdParamsSchema }), getUser);
 
+// Supports both file upload (multipart with profilePicture field) and JSON with base64
+// For multipart: Content-Type: multipart/form-data, field name "profilePicture"
+// For base64 JSON: Content-Type: application/json, body: { profilePicture: "data:image/png;base64,..." }
 userRouter.patch(
   "/users/:id",
   authenticate,
+  uploadSingleFile("profilePicture"),
   validate({ params: userIdParamsSchema, body: updateUserSchema }),
   updateUser,
 );

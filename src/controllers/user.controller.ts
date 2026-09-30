@@ -8,6 +8,7 @@ import { activityLogModel } from "../models/activityLog.model.js";
 import { assertPermission, assertSelfOrPermission } from "../middlewares/authorize.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { emitToUser } from "../services/socket.service.js";
+import { uploadFile } from "../services/storage.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 import type {
@@ -120,8 +121,8 @@ export async function getUser(req: Request, res: Response) {
 
 export async function updateUser(req: Request, res: Response) {
   const { id } = req.validated.params as { id: string };
-  const { email, phoneCountryCode, phoneNumber, profile, ...personalFields } = req.validated
-    .body as UpdateUserInput;
+  const { email, phoneCountryCode, phoneNumber, profile, profilePicture, ...otherFields } =
+    req.validated.body as UpdateUserInput;
 
   const target = await findUserOrThrow(id);
   await assertSelfOrPermission(req, target.id, moduleFor(target), "update");
@@ -133,6 +134,14 @@ export async function updateUser(req: Request, res: Response) {
     throw AppError.badRequest("This driver has no profile yet — create one first via POST /driver");
   }
 
+  // Handle file upload: if req.file exists (from multipart or base64), upload to storage and get URL
+  let profilePictureUrl = profilePicture;
+  if ((req as Record<string, unknown>).file) {
+    const file = (req as Record<string, unknown>).file as Express.Multer.File;
+    const uploaded = await uploadFile(file.buffer, `profiles/${id}`, file.originalname);
+    profilePictureUrl = uploaded.fileUrl;
+  }
+
   // A changed identifier is no longer verified. Resending the current value isn't a change.
   const emailChanged = email !== undefined && email !== target.email;
   const phoneChanged =
@@ -140,7 +149,8 @@ export async function updateUser(req: Request, res: Response) {
     (phoneNumber !== undefined && phoneNumber !== target.phoneNumber);
 
   const userFields = {
-    ...personalFields,
+    ...otherFields,
+    ...(profilePictureUrl && { profilePicture: profilePictureUrl }),
     ...(emailChanged && { email, isEmailVerified: false }),
     ...(phoneChanged && { phoneCountryCode, phoneNumber, isPhoneVerified: false }),
   };
