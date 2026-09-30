@@ -14,6 +14,7 @@ import "./setting.docs.js";
 import "./user.docs.js";
 import "./vehicle.docs.js";
 import "./verification.docs.js";
+import "./wallet.docs.js";
 
 const generator = new OpenApiGeneratorV3(registry.definitions);
 

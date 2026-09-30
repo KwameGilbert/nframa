@@ -58,6 +58,7 @@ describe.each([
   ["a zero fallback speed", "trips.fallbackSpeedKmh", 0, 30],
   ["a negative fallback speed", "trips.fallbackSpeedKmh", -10, 30],
   ["a negative rate", "fares.perKmRate", -2, 2],
+  ["a top-up limit over its max", "wallet.maxTopUp", 5_000_000, 5000],
 ] as const)("settingModel.getValue with %s", { concurrent: false }, (_name, key, bad, fallback) => {
   it("falls back to the default", async () => {
     expect(await withStoredRows([{ key, value: bad }], () => settingModel.getValue(key))).toBe(
@@ -71,6 +72,7 @@ describe("trip setting defaults", () => {
     for (const spec of Object.values(TRIP_SETTINGS) as TripSettingSpec[]) {
       expect(typeof spec.default).toBe(spec.type);
       if (spec.min !== undefined) expect(spec.default as number).toBeGreaterThanOrEqual(spec.min);
+      if (spec.max !== undefined) expect(spec.default as number).toBeLessThanOrEqual(spec.max);
       if (spec.oneOf) expect(spec.oneOf).toContain(spec.default);
     }
   });

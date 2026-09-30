@@ -33,7 +33,7 @@ class SettingModel extends BaseModel<Setting> {
   }
 
   // The stored value of each key, or its default when the setting is missing or its value doesn't match the
-  // type or its bounds (min, oneOf). One query for all of them.
+  // type or its bounds (min, max, oneOf). One query for all of them.
   async getValues<K extends TripSettingKey>(
     keys: readonly K[],
   ): Promise<{ [P in K]: TripSettingValue<P> }> {
@@ -50,6 +50,7 @@ class SettingModel extends BaseModel<Setting> {
           value !== undefined &&
           isValidSettingValue(spec.type, value) &&
           (spec.min === undefined || (value as number) >= spec.min) &&
+          (spec.max === undefined || (value as number) <= spec.max) &&
           (spec.oneOf === undefined || spec.oneOf.includes(value as string));
         return [key, valid ? value : spec.default];
       }),

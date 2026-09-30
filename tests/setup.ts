@@ -45,6 +45,19 @@ vi.mock("../src/services/google.service.js", async () => {
   };
 });
 
+// No test calls Paystack: starting and verifying a payment go to tests/helpers/paystack.ts, which tests steer.
+// The webhook signature check stays real, against this test key.
+process.env.PAYSTACK_SECRET_KEY = "test-paystack-secret";
+vi.mock("../src/services/paystack.service.js", async (importActual) => {
+  const actual = await importActual<typeof import("../src/services/paystack.service.js")>();
+  const { paystackMock } = await import("./helpers/paystack.js");
+  return {
+    ...actual,
+    initializeTransaction: vi.fn(paystackMock.initialize),
+    verifyTransaction: vi.fn(paystackMock.verify),
+  };
+});
+
 beforeAll(async () => {
   // Run any pending migrations before tests start
   await db.migrate.latest();

@@ -23,6 +23,8 @@ export function trackForCleanup(table: string, criteria: Criteria): void {
 // verificationDocuments/verificationDocumentHistory/rolePermissions cascade on their own when their
 // parent is deleted; they're listed anyway so the order stays self-documenting.
 const DELETE_ORDER = [
+  "transactions", // ON DELETE RESTRICT on users: a ledger never vanishes with its user
+  "wallets",
   "verificationDocumentHistory",
   "verificationDocuments",
   "vehicles",

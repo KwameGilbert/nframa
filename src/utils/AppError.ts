@@ -32,4 +32,13 @@ export class AppError extends Error {
   static tooManyRequests(message = "Too many requests, try again later") {
     return new AppError(message, 429);
   }
+
+  // An upstream service (e.g. Paystack) failed or answered with something unusable.
+  static badGateway(message: string) {
+    return new AppError(message, 502);
+  }
+
+  static serviceUnavailable(message: string) {
+    return new AppError(message, 503);
+  }
 }

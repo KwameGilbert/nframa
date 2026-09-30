@@ -6,6 +6,16 @@ import { notFoundHandler } from "./middlewares/notFound.js";
 import { errorHandler } from "./middlewares/errorHandler.js";
 import { router } from "./routes/index.js";
 
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace -- required by Express's ambient augmentation pattern
+  namespace Express {
+    interface Request {
+      // The JSON body exactly as received, for checking webhook signatures (see verifyPaystackSignature).
+      rawBody?: Buffer;
+    }
+  }
+}
+
 // The Express app on its own, without a server: src/index.ts serves it, and tests call it in-process.
 export const app = express();
 
@@ -20,7 +30,13 @@ app.use(captureResponseBody);
 app.use(httpLogger);
 app.use(helmet());
 app.use(cors());
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, _res, buf) => {
+      (req as express.Request).rawBody = buf;
+    },
+  }),
+);
 
 app.use(router);
 

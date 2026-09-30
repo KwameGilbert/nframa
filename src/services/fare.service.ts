@@ -1,4 +1,5 @@
 import { settingModel } from "../models/setting.model.js";
+import { CURRENCY, roundMoney } from "../utils/money.js";
 import type { TripSettingKey, TripSettingValue } from "../config/tripSettings.js";
 
 const FARE_SETTING_KEYS = [
@@ -19,12 +20,6 @@ export interface FareLeg {
   distanceMeters: number;
   durationSeconds: number;
   waitMinutes?: number;
-}
-
-export const CURRENCY = "GHS";
-
-export function roundMoney(amount: number) {
-  return Math.round((amount + Number.EPSILON) * 100) / 100;
 }
 
 // A fee is either a fixed amount or a percentage of the fare.

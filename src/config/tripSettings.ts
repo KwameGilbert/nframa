@@ -1,16 +1,17 @@
 import type { SettingType } from "../schemas/setting.schema.js";
 
-// min (numbers) and oneOf (strings) are optional bounds: a stored value outside them is ignored, so a typo like
+// min, max (numbers) and oneOf (strings) are optional bounds: a stored value outside them is ignored, so a typo like
 // "percentage" or a speed of 0 can't break fares.
 export interface TripSettingSpec {
   type: SettingType;
   default: unknown;
   description: string;
   min?: number;
+  max?: number;
   oneOf?: readonly string[];
 }
 
-// Every setting the fare and trip code reads: its type, the default used until an admin sets it, and what it
+// Every setting the fare, trip and wallet code reads: its type, the default used until an admin sets it, and what it
 // controls. The reader (settingModel.getValues) falls back to the default when the row is missing or its value
 // doesn't match the type, and the seed inserts these rows so they show up in GET /settings.
 export const TRIP_SETTINGS = {
@@ -104,6 +105,19 @@ export const TRIP_SETTINGS = {
     default: 30,
     description:
       "Average speed, in km/h, used to estimate travel time when Google routing is unavailable",
+  },
+  "wallet.minTopUp": {
+    type: "number",
+    min: 0,
+    default: 1,
+    description: "Smallest amount, in GHS, a rider can add to their wallet in one top-up",
+  },
+  "wallet.maxTopUp": {
+    type: "number",
+    min: 0,
+    max: 1_000_000, // far inside numeric(12,2)
+    default: 5000,
+    description: "Largest amount, in GHS, a rider can add to their wallet in one top-up",
   },
 } as const satisfies Record<string, TripSettingSpec>;
 
