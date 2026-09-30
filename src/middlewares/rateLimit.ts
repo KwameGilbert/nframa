@@ -65,3 +65,7 @@ export const tripRequestLimit = limitBy(byUser, 30);
 export const tripBrowseLimit = limitBy(byUser, 300);
 // Drivers answering requests and reading their manifests: a flood guard, well above a busy morning's use.
 export const tripActionLimit = limitBy(byUser, 120);
+// Riders' apps share their location every few seconds while waiting on the day of a trip.
+export const tripLocationLimit = limitBy(byUser, 300);
+// Every scan counts, so a driver can't guess boarding codes.
+export const tripBoardLimit = limitBy(byUser, 60);

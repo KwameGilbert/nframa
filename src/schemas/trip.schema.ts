@@ -25,7 +25,7 @@ const pageFields = {
 
 export const tripStatusSchema = z.enum(TRIP_STATUSES).meta({
   description:
-    "pending: waiting for the driver; accepted: seat confirmed and the total held in the rider's wallet; boarded: picked up (the hold became the charge); completed; declined (by the driver); cancelled (by the rider or driver); no_show; expired (the driver didn't answer in time)",
+    "pending: waiting for the driver; accepted: seat confirmed and the total held in the rider's wallet; boarded: scanned on board (the hold became the charge, plus any wait charge); completed: dropped off and the driver paid; declined (by the driver); cancelled (by the rider or driver); no_show: never boarded (reported by the driver after the boarding window, or by the system trips.staleAfterHours after the scheduled drop-off), the hold released; expired (the driver didn't answer in time)",
   example: "accepted",
 });
 
@@ -104,7 +104,32 @@ export const commuteTripsQuerySchema = z.object({
 
 export type CommuteTripsQuery = z.infer<typeof commuteTripsQuerySchema>;
 
+// Where the caller is right now: the rider sharing their location, or the driver at the pickup.
+export const tripLocationSchema = z.object({
+  lat: latitude(PICKUP_EXAMPLE.lat),
+  lng: longitude(PICKUP_EXAMPLE.lng),
+});
+
+export type TripLocationInput = z.infer<typeof tripLocationSchema>;
+
+export const boardTripSchema = z.object({
+  code: z.string().trim().toUpperCase().min(1).max(20).meta({
+    description: "The rider's boarding code, as scanned from their app",
+    example: "TR-7KQ2MX",
+  }),
+  ...tripLocationSchema.shape,
+});
+
+export type BoardTripInput = z.infer<typeof boardTripSchema>;
+
 // Responses (docs only — see CLAUDE.md "API docs").
+
+export const riderLocationSchema = z.object({
+  tripId: z.uuid(),
+  lat: latitude(PICKUP_EXAMPLE.lat),
+  lng: longitude(PICKUP_EXAMPLE.lng),
+  recordedAt: z.iso.datetime().meta({ description: "When the location was stored" }),
+});
 
 const pagination = z.object({
   page: z.number().int(),
@@ -193,13 +218,21 @@ export const tripSchema = z.object({
   platformFee: money(1.8),
   bookingFee: money(1),
   totalAmount: money(20.75, "What the rider pays: fare + fees"),
-  driverEarnings: money(17.95),
-  waitCharge: money(0),
+  driverEarnings: money(17.95, "The fare, plus the wait charge once boarded: paid on completion"),
+  waitCharge: money(0, "Charged at boarding for the wait past the grace period, no fees; 0 before"),
+  waitMinutes: z.number().int().nullable().meta({
+    description:
+      "Minutes the driver waited, from their arrival (or the scheduled pickup, if later) to the scan; 0 without an arrival mark; null until boarded",
+    example: 7,
+  }),
   heldAmount: money(20.75, "Held in the rider's wallet while the trip is accepted"),
   fareBreakdown: fareBreakdownSchema.extend({ currency: z.literal("GHS") }),
   acceptedAt: z.iso.datetime().nullable(),
-  arrivedAt: z.iso.datetime().nullable(),
-  boardedAt: z.iso.datetime().nullable(),
+  arrivedAt: z.iso
+    .datetime()
+    .nullable()
+    .meta({ description: "When the driver marked arrival at the pickup" }),
+  boardedAt: z.iso.datetime().nullable().meta({ description: "When the driver scanned the rider" }),
   completedAt: z.iso.datetime().nullable(),
   cancelledAt: z.iso.datetime().nullable(),
   cancelledBy: z.enum(["rider", "driver", "system"]).nullable(),

@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { publicTrip, tripModel } from "../models/trip.model.js";
+import { publicTrip, tripModel, type Trip } from "../models/trip.model.js";
 import { driverCommuteModel } from "../models/driverCommute.model.js";
 import { driverProfileModel } from "../models/driverProfile.model.js";
 import { riderProfileModel } from "../models/riderProfile.model.js";
@@ -10,7 +10,12 @@ import { assertPermission } from "../middlewares/authorize.js";
 import { findCommuteFor } from "./driverCommute.controller.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { calculateFare, getFareSettings } from "../services/fare.service.js";
-import { distanceToSegmentMeters, progressAlong } from "../services/geo.js";
+import {
+  distanceToSegmentMeters,
+  haversineMeters,
+  progressAlong,
+  type Point,
+} from "../services/geo.js";
 import { commuteRoute, getRoute } from "../services/maps.service.js";
 import { emitToUser } from "../services/socket.service.js";
 import { AppError } from "../utils/AppError.js";
@@ -18,11 +23,13 @@ import { sendCreated, sendSuccess } from "../utils/response.js";
 import { addDays, departureAt, isoWeekday, timeOfDay, today } from "../utils/tripTime.js";
 import type {
   AvailableTripsQuery,
+  BoardTripInput,
   CancelTripInput,
   CommuteTripsQuery,
   CreateTripInput,
   DeclineTripInput,
   ListTripsQuery,
+  TripLocationInput,
 } from "../schemas/trip.schema.js";
 
 const TRIP_ACTIVITY = { module: "trips", targetType: "trip" } as const;
@@ -136,7 +143,7 @@ function ownRun(trip: TripDetail["trip"]): RunRider {
 // Loads a trip for its rider, its driver, or an admin with trips: read. Stale pending requests expire first, so
 // the status shown is current.
 async function findTripFor(req: Request, id: string): Promise<TripDetail> {
-  await tripModel.expireStale({ id });
+  await tripModel.settleStale({ id });
   const detail = await tripModel.findDetail(id);
   if (!detail) {
     throw AppError.notFound(`Trip not found: ${id}`);
@@ -148,9 +155,10 @@ async function findTripFor(req: Request, id: string): Promise<TripDetail> {
   return detail;
 }
 
-// Loads a trip for its driver to answer. A stale pending request is then expired, so the locked re-check in the
-// model refuses it by its status.
+// Loads a trip for its driver to act on, once stale trips are settled (an overdue request expired, ...), so the
+// status seen here, and re-checked under the lock in the model, is current.
 async function findTripForDriver(req: Request, id: string, action: string): Promise<TripDetail> {
+  await tripModel.settleStale({ id });
   const detail = await tripModel.findDetail(id);
   if (!detail) {
     throw AppError.notFound(`Trip not found: ${id}`);
@@ -158,8 +166,55 @@ async function findTripForDriver(req: Request, id: string, action: string): Prom
   if (req.auth?.role !== "driver" || req.auth.id !== detail.trip.driverUserId) {
     throw AppError.forbidden(`Only the trip's driver can ${action} it`);
   }
-  await tripModel.expireStale({ id });
   return detail;
+}
+
+const BOARDING_SETTINGS = [
+  "trips.boardingRadiusMeters",
+  "trips.locationMaxAgeSeconds",
+  "trips.boardingEarlyMinutes",
+  "trips.boardingLateMinutes",
+  "fares.waitGraceMinutes",
+  "fares.waitPerMinuteRate",
+] as const;
+
+type BoardingSettings = Awaited<ReturnType<typeof boardingSettings>>;
+
+const boardingSettings = () => settingModel.getValues(BOARDING_SETTINGS);
+
+// The driver can mark arrival and scan the rider from trips.boardingEarlyMinutes before the scheduled pickup to
+// trips.boardingLateMinutes after it. Deliberately not tied to tripDate: a pickup can fall after midnight.
+function assertBoardingWindow(trip: Trip, s: BoardingSettings, now: Date) {
+  const pickup = trip.scheduledPickupAt.getTime();
+  const opens = new Date(pickup - s["trips.boardingEarlyMinutes"] * 60_000);
+  const closes = new Date(pickup + s["trips.boardingLateMinutes"] * 60_000);
+  if (now < opens) throw AppError.conflict(`Boarding opens at ${opens.toISOString()}`);
+  if (now > closes) throw AppError.conflict(`Boarding closed at ${closes.toISOString()}`);
+}
+
+function assertNearPickup(trip: Trip, driverAt: Point, s: BoardingSettings) {
+  const pickup = { lat: trip.pickupLat, lng: trip.pickupLng };
+  if (haversineMeters(driverAt, pickup) > s["trips.boardingRadiusMeters"]) {
+    throw AppError.conflict("You're too far from the pickup point");
+  }
+}
+
+// Proof the rider is in the car: their app's last location is fresh and within the radius of the driver.
+function assertRiderWithDriver(trip: Trip, driverAt: Point, s: BoardingSettings, now: Date) {
+  const { riderLat, riderLng, riderLocationAt } = trip;
+  const maxAgeMs = s["trips.locationMaxAgeSeconds"] * 1000;
+  if (
+    riderLat === null ||
+    riderLng === null ||
+    !riderLocationAt ||
+    now.getTime() - riderLocationAt.getTime() > maxAgeMs
+  ) {
+    throw AppError.conflict("The rider's location is out of date: ask them to open the app");
+  }
+  const riderAt = { lat: riderLat, lng: riderLng };
+  if (haversineMeters(riderAt, driverAt) > s["trips.boardingRadiusMeters"]) {
+    throw AppError.conflict("The rider isn't close enough to the vehicle");
+  }
 }
 
 const tripEvent = ({ trip }: TripDetail) => ({
@@ -273,10 +328,11 @@ export async function requestTrip(req: Request, res: Response) {
     throw AppError.serviceUnavailable("Fares are not configured");
   }
 
+  // Settled first: a stale trip's hold, once released, counts toward the balance.
+  await tripModel.settleStale({ riderUserId: riderId });
   if ((await walletModel.getAvailableBalance(riderId)) < fareBreakdown.total) {
     throw AppError.conflict("Insufficient wallet balance");
   }
-  await tripModel.expireStale({ riderUserId: riderId });
   const overlapping = await tripModel.hasOverlappingTrip(riderId, {
     commuteId: commute.id,
     from: scheduledPickupAt,
@@ -353,7 +409,7 @@ export async function listTrips(req: Request, res: Response) {
   const userId = req.auth.id;
   const query = req.validated.query as ListTripsQuery;
 
-  await tripModel.expireStale(
+  await tripModel.settleStale(
     role === "rider" ? { riderUserId: userId } : { driverUserId: userId },
   );
   const { items, totalItems } = await tripModel.listForUser({ ...query, userId, as: role });
@@ -373,7 +429,7 @@ export async function cancelTrip(req: Request, res: Response) {
   const { id } = req.validated.params as { id: string };
   const { reason } = req.validated.body as CancelTripInput;
 
-  await tripModel.expireStale({ id });
+  await tripModel.settleStale({ id });
   const before = await tripModel.findDetail(id);
   if (!before) {
     throw AppError.notFound(`Trip not found: ${id}`);
@@ -456,7 +512,7 @@ export async function listCommuteTrips(req: Request, res: Response) {
   const { date = today(), ...query } = req.validated.query as CommuteTripsQuery;
 
   const commute = await findCommuteFor(req, id, "read");
-  await tripModel.expireStale({ commuteId: id });
+  await tripModel.settleStale({ commuteId: id });
   const [{ items, totalItems }, riders, seatsLeft] = await Promise.all([
     tripModel.listManifest({
       ...query,
@@ -484,5 +540,163 @@ export async function listCommuteTrips(req: Request, res: Response) {
       scheduledAt: point.scheduledAt,
     })),
     ...paginated(items, totalItems, query),
+  });
+}
+
+// The rider's app reports where they are while waiting for the pickup, for the boarding scan to check.
+export async function shareTripLocation(req: Request, res: Response) {
+  const { id } = req.validated.params as { id: string };
+  const point = req.validated.body as TripLocationInput;
+
+  const trip = await tripModel.findById(id);
+  if (!trip) {
+    throw AppError.notFound(`Trip not found: ${id}`);
+  }
+  if (req.auth?.id !== trip.riderUserId) {
+    throw AppError.forbidden("Only the trip's rider can share their location for it");
+  }
+  if (trip.status !== "accepted") {
+    throw AppError.conflict(`Can't share your location for a trip that is ${trip.status}`);
+  }
+  const earlyMinutes = await settingModel.getValue("trips.boardingEarlyMinutes");
+  const opens = new Date(trip.scheduledPickupAt.getTime() - earlyMinutes * 60_000);
+  if (new Date() < opens) {
+    throw AppError.conflict(`You can share your location from ${opens.toISOString()}`);
+  }
+  const location = await tripModel.shareRiderLocation(id, point);
+
+  sendSuccess(res, "Location shared successfully", location);
+}
+
+export async function markArrived(req: Request, res: Response) {
+  const { id } = req.validated.params as { id: string };
+  const driverAt = req.validated.body as TripLocationInput;
+
+  const before = await findTripForDriver(req, id, "mark arrival for");
+  // A repeat mark changes nothing, so it isn't checked again; any status but accepted is refused in the model.
+  if (before.trip.status === "accepted" && !before.trip.arrivedAt) {
+    const settings = await boardingSettings();
+    assertBoardingWindow(before.trip, settings, new Date());
+    assertNearPickup(before.trip, driverAt, settings);
+  }
+  const { changed } = await tripModel.markArrived(id);
+  const after = (await tripModel.findDetail(id)) as TripDetail;
+
+  sendSuccess(res, "Arrival marked successfully", tripView(after, before.trip.driverUserId));
+  if (!changed) return;
+
+  emitToUser(after.trip.riderUserId, "trip:driver_arrived", {
+    ...tripEvent(after),
+    arrivedAt: after.trip.arrivedAt,
+  });
+  logActivity(req, {
+    ...TRIP_ACTIVITY,
+    action: "trip.arrive",
+    description: "Arrived at the pickup point",
+    targetId: id,
+    before: tripView(before, null),
+    after: tripView(after, null),
+  });
+}
+
+// The driver scans the rider's boarding code. Checks, in order: the code is on one of the caller's trips (anything
+// else is the same 404, so codes can't be probed), the trip is accepted and today, inside the boarding window, the
+// driver near the pickup, and the rider's shared location fresh and near the driver.
+export async function boardTrip(req: Request, res: Response) {
+  if (req.auth?.role !== "driver") {
+    throw AppError.forbidden("Only drivers can board riders");
+  }
+  const driverId = req.auth.id;
+  const { code, ...driverAt } = req.validated.body as BoardTripInput;
+
+  const found = await tripModel.findByBoardingCode(code, driverId);
+  if (!found) {
+    throw AppError.notFound("No trip found for that code");
+  }
+  await tripModel.settleStale({ id: found.id });
+  const before = (await tripModel.findDetail(found.id)) as TripDetail;
+  const { trip } = before;
+  if (trip.status !== "accepted") {
+    throw AppError.conflict(`Can't board a trip that is ${trip.status}`);
+  }
+  const settings = await boardingSettings();
+  const now = new Date();
+  assertBoardingWindow(trip, settings, now);
+  assertNearPickup(trip, driverAt, settings);
+  assertRiderWithDriver(trip, driverAt, settings, now);
+
+  await tripModel.boardTrip(trip.id, driverAt, settings);
+  const after = (await tripModel.findDetail(trip.id)) as TripDetail;
+
+  sendSuccess(res, "Rider boarded successfully", tripView(after, driverId));
+
+  emitToUser(trip.riderUserId, "trip:boarded", {
+    ...tripEvent(after),
+    boardedAt: after.trip.boardedAt,
+    waitMinutes: after.trip.waitMinutes,
+    waitCharge: after.trip.waitCharge,
+  });
+  logActivity(req, {
+    ...TRIP_ACTIVITY,
+    action: "trip.board",
+    description: "Boarded a rider",
+    targetId: trip.id,
+    redact: ["code"],
+    before: tripView(before, null),
+    after: tripView(after, null),
+  });
+}
+
+export async function completeTrip(req: Request, res: Response) {
+  const { id } = req.validated.params as { id: string };
+
+  const before = await findTripForDriver(req, id, "complete");
+  await tripModel.completeTrip(id);
+  const after = (await tripModel.findDetail(id)) as TripDetail;
+
+  sendSuccess(res, "Trip completed successfully", tripView(after, before.trip.driverUserId));
+
+  emitToUser(after.trip.riderUserId, "trip:completed", {
+    ...tripEvent(after),
+    completedAt: after.trip.completedAt,
+  });
+  logActivity(req, {
+    ...TRIP_ACTIVITY,
+    action: "trip.complete",
+    description: "Completed a trip",
+    targetId: id,
+    before: tripView(before, null),
+    after: tripView(after, null),
+  });
+}
+
+// Only once the boarding window has closed: until then the rider can still be scanned.
+export async function reportNoShow(req: Request, res: Response) {
+  const { id } = req.validated.params as { id: string };
+
+  const before = await findTripForDriver(req, id, "report a no-show for");
+  if (before.trip.status === "accepted") {
+    const lateMinutes = await settingModel.getValue("trips.boardingLateMinutes");
+    const opens = new Date(before.trip.scheduledPickupAt.getTime() + lateMinutes * 60_000);
+    if (new Date() < opens) {
+      throw AppError.conflict(`You can report a no-show from ${opens.toISOString()}`);
+    }
+  }
+  await tripModel.reportNoShow(id, "driver");
+  const after = (await tripModel.findDetail(id)) as TripDetail;
+
+  sendSuccess(res, "No-show reported successfully", tripView(after, before.trip.driverUserId));
+
+  emitToUser(after.trip.riderUserId, "trip:no_show", {
+    ...tripEvent(after),
+    reason: after.trip.cancellationReason,
+  });
+  logActivity(req, {
+    ...TRIP_ACTIVITY,
+    action: "trip.no_show",
+    description: "Reported that the rider didn't show up",
+    targetId: id,
+    before: tripView(before, null),
+    after: tripView(after, null),
   });
 }
