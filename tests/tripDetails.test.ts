@@ -184,11 +184,11 @@ describe("tripModel.acceptWithHold", () => {
 
     await expect(tripModel.acceptWithHold(expired.id)).rejects.toMatchObject({
       statusCode: 409,
-      message: "This trip request has expired",
+      message: "Can't accept a trip that is expired",
     });
     await expect(tripModel.acceptWithHold(tooDear.id)).rejects.toMatchObject({
       statusCode: 409,
-      message: "Insufficient wallet balance",
+      message: "The rider's wallet no longer covers this trip",
     });
     await expect(tripModel.acceptWithHold(cancelled.id)).rejects.toMatchObject({
       statusCode: 409,

@@ -76,19 +76,33 @@ export const listTripsQuerySchema = z.object({
 
 export type ListTripsQuery = z.infer<typeof listTripsQuerySchema>;
 
-export const cancelTripSchema = z
-  .object({
-    reason: z
-      .string()
-      .trim()
-      .min(1)
-      .max(500)
-      .optional()
-      .meta({ description: "Why the trip is cancelled", example: "Plans changed" }),
-  })
-  .default({});
+const reasonBody = (description: string, example: string) =>
+  z
+    .object({
+      reason: z.string().trim().min(1).max(500).optional().meta({ description, example }),
+    })
+    .default({});
+
+export const cancelTripSchema = reasonBody("Why the trip is cancelled", "Plans changed");
 
 export type CancelTripInput = z.infer<typeof cancelTripSchema>;
+
+export const declineTripSchema = reasonBody(
+  "Why the request is declined (shown to the rider)",
+  "Car is full of family today",
+);
+
+export type DeclineTripInput = z.infer<typeof declineTripSchema>;
+
+export const commuteTripsQuerySchema = z.object({
+  date: tripDateSchema
+    .optional()
+    .meta({ description: "Service date (Ghana time), YYYY-MM-DD. Defaults to today; any date" }),
+  status: tripStatusSchema.optional().meta({ description: "Only trips with this status" }),
+  ...pageFields,
+});
+
+export type CommuteTripsQuery = z.infer<typeof commuteTripsQuerySchema>;
 
 // Responses (docs only — see CLAUDE.md "API docs").
 
@@ -237,6 +251,14 @@ export const tripDetailSchema = tripSchema.extend({
         .meta({ description: "Only once the trip is accepted", example: "GR 4821-23" }),
     })
     .nullable(),
+  rider: z.object({
+    fullName: z.string().nullable().meta({ example: "Ama Owusu" }),
+    profilePicture: z.string().nullable(),
+    phone: z.string().nullable().meta({
+      description: "Only for the driver, once the trip is accepted",
+      example: "+233201234567",
+    }),
+  }),
   seatsLeft: z.number().int().meta({ description: "Seats still free on this date", example: 1 }),
   otherCommuters: z
     .array(
@@ -264,4 +286,61 @@ export const tripDetailSchema = tripSchema.extend({
       description:
         "Pickups and drop-offs of the accepted and boarded riders on this run, in route order (no names). Until the rider's own trip is accepted, the rider sees only their own two stops",
     }),
+});
+
+export const commuteManifestSchema = z.object({
+  commuteId: z.uuid(),
+  date: z.string().meta({ example: "2026-10-01" }),
+  departureAt: commuteEnds.departureAt,
+  capacity: z.number().int().meta({ example: 3 }),
+  seatsLeft: z.number().int().meta({
+    description:
+      "Seats still free on this date (never below 0, even if the capacity was lowered under the seats already taken)",
+    example: 1,
+  }),
+  stops: z
+    .array(
+      z.object({
+        type: z.enum(["pickup", "dropoff"]),
+        tripId: z.uuid(),
+        firstName: z.string().nullable().meta({ example: "Ama" }),
+        address: z.string().meta({ example: PICKUP_EXAMPLE.address }),
+        lat: z.number(),
+        lng: z.number(),
+        scheduledAt: z.iso.datetime(),
+      }),
+    )
+    .meta({
+      description:
+        "The route sheet: pickups and drop-offs of the accepted and boarded riders on this date, in route order. Not paginated and not filtered by status",
+    }),
+  items: z
+    .array(
+      z.object({
+        tripId: z.uuid(),
+        status: tripStatusSchema,
+        tripDate: z.string().meta({ example: "2026-10-01" }),
+        rider: z.object({
+          id: z.uuid(),
+          fullName: z.string().nullable().meta({ example: "Ama Owusu" }),
+          profilePicture: z.string().nullable(),
+          phone: z.string().nullable().meta({
+            description:
+              "Only for the commute's driver (null for an admin), once the trip is accepted (also boarded and completed)",
+            example: "+233201234567",
+          }),
+        }),
+        pickup: place(PICKUP_EXAMPLE),
+        dropoff: place(DROPOFF_EXAMPLE),
+        scheduledPickupAt: z.iso.datetime(),
+        scheduledDropoffAt: z.iso.datetime(),
+        totalAmount: money(20.75, "What the rider pays"),
+        driverEarnings: money(17.95, "What the driver earns"),
+        heldAmount: money(20.75, "Held in the rider's wallet while the trip is accepted"),
+      }),
+    )
+    .meta({
+      description: "Every trip on this date (any status unless filtered), soonest pickup first",
+    }),
+  pagination,
 });

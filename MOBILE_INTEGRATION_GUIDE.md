@@ -15,10 +15,11 @@ Every response has the shape `{ "success": true, "message": "...", "data": ... }
 4. [Driver Verification Documents](#driver-verification-documents)
 5. [Driver Approval & Verification Status](#driver-approval--verification-status)
 6. [Trips (Rider Booking)](#trips-rider-booking)
-7. [Real-Time Events (Socket.IO)](#real-time-events-socketio)
-8. [Admin Document Review](#admin-document-review)
-9. [Error Codes & Handling](#error-codes--handling)
-10. [Rate Limiting](#rate-limiting)
+7. [Trips (Driver Side)](#trips-driver-side)
+8. [Real-Time Events (Socket.IO)](#real-time-events-socketio)
+9. [Admin Document Review](#admin-document-review)
+10. [Error Codes & Handling](#error-codes--handling)
+11. [Rate Limiting](#rate-limiting)
 
 ---
 
@@ -908,6 +909,7 @@ For the trip's rider or driver.
       "departureAt": "2026-10-01T07:30:00.000Z"
     },
     "driver": { "fullName": "Kwame Mensah", "profilePicture": null, "phone": "+233241234567" },
+    "rider": { "fullName": "Ama Owusu", "profilePicture": null, "phone": null },
     "vehicle": { "make": "Toyota", "model": "Corolla", "color": "Silver", "plate": "GR 1234-21" },
     "seatsLeft": 1,
     "otherCommuters": [{ "firstName": "Kofi", "profilePicture": null }],
@@ -952,7 +954,7 @@ For the trip's rider or driver.
 What each viewer sees:
 
 - `boardingCode` — the rider only (show it as a QR/code for the driver to scan). `null` for the driver.
-- `driver.phone` — the rider only, once the trip is `accepted` (or later). `vehicle.plate` — once `accepted`.
+- `driver.phone` — the rider only, once the trip is `accepted` (or later). `rider.phone` — the driver only, once `accepted`. `vehicle.plate` — once `accepted`.
 - `otherCommuters` — the other riders with a confirmed seat on this run: first name and photo only.
 - `stops` — every confirmed rider's pickup and drop-off in route order, without names; `isYou` marks this trip's own.
 - Until the rider's own trip is `accepted`, the rider sees no other riders: `otherCommuters` is empty and `stops` holds only their own pickup and drop-off.
@@ -968,6 +970,116 @@ Content-Type: application/json
 ```
 
 `reason` is optional (the body can be empty). The rider can cancel a `pending` or `accepted` trip; the driver can cancel an `accepted` one. Cancelling an accepted trip frees the seat and releases the hold: nothing is charged. Returns the updated trip (`200`). Other statuses answer `409` (`Can't cancel a trip that is boarded`, `... that is cancelled`, ...); anyone else gets `403` (`Only the trip's rider or driver can cancel it`).
+
+---
+
+## Trips (Driver Side)
+
+Drivers get `trip:requested` for every new request on their commutes. A `pending` request waits for the driver to accept or decline it until `expiresAt`; drivers who turned on `autoAcceptBookings` get requests already `accepted`. `GET /trips` lists the trips on the driver's commutes; `GET /trips/{id}` shows one (never with the boarding code: the driver scans it from the rider's phone).
+
+### 1. Accept a Request
+
+```http
+PATCH /trips/{id}/accept
+Authorization: Bearer <accessToken>
+```
+
+**The trip's driver only.** Gives the rider the seat and holds the trip's `totalAmount` in the rider's wallet, in one step: two accepts can never hand out the same seat or hold the money twice. Returns the trip (`200`, "Trip accepted successfully") in the `GET /trips/{id}` shape, now with `rider.phone`. The rider gets `trip:accepted`.
+
+**Errors:**
+
+| Status | `error`                                                                                     |
+| ------ | ------------------------------------------------------------------------------------------- |
+| 403    | `Only the trip's driver can accept it`                                                      |
+| 404    | `Trip not found: <id>`                                                                      |
+| 409    | `Can't accept a trip that is accepted` (or `declined`, `cancelled`, `expired`, ...)         |
+| 409    | `This commute is not taking bookings` (the commute is paused, or your approval was revoked) |
+| 409    | `This commute is full` (no seat left on that date)                                          |
+| 409    | `The rider's wallet no longer covers this trip` (the request stays pending; decline it)     |
+
+### 2. Decline a Request
+
+```http
+PATCH /trips/{id}/decline
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{ "reason": "Car is full of family today" }
+```
+
+**The trip's driver only**, and only a `pending` request (to drop an `accepted` rider, cancel with `POST /trips/{id}/cancel`). `reason` is optional (the body can be empty) and is shown to the rider as `cancellationReason`. Nothing was held, so no money moves. Returns the trip (`200`, "Trip declined successfully", `status: "declined"`, `cancelledBy: "driver"`). The rider gets `trip:declined`. Errors: `403` `Only the trip's driver can decline it`, `404`, `409` `Can't decline a trip that is accepted` (or any other non-pending status).
+
+### 3. Manifest: a Commute's Trips on a Date
+
+```http
+GET /commutes/{id}/trips?date=2026-10-01&status=accepted&page=1&limit=20
+Authorization: Bearer <accessToken>
+```
+
+**The commute's driver** (or an admin with `commutes: read`). `date` defaults to today and can be any date; `status` is optional. Items are soonest pickup first. The rider's phone is included only for the commute's driver (not an admin), once the trip is `accepted` (or `boarded`, `completed`); no boarding code ever appears here. `stops` is the route sheet for the date: every accepted or boarded rider's pickup and drop-off in route order with their first name (it ignores `status` and pagination).
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "message": "Commute trips retrieved successfully",
+  "data": {
+    "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+    "date": "2026-10-01",
+    "departureAt": "2026-10-01T07:30:00.000Z",
+    "capacity": 3,
+    "seatsLeft": 2,
+    "stops": [
+      {
+        "type": "pickup",
+        "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
+        "firstName": "Ama",
+        "address": "Airport Junction, Accra",
+        "lat": 5.6051,
+        "lng": -0.1757,
+        "scheduledAt": "2026-10-01T07:34:00.000Z"
+      },
+      {
+        "type": "dropoff",
+        "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
+        "firstName": "Ama",
+        "address": "Danquah Circle, Osu, Accra",
+        "lat": 5.5635,
+        "lng": -0.1806,
+        "scheduledAt": "2026-10-01T07:44:26.000Z"
+      }
+    ],
+    "items": [
+      {
+        "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
+        "status": "accepted",
+        "tripDate": "2026-10-01",
+        "rider": {
+          "id": "4d1a55bb-...",
+          "fullName": "Ama Owusu",
+          "profilePicture": null,
+          "phone": "+233201234567"
+        },
+        "pickup": { "address": "Airport Junction, Accra", "lat": 5.6051, "lng": -0.1757 },
+        "dropoff": { "address": "Danquah Circle, Osu, Accra", "lat": 5.5635, "lng": -0.1806 },
+        "scheduledPickupAt": "2026-10-01T07:34:00.000Z",
+        "scheduledDropoffAt": "2026-10-01T07:44:26.000Z",
+        "totalAmount": 25.2,
+        "driverEarnings": 22,
+        "heldAmount": 25.2
+      }
+    ],
+    "pagination": { "page": 1, "limit": 20, "totalItems": 1, "totalPages": 1 }
+  }
+}
+```
+
+Errors: `403` `Missing permission: read on commutes` (not your commute), `404` `Commute not found: <id>`.
+
+### 4. Editing a Commute That Has Bookings
+
+`PATCH /commutes/{id}` refuses (`409` `This commute has upcoming trips: pause it or cancel them before changing its route or schedule`) to change the start or end coordinates, `departureTime` or `recurrenceDays` while the commute has any `pending`, `accepted` or `boarded` trip from today on: those riders booked that route and time. Sending the current values again is fine (days in any order). The address text, `capacity` and `isActive` can always change: pause with `{ "isActive": false }` to stop new bookings, then cancel or decline the remaining trips before moving the route. Lowering `capacity` below the seats already taken keeps the accepted riders; `seatsLeft` reads `0` until enough seats free up. A commute with any trips at all can't be deleted (`409` `This commute has trips: pause it instead of deleting it`).
 
 ---
 
@@ -1045,6 +1157,35 @@ Sent to the **other party** when a trip is cancelled (`POST /trips/{id}/cancel`)
 ```
 
 `reason` is `null` when none was given. Refetch `GET /trips/{id}` for the full trip.
+
+### `trip:accepted`
+
+Sent to the **rider** when the driver accepts their request (`PATCH /trips/{id}/accept`). The seat is confirmed and the total is now held. Not sent for requests accepted automatically (the `POST /trips` response already says `accepted`).
+
+```json
+{
+  "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
+  "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+  "tripDate": "2026-10-01",
+  "status": "accepted"
+}
+```
+
+### `trip:declined`
+
+Sent to the **rider** when the driver declines their request (`PATCH /trips/{id}/decline`). Nothing was held, so nothing is released.
+
+```json
+{
+  "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
+  "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+  "tripDate": "2026-10-01",
+  "status": "declined",
+  "reason": "Car is full of family today"
+}
+```
+
+`reason` is `null` when the driver gave none.
 
 ---
 
@@ -1132,6 +1273,9 @@ All limits are **per 15-minute window** and apply in addition to a generous per-
 | `POST /auth/refresh`                 | 300 per IP         | Every request        |
 | `POST /trips`                        | 30 per account     | Every request        |
 | `GET /trips`, `GET /trips/available` | 300 per account    | Every request        |
+| `PATCH /trips/{id}/accept`           | 120 per account    | Every request        |
+| `PATCH /trips/{id}/decline`          | 120 per account    | Every request        |
+| `GET /commutes/{id}/trips`           | 120 per account    | Every request        |
 
 **Response (429):**
 
@@ -1148,37 +1292,41 @@ Standard `RateLimit` / `RateLimit-Policy` response headers (draft-8 format) tell
 
 ## Quick Reference: All Endpoints Used Above
 
-| Method | Path                                        | Auth      | Purpose                                              |
-| ------ | ------------------------------------------- | --------- | ---------------------------------------------------- |
-| POST   | `/auth/login/otp`                           | —         | Request a sign-up/sign-in code                       |
-| POST   | `/auth/login/verify`                        | —         | Verify code, get tokens (creates account if new)     |
-| POST   | `/auth/login`                               | —         | Email + password sign-in (accounts with a password)  |
-| POST   | `/auth/refresh`                             | —         | Exchange refresh token for a new pair                |
-| GET    | `/auth/me`                                  | ✓         | Get the signed-in account                            |
-| POST   | `/auth/logout`                              | —         | Revoke a refresh token                               |
-| POST   | `/auth/password/forgot`                     | —         | Email a reset code                                   |
-| POST   | `/auth/password/reset`                      | —         | Set new password with the reset code                 |
-| POST   | `/auth/password/change`                     | ✓         | Change password while signed in                      |
-| POST   | `/rider`                                    | ✓         | Create rider profile                                 |
-| GET    | `/rider/{userId}`                           | ✓         | Get rider profile                                    |
-| POST   | `/driver`                                   | ✓         | Create driver profile                                |
-| GET    | `/driver/{userId}`                          | ✓         | Get driver profile (with vehicles/documents)         |
-| PATCH  | `/driver/{userId}`                          | ✓         | Update driver profile / go online                    |
-| POST   | `/vehicles`                                 | ✓         | Register a vehicle                                   |
-| PATCH  | `/users/{id}`                               | ✓         | Update account details (fullName, dateOfBirth, etc)  |
-| GET    | `/trips/available`                          | ✓ (rider) | Find commutes near a point on a date                 |
-| POST   | `/trips`                                    | ✓ (rider) | Request a seat on a commute                          |
-| GET    | `/trips`                                    | ✓         | List my trips (rider) or my commutes' trips (driver) |
-| GET    | `/trips/{id}`                               | ✓         | Get a trip                                           |
-| POST   | `/trips/{id}/cancel`                        | ✓         | Cancel a trip                                        |
-| GET    | `/document-types`                           | ✓         | List document types to upload                        |
-| POST   | `/driver/verification/{documentTypeId}`     | ✓         | Upload a document                                    |
-| GET    | `/driver/verification`                      | ✓         | Get own documents with history                       |
-| GET    | `/verification/{documentId}/history`        | ✓         | Get one document's history                           |
-| DELETE | `/verification/{documentId}`                | ✓         | Delete (soft) a document                             |
-| GET    | `/admin/driver/verification/pending`        | ✓ (admin) | List documents awaiting review                       |
-| PATCH  | `/admin/verification/document/{documentId}` | ✓ (admin) | Review a document                                    |
-| PATCH  | `/admin/driver/{userId}/verification`       | ✓ (admin) | Approve/change driver status                         |
+| Method | Path                                        | Auth       | Purpose                                              |
+| ------ | ------------------------------------------- | ---------- | ---------------------------------------------------- |
+| POST   | `/auth/login/otp`                           | —          | Request a sign-up/sign-in code                       |
+| POST   | `/auth/login/verify`                        | —          | Verify code, get tokens (creates account if new)     |
+| POST   | `/auth/login`                               | —          | Email + password sign-in (accounts with a password)  |
+| POST   | `/auth/refresh`                             | —          | Exchange refresh token for a new pair                |
+| GET    | `/auth/me`                                  | ✓          | Get the signed-in account                            |
+| POST   | `/auth/logout`                              | —          | Revoke a refresh token                               |
+| POST   | `/auth/password/forgot`                     | —          | Email a reset code                                   |
+| POST   | `/auth/password/reset`                      | —          | Set new password with the reset code                 |
+| POST   | `/auth/password/change`                     | ✓          | Change password while signed in                      |
+| POST   | `/rider`                                    | ✓          | Create rider profile                                 |
+| GET    | `/rider/{userId}`                           | ✓          | Get rider profile                                    |
+| POST   | `/driver`                                   | ✓          | Create driver profile                                |
+| GET    | `/driver/{userId}`                          | ✓          | Get driver profile (with vehicles/documents)         |
+| PATCH  | `/driver/{userId}`                          | ✓          | Update driver profile / go online                    |
+| POST   | `/vehicles`                                 | ✓          | Register a vehicle                                   |
+| PATCH  | `/users/{id}`                               | ✓          | Update account details (fullName, dateOfBirth, etc)  |
+| GET    | `/trips/available`                          | ✓ (rider)  | Find commutes near a point on a date                 |
+| POST   | `/trips`                                    | ✓ (rider)  | Request a seat on a commute                          |
+| GET    | `/trips`                                    | ✓          | List my trips (rider) or my commutes' trips (driver) |
+| GET    | `/trips/{id}`                               | ✓          | Get a trip                                           |
+| POST   | `/trips/{id}/cancel`                        | ✓          | Cancel a trip                                        |
+| PATCH  | `/trips/{id}/accept`                        | ✓ (driver) | Accept a pending request                             |
+| PATCH  | `/trips/{id}/decline`                       | ✓ (driver) | Decline a pending request                            |
+| GET    | `/commutes/{id}/trips`                      | ✓ (driver) | A commute's trips on a date (manifest)               |
+| PATCH  | `/commutes/{id}`                            | ✓ (driver) | Edit or pause a commute                              |
+| GET    | `/document-types`                           | ✓          | List document types to upload                        |
+| POST   | `/driver/verification/{documentTypeId}`     | ✓          | Upload a document                                    |
+| GET    | `/driver/verification`                      | ✓          | Get own documents with history                       |
+| GET    | `/verification/{documentId}/history`        | ✓          | Get one document's history                           |
+| DELETE | `/verification/{documentId}`                | ✓          | Delete (soft) a document                             |
+| GET    | `/admin/driver/verification/pending`        | ✓ (admin)  | List documents awaiting review                       |
+| PATCH  | `/admin/verification/document/{documentId}` | ✓ (admin)  | Review a document                                    |
+| PATCH  | `/admin/driver/{userId}/verification`       | ✓ (admin)  | Approve/change driver status                         |
 
 ---
 

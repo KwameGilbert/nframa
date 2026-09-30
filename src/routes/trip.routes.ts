@@ -1,18 +1,23 @@
 import { Router } from "express";
 import { validate } from "../middlewares/validate.js";
 import { authenticate } from "../middlewares/authenticate.js";
-import { tripBrowseLimit, tripRequestLimit } from "../middlewares/rateLimit.js";
+import { tripActionLimit, tripBrowseLimit, tripRequestLimit } from "../middlewares/rateLimit.js";
 import { idParamsSchema } from "../schemas/common.schema.js";
 import {
   availableTripsQuerySchema,
   cancelTripSchema,
+  commuteTripsQuerySchema,
   createTripSchema,
+  declineTripSchema,
   listTripsQuerySchema,
 } from "../schemas/trip.schema.js";
 import {
+  acceptTrip,
   cancelTrip,
+  declineTrip,
   getTrip,
   listAvailableTrips,
+  listCommuteTrips,
   listTrips,
   requestTrip,
 } from "../controllers/trip.controller.js";
@@ -54,4 +59,29 @@ tripRouter.post(
   authenticate,
   validate({ params: idParamsSchema, body: cancelTripSchema }),
   cancelTrip,
+);
+
+tripRouter.patch(
+  "/trips/:id/accept",
+  authenticate,
+  tripActionLimit,
+  validate({ params: idParamsSchema }),
+  acceptTrip,
+);
+
+tripRouter.patch(
+  "/trips/:id/decline",
+  authenticate,
+  tripActionLimit,
+  validate({ params: idParamsSchema, body: declineTripSchema }),
+  declineTrip,
+);
+
+// The driver's manifest: lives here rather than with the commute routes because it lists trips.
+tripRouter.get(
+  "/commutes/:id/trips",
+  authenticate,
+  tripActionLimit,
+  validate({ params: idParamsSchema, query: commuteTripsQuerySchema }),
+  listCommuteTrips,
 );
