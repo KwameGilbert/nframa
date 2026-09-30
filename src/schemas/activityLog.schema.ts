@@ -12,6 +12,7 @@ export const ACTIVITY_MODULES = [
   "drivers",
   "riders",
   "vehicles",
+  "commutes",
   "activityLogs",
 ] as const;
 
