@@ -52,7 +52,11 @@ export const updateUserSchema = z
     phoneCountryCode: phoneCountryCodeSchema,
     phoneNumber: z.string().min(9).meta({ example: "541436414" }),
     dateOfBirth: z.iso.date().meta({ example: "1995-04-12" }),
-    profilePicture: z.string().min(1).meta({ example: "https://cdn.nframa.com/avatars/ama.jpg" }),
+    profilePicture: z.string().min(1).meta({
+      description:
+        "Profile picture URL, or file upload (multipart form field 'profilePicture'), or base64-encoded image (data:image/png;base64,... or raw base64). Files uploaded to cloud storage; URL is stored.",
+      example: "https://cdn.nframa.com/avatars/ama.jpg",
+    }),
     profile: driverProfileFieldsSchema.meta({
       description:
         "Driver-specific fields (ghanaCardNumber, address, isOnline, autoAcceptBookings) — only valid when the target account's role is driver. Saved atomically with the personal fields above, in the same transaction.",

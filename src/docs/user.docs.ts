@@ -79,18 +79,21 @@ registry.registerPath({
   tags: ["Users"],
   summary: "Update a user (the user themselves, or an admin with users: update)",
   description:
-    "Send only the fields to change (at least one). Changing email, phoneCountryCode, or phoneNumber needs users: update even on your own account — they're login identifiers. Admin accounts need admin: update instead of users: update. Emails are stored lowercased.\n\nFor a driver, personal fields (this endpoint's usual fields) and driver-specific fields can be sent together via the optional profile object (ghanaCardNumber, address, isOnline, autoAcceptBookings) — both are written in one database transaction, so a partial failure can't save one without the other. profile is rejected for non-driver accounts, and for a driver with no profile yet (create one first via POST /driver).",
+    "Send only the fields to change (at least one). Changing email, phoneCountryCode, or phoneNumber needs users: update even on your own account — they're login identifiers. Admin accounts need admin: update instead of users: update. Emails are stored lowercased.\n\nprofilePicture can be provided as: (1) a URL string (e.g., https://example.com/image.jpg), (2) a file upload via multipart/form-data with field name 'profilePicture', or (3) a base64-encoded image in JSON (e.g., { profilePicture: \"data:image/png;base64,...\" } or { profilePicture: \"raw-base64-string\" } — defaults to JPEG if no MIME type). Files are uploaded to cloud storage and the returned URL is stored.\n\nFor a driver, personal fields (this endpoint's usual fields) and driver-specific fields can be sent together via the optional profile object (ghanaCardNumber, address, isOnline, autoAcceptBookings) — both are written in one database transaction, so a partial failure can't save one without the other. profile is rejected for non-driver accounts, and for a driver with no profile yet (create one first via POST /driver).",
   security: [{ bearerAuth: [] }],
   request: {
     params: userIdParamsSchema,
     body: {
-      content: { "application/json": { schema: updateUserSchema } },
+      content: {
+        "application/json": { schema: updateUserSchema },
+        "multipart/form-data": { schema: updateUserSchema },
+      },
     },
   },
   responses: {
     200: successResponse("User updated successfully", userResponseSchema),
     400: errorResponse(
-      "Validation error, profile sent for a non-driver account, or the driver has no profile yet",
+      "Validation error, invalid base64 encoding, unsupported file type (JPEG, PNG, WEBP, PDF only), file too large (>10MB), profile sent for a non-driver account, or the driver has no profile yet",
     ),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse(

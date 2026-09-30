@@ -28,6 +28,8 @@ pnpm test tests/users.test.ts   # exactly one file ("users" alone also matches a
 pnpm test:watch
 ```
 
+All variables must be in camelCase, never snake_case.
+
 Don't execute prompts/plans just like that, break it into parts. As much as possible, always rewrite prompt and optimized to use as minimum usage tokens as possible while doing the best work possible. Between all available models and its version From Fable, Opus, Haiku, to Sonnet and any other avaiable one to always make sure usage lasts as long as possible switch between models and version depending on the difficulty, complexity, and demand of the work for the best results while optmizing to save usage while giving the best results without compromising quality of work.
 
 **KISS (Keep It Simple, Stupid)**: Avoid over-engineering. A simple solution that works is better than a complex one. When adding features, make sure they are necessary and don't add unnecessary layers of abstraction.
@@ -36,11 +38,13 @@ Don't execute prompts/plans just like that, break it into parts. As much as poss
 
 **Docs/schema must track every structural change**: whenever a route's request or response shape changes — a field added/removed/renamed, a response nested differently, a new route added, a route's path or params changed — update the zod schema (`src/schemas/*.schema.ts`), the OpenAPI doc (`src/docs/*.docs.ts`, including its `description`/`.meta({ example })` text), and any route comment referencing the old shape, in the same change. A schema/doc that still describes the old shape is worse than no doc — it actively misleads whoever reads it next (including future you). This is not optional cleanup; treat a route change as incomplete until `src/docs/*.docs.ts` and the schemas agree with what the controller actually returns and what routes actually validate.
 
+All commits must first be tested and stagged and requires confirmation from usr first.
+
 Spawn one agent to plan if there already isnt a plan yet, one to execute the plan and another to review what has been done and compare to the plan that was initially done, if there is anything wrong about the execution take it back to the executor to work on or fix.
 
 `.husky/pre-commit` runs `pnpm test`, which is now the real suite (see Tests below): every commit takes ~40s, needs the database, and adds test records to it. `lint-staged` is installed but not wired into the hook.
 
-**Never run `pnpm migrate` / `pnpm migrate:rollback` automatically.** Write and edit migration files as needed, but leave running them to the user — they run migrations themselves.
+**Run `pnpm migrate` / `pnpm migrate:rollback` automatically only when necessary.** Write and edit migration files as needed, but leave running them to the user — they run migrations themselves.
 
 The app does **not** migrate on boot — a new migration's table doesn't exist until the user runs `pnpm migrate`, so routes that need it 500 until then. If a migration file's **content** changes after Knex already recorded it as applied (tracked by filename, not content), `migrate:latest` won't pick up the change — that still needs an explicit `migrate:rollback` + `migrate` from the user.
 
