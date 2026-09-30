@@ -28,7 +28,7 @@ registry.registerPath({
     400: errorResponse("Validation error"),
     401: unauthorized,
     403: errorResponse("Caller lacks roles: read"),
-    404: errorResponse("Role not found"),
+    404: errorResponse("Role not found", "Role not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34"),
   },
 });
 
@@ -51,7 +51,7 @@ registry.registerPath({
     400: errorResponse("Validation error (e.g. an unknown module)"),
     401: unauthorized,
     403: systemRole,
-    404: errorResponse("Role not found"),
+    404: errorResponse("Role not found", "Role not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34"),
   },
 });
 
@@ -70,6 +70,6 @@ registry.registerPath({
     400: errorResponse("Validation error (e.g. an unknown module)"),
     401: unauthorized,
     403: systemRole,
-    404: errorResponse("Role not found"),
+    404: errorResponse("Role not found", "Role not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34"),
   },
 });

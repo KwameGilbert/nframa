@@ -69,7 +69,7 @@ registry.registerPath({
     403: errorResponse(
       "Caller isn't this user and lacks users: read (admin: read for an admin account)",
     ),
-    404: errorResponse("User not found"),
+    404: errorResponse("User not found", "User not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34"),
   },
 });
 
@@ -96,7 +96,7 @@ registry.registerPath({
     403: errorResponse(
       "Caller isn't this user and lacks users: update, or tried to change email/phone without it (admin for admin accounts)",
     ),
-    404: errorResponse("User not found"),
+    404: errorResponse("User not found", "User not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34"),
     409: errorResponse("Another user already has this email or phone number"),
   },
 });
@@ -121,9 +121,10 @@ registry.registerPath({
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse(
       "Caller lacks users: update (admin: update for an admin account), or tried to change their own status",
+      "You can't change your own account status",
     ),
-    404: errorResponse("User not found"),
-    409: errorResponse("Account is already active/suspended"),
+    404: errorResponse("User not found", "User not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34"),
+    409: errorResponse("Account is already active/suspended", "Account is already suspended"),
   },
 });
 
@@ -146,7 +147,7 @@ registry.registerPath({
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller lacks users: read (admin: read for an admin account)"),
-    404: errorResponse("User not found"),
+    404: errorResponse("User not found", "User not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34"),
   },
 });
 
@@ -169,8 +170,11 @@ registry.registerPath({
     ),
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("Missing permission: read on activityLogs"),
-    404: errorResponse("User not found"),
+    403: errorResponse(
+      "Missing permission: read on activityLogs",
+      "Missing permission: read on activityLogs",
+    ),
+    404: errorResponse("User not found", "User not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34"),
   },
 });
 
@@ -191,8 +195,9 @@ registry.registerPath({
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse(
       "Caller isn't this user and lacks users: delete (admin: delete for an admin account), is an admin deleting themselves, or lacks a system role to delete a system-role admin",
+      "You can't delete your own admin account",
     ),
-    404: errorResponse("User not found"),
-    409: errorResponse("User is already deleted"),
+    404: errorResponse("User not found", "User not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34"),
+    409: errorResponse("User is already deleted", "User is already deleted"),
   },
 });

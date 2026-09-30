@@ -67,7 +67,10 @@ registry.registerPath({
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller lacks admin: read"),
-    404: errorResponse("Admin user not found"),
+    404: errorResponse(
+      "Admin user not found",
+      "Admin user not found for user: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+    ),
   },
 });
 
@@ -89,8 +92,14 @@ registry.registerPath({
     200: successResponse("Admin user updated successfully", adminUserWithRelationsResponseSchema),
     400: errorResponse("Validation error, or roleId doesn't match an existing role"),
     401: errorResponse("Missing or invalid access token"),
-    403: errorResponse("Caller lacks admin: update, or tried to change their own role or status"),
-    404: errorResponse("Admin user not found"),
+    403: errorResponse(
+      "Caller lacks admin: update, or tried to change their own role or status",
+      "You can't change your own role or status",
+    ),
+    404: errorResponse(
+      "Admin user not found",
+      "Admin user not found for user: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+    ),
   },
 });
 
@@ -111,8 +120,12 @@ registry.registerPath({
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse(
       "Caller lacks admin: delete, is deleting themselves, or lacks a system role to delete a system-role admin",
+      "You can't delete your own admin account",
     ),
-    404: errorResponse("Admin user not found"),
-    409: errorResponse("Admin user is already deleted"),
+    404: errorResponse(
+      "Admin user not found",
+      "Admin user not found for user: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+    ),
+    409: errorResponse("The account is already deleted", "User is already deleted"),
   },
 });

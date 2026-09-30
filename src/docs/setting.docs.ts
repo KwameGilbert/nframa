@@ -10,7 +10,7 @@ import {
 
 const unauthorized = errorResponse("Missing or invalid access token");
 const missingPermission = (action: string) => errorResponse(`Caller lacks settings: ${action}`);
-const notFound = errorResponse("Setting not found");
+const notFound = errorResponse("Setting not found", "Setting not found: fares.baseFare");
 
 registry.registerPath({
   method: "get",
@@ -46,7 +46,10 @@ registry.registerPath({
     ),
     401: unauthorized,
     403: missingPermission("create"),
-    409: errorResponse("A setting with this key already exists"),
+    409: errorResponse(
+      "A setting with this key already exists",
+      "Setting already exists: fares.baseFare",
+    ),
   },
 });
 
@@ -87,7 +90,10 @@ registry.registerPath({
   },
   responses: {
     200: successResponse("Setting updated successfully", settingResponseSchema),
-    400: errorResponse("Validation error (e.g. a value that doesn't match the setting's type)"),
+    400: errorResponse(
+      "Validation error (e.g. a value that doesn't match the setting's type)",
+      "key: Key must be camelCase segments separated by dots, each starting with a lowercase letter (e.g. fares.baseFare)",
+    ),
     401: unauthorized,
     403: missingPermission("update"),
     404: notFound,
@@ -106,7 +112,10 @@ registry.registerPath({
   },
   responses: {
     200: successResponse("Setting deleted successfully"),
-    400: errorResponse("Validation error"),
+    400: errorResponse(
+      "Validation error",
+      "key: Key must be camelCase segments separated by dots, each starting with a lowercase letter (e.g. fares.baseFare)",
+    ),
     401: unauthorized,
     403: missingPermission("delete"),
     404: notFound,

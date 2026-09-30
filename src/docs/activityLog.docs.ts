@@ -36,6 +36,9 @@ registry.registerPath({
     400: errorResponse("id is not a UUID"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Missing permission: read on activityLogs"),
-    404: errorResponse("Activity log not found"),
+    404: errorResponse(
+      "Activity log not found",
+      "Activity log not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+    ),
   },
 });

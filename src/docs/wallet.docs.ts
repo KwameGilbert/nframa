@@ -57,8 +57,11 @@ registry.registerPath({
     400: errorResponse("Invalid amount, or outside the top-up limits"),
     401: unauthorized,
     429: rateLimitedResponse,
-    502: errorResponse("Paystack couldn't start the payment (the top-up is recorded as failed)"),
-    503: errorResponse("Payments are not configured"),
+    502: errorResponse(
+      "Paystack couldn't start the payment (the top-up is recorded as failed)",
+      "Couldn't start the payment, try again",
+    ),
+    503: errorResponse("Payments are not configured", "Payments are not configured"),
   },
 });
 
@@ -74,10 +77,16 @@ registry.registerPath({
   responses: {
     200: successResponse("Top-up retrieved successfully", transactionResponseSchema),
     401: unauthorized,
-    404: errorResponse("No top-up of yours has this reference"),
+    404: errorResponse(
+      "No top-up of yours has this reference",
+      "Top-up not found: NF-9f3a1c5e7b2d4a6810c3e5f7",
+    ),
     429: rateLimitedResponse,
-    502: errorResponse("Couldn't reach Paystack to check the payment"),
-    503: errorResponse("Payments are not configured"),
+    502: errorResponse(
+      "Couldn't reach Paystack to check the payment",
+      "Couldn't check the payment with Paystack, try again",
+    ),
+    503: errorResponse("Payments are not configured", "Payments are not configured"),
   },
 });
 
@@ -99,8 +108,11 @@ registry.registerPath({
   responses: {
     200: successResponse("Webhook handled"),
     400: errorResponse("Signed, but not a Paystack event body"),
-    401: errorResponse("Invalid webhook signature"),
-    502: errorResponse("Couldn't reach Paystack to check the payment (Paystack will retry)"),
-    503: errorResponse("Payments are not configured"),
+    401: errorResponse("Invalid webhook signature", "Invalid webhook signature"),
+    502: errorResponse(
+      "Couldn't reach Paystack to check the payment (Paystack will retry)",
+      "Couldn't check the payment with Paystack, try again",
+    ),
+    503: errorResponse("Payments are not configured", "Payments are not configured"),
   },
 });

@@ -42,7 +42,10 @@ registry.registerPath({
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller doesn't own this vehicle and lacks users: read"),
-    404: errorResponse("Vehicle not found"),
+    404: errorResponse(
+      "Vehicle not found",
+      "Vehicle not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+    ),
   },
 });
 
@@ -64,7 +67,10 @@ registry.registerPath({
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller doesn't own this vehicle and lacks users: update"),
-    404: errorResponse("Vehicle not found"),
+    404: errorResponse(
+      "Vehicle not found",
+      "Vehicle not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+    ),
     409: errorResponse("Another vehicle already has this plate"),
   },
 });
