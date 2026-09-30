@@ -2,7 +2,7 @@ import { Router } from "express";
 import { healthRouter } from "./health.routes.js";
 import { userRouter } from "./user.routes.js";
 import { driverProfileRouter } from "./driverProfile.routes.js";
-import { savedCommuteRouter } from "./savedCommute.routes.js";
+import { driverCommuteRouter } from "./driverCommute.routes.js";
 import { riderProfileRouter } from "./riderProfile.routes.js";
 import { vehicleRouter } from "./vehicle.routes.js";
 import { roleRouter } from "./role.routes.js";
@@ -24,7 +24,7 @@ router.use(userRouter);
 // first (same segment count, registered-order wins), 400ing every verification-document request.
 router.use(verificationRouter);
 router.use(driverProfileRouter);
-router.use(savedCommuteRouter);
+router.use(driverCommuteRouter);
 router.use(riderProfileRouter);
 router.use(vehicleRouter);
 router.use(roleRouter);

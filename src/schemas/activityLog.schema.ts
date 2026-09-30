@@ -20,7 +20,7 @@ export type ActivityModule = (typeof ACTIVITY_MODULES)[number];
 
 export const activityModuleSchema = z.enum(ACTIVITY_MODULES).meta({
   description:
-    "Area of the app the action belongs to: auth (sign-up, sign-in, sign-out, passwords), users (rider/driver/admin accounts), admin (admin records), roles (roles and their permissions), settings, verification (documents and driver verification status), drivers, riders, vehicles, activityLogs (audit trail views)",
+    "Area of the app the action belongs to: auth (sign-up, sign-in, sign-out, passwords), users (rider/driver/admin accounts), admin (admin records), roles (roles and their permissions), settings, verification (documents and driver verification status), drivers, riders, vehicles, commutes (driver commutes), activityLogs (audit trail views)",
   example: "settings",
 });
 
@@ -123,7 +123,7 @@ export const activityLogResponseSchema = z.object({
   description: z.string().meta({ example: "Updated a setting" }),
   targetType: z.string().nullable().meta({
     description:
-      "Kind of record acted on: setting, role, user, adminUser, driver, rider, vehicle, verificationDocument. Sign-in and password activity targets the account (user)",
+      "Kind of record acted on: setting, role, user, adminUser, driver, rider, vehicle, commute, verificationDocument. Sign-in and password activity targets the account (user)",
     example: "setting",
   }),
   targetId: z
