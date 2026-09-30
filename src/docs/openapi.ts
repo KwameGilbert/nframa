@@ -11,6 +11,7 @@ import "./riderProfile.docs.js";
 import "./role.docs.js";
 import "./rolePermission.docs.js";
 import "./setting.docs.js";
+import "./socketEvents.docs.js";
 import "./trip.docs.js";
 import "./user.docs.js";
 import "./vehicle.docs.js";
@@ -36,7 +37,7 @@ export const openApiDocument = withErrorExamples(
         "",
         "**Emails** are case-insensitive — they're lowercased on the way in.",
         "",
-        "**Real-time:** the API also accepts Socket.IO connections (same host, same access token passed via the connection's `auth.token`) for a small set of push events — not represented here since they aren't REST endpoints. See `MOBILE_INTEGRATION_GUIDE.md`'s \"Real-Time Events\" section for the connection handshake and event payloads.",
+        "**Real-time (Socket.IO):** the API accepts Socket.IO connections (same host, same access token in `auth.token`) for push events (10 events total, from 3 controllers). Connection, payloads, and event details are in `SOCKET_EVENTS.md` at the repo root. **For mobile apps:** See `SOCKET_EVENTS.md` for the backend's event contract, and `driver/SOCKET_INTEGRATION_TASKS.md` (or `customer/SOCKET_INTEGRATION_TASKS.md`) for the mobile side's implementation checklist.",
       ].join("\n"),
     },
   }),

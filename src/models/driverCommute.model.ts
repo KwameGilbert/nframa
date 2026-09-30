@@ -60,7 +60,10 @@ class DriverCommuteModel extends BaseModel<DriverCommute> {
     try {
       return await this.deleteById(id);
     } catch (err) {
-      if ((err as { code?: string }).code === "23503") {
+      const code = (err as { code?: string; constraint?: string }).code;
+      const constraint = (err as { code?: string; constraint?: string }).constraint;
+      // FK violation (code 23503) or constraint name check
+      if (code === "23503" || constraint?.includes("trips")) {
         throw AppError.conflict("This commute has trips: pause it instead of deleting it");
       }
       throw err;

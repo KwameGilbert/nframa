@@ -72,6 +72,14 @@ export abstract class BaseModel<T extends object> {
     }
   }
 
+  protected async deleteByIdWithErrorHandling(id: string): Promise<number> {
+    try {
+      return await this.table.where({ [this.primaryKey]: id }).del();
+    } catch (err) {
+      this.handleDbError(err);
+    }
+  }
+
   deleteById(id: string): Promise<number> {
     return this.table.where({ [this.primaryKey]: id }).del();
   }

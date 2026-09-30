@@ -28,7 +28,7 @@ pnpm test tests/users.test.ts   # exactly one file ("users" alone also matches a
 pnpm test:watch
 ```
 
-Don't execute prompts/plans just like that, break it into parts. As much as possible, always rewrite prompt and optimized to use as minimum tokens as possible while doing the best work possible. Between all available models and its version From Fable, Opus, Haiku, to Sonnet switch between models and version depending on the difficulty, complexity, and demand of the work for the best results while optmizing to save usage while giving the best results without compromising quality of work.
+Don't execute prompts/plans just like that, break it into parts. As much as possible, always rewrite prompt and optimized to use as minimum usage tokens as possible while doing the best work possible. Between all available models and its version From Fable, Opus, Haiku, to Sonnet and any other avaiable one to always make sure usage lasts as long as possible switch between models and version depending on the difficulty, complexity, and demand of the work for the best results while optmizing to save usage while giving the best results without compromising quality of work.
 
 **KISS (Keep It Simple, Stupid)**: Avoid over-engineering. A simple solution that works is better than a complex one. When adding features, make sure they are necessary and don't add unnecessary layers of abstraction.
 

@@ -33,7 +33,9 @@ describe("tripTime", () => {
     "gives the same answers when the server's TZ is %s",
     (tz) => {
       const helpers = fileURLToPath(new URL("../src/utils/tripTime.ts", import.meta.url));
-      const script = `const t = await import(${JSON.stringify(helpers)});
+      // On Windows, convert path to file:// URL for proper import handling
+      const importPath = process.platform === "win32" ? `file:///${helpers.replace(/\\/g, "/")}` : helpers;
+      const script = `const t = await import(${JSON.stringify(importPath)});
         console.log(JSON.stringify([
           t.today(new Date("2026-09-30T23:30:00Z")),
           t.isoWeekday("2026-10-04"),

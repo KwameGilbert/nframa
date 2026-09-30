@@ -3,6 +3,8 @@ import { afterAll, beforeAll, vi } from "vitest";
 import db from "../src/database/knex.js";
 import { logOutSuperAdmin } from "./helpers/actors.js";
 import { cleanupTestData } from "./helpers/cleanup.js";
+import { seed as bootstrapAdminSeed } from "../src/database/seeds/001_bootstrap_admin.js";
+import { seed as defaultSettingsSeed } from "../src/database/seeds/002_default_settings.js";
 
 // No test ever sends a real SMS or email: every message lands in these mocks instead, which is also how
 // tests read OTP and reset codes (see helpers/outbox.ts).
@@ -59,8 +61,10 @@ vi.mock("../src/services/paystack.service.js", async (importActual) => {
 });
 
 beforeAll(async () => {
-  // Run any pending migrations before tests start
+  // Run any pending migrations and seeds before tests start
   await db.migrate.latest();
+  await bootstrapAdminSeed(db);
+  await defaultSettingsSeed(db);
 });
 
 afterAll(async () => {
