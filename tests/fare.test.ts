@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { api, auth, expectStatus } from "./helpers/api.js";
 import { loginAsSuperAdmin, signUpByPhone } from "./helpers/actors.js";
-import { calculateFare, getFareSettings, roundMoney } from "../src/services/fare.service.js";
+import { calculateFare, getFareSettings } from "../src/services/fare.service.js";
+import { roundMoney } from "../src/utils/money.js";
 import { settingModel } from "../src/models/setting.model.js";
 import { haversineMeters } from "../src/services/geo.js";
 

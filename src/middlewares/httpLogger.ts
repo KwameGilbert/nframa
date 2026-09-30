@@ -12,6 +12,15 @@ export function captureResponseBody(_req: Request, res: Response, next: NextFunc
   next();
 }
 
+// Payment webhooks carry the payer's email, phone and card details: log only which event it was.
+function loggableBody(req: Request) {
+  if (req.originalUrl.startsWith("/webhooks/")) {
+    const event = (req.body as { event?: unknown } | undefined)?.event;
+    return { event, details: "[REDACTED]" };
+  }
+  return req.body;
+}
+
 export const httpLogger = pinoHttp<Request, Response>({
   logger: createLogger("http"),
   genReqId: (req, res) => {
@@ -21,7 +30,7 @@ export const httpLogger = pinoHttp<Request, Response>({
     return id;
   },
   customProps: (req, res) => ({
-    requestBody: req.body,
+    requestBody: loggableBody(req),
     responseBody: res.locals.responseBody,
   }),
   customSuccessMessage: (req, res) => `${req.method} ${req.url} ${res.statusCode}`,

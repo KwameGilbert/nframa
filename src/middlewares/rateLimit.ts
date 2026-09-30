@@ -52,6 +52,9 @@ export const otpVerifyLimit = limitBy(byIdentifier, 10, { failuresOnly: true });
 export const passwordResetLimit = limitBy(byIdentifier, 10, { failuresOnly: true });
 export const passwordChangeLimit = limitBy(byUser, 5, { failuresOnly: true });
 
+// Every request counts — each top-up start or verify calls Paystack. Shared by both routes, per account.
+export const walletPaymentLimit = limitBy(byUser, 60);
+
 // Every request counts — each one sends an SMS or email.
 export const otpSendLimit = limitBy(byIdentifier, 5);
 export const passwordForgotLimit = limitBy(byIdentifier, 5);
