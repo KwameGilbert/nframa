@@ -12,13 +12,26 @@ export function captureResponseBody(_req: Request, res: Response, next: NextFunc
   next();
 }
 
-// Payment webhooks carry the payer's email, phone and card details: log only which event it was.
+// Payment webhooks carry the payer's email, phone and card details: log only which event it was. A boarding
+// scan carries the rider's boarding code, which is theirs alone.
 function loggableBody(req: Request) {
   if (req.originalUrl.startsWith("/webhooks/")) {
     const event = (req.body as { event?: unknown } | undefined)?.event;
     return { event, details: "[REDACTED]" };
   }
+  if (req.originalUrl.startsWith("/trips/board")) {
+    return { ...(req.body as object), code: "[REDACTED]" };
+  }
   return req.body;
+}
+
+// Trip views carry the rider's boarding code (for the rider alone): keep it out of the logged response.
+export function loggableResponse(body: unknown) {
+  const data = (body as { data?: unknown } | undefined)?.data;
+  if (typeof data === "object" && data !== null && "boardingCode" in data) {
+    return { ...(body as object), data: { ...data, boardingCode: "[REDACTED]" } };
+  }
+  return body;
 }
 
 export const httpLogger = pinoHttp<Request, Response>({
@@ -31,7 +44,7 @@ export const httpLogger = pinoHttp<Request, Response>({
   },
   customProps: (req, res) => ({
     requestBody: loggableBody(req),
-    responseBody: res.locals.responseBody,
+    responseBody: loggableResponse(res.locals.responseBody),
   }),
   customSuccessMessage: (req, res) => `${req.method} ${req.url} ${res.statusCode}`,
   customErrorMessage: (req, res, err) =>

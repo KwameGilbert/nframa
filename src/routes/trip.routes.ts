@@ -1,25 +1,38 @@
 import { Router } from "express";
 import { validate } from "../middlewares/validate.js";
 import { authenticate } from "../middlewares/authenticate.js";
-import { tripActionLimit, tripBrowseLimit, tripRequestLimit } from "../middlewares/rateLimit.js";
+import {
+  tripActionLimit,
+  tripBoardLimit,
+  tripBrowseLimit,
+  tripLocationLimit,
+  tripRequestLimit,
+} from "../middlewares/rateLimit.js";
 import { idParamsSchema } from "../schemas/common.schema.js";
 import {
   availableTripsQuerySchema,
+  boardTripSchema,
   cancelTripSchema,
   commuteTripsQuerySchema,
   createTripSchema,
   declineTripSchema,
   listTripsQuerySchema,
+  tripLocationSchema,
 } from "../schemas/trip.schema.js";
 import {
   acceptTrip,
+  boardTrip,
   cancelTrip,
+  completeTrip,
   declineTrip,
   getTrip,
   listAvailableTrips,
   listCommuteTrips,
   listTrips,
+  markArrived,
+  reportNoShow,
   requestTrip,
+  shareTripLocation,
 } from "../controllers/trip.controller.js";
 
 export const tripRouter = Router();
@@ -42,6 +55,15 @@ tripRouter.post(
   tripRequestLimit,
   validate({ body: createTripSchema }),
   requestTrip,
+);
+
+// By boarding code, not id: the driver scans it from the rider's phone.
+tripRouter.post(
+  "/trips/board",
+  authenticate,
+  tripBoardLimit,
+  validate({ body: boardTripSchema }),
+  boardTrip,
 );
 
 tripRouter.get(
@@ -75,6 +97,38 @@ tripRouter.patch(
   tripActionLimit,
   validate({ params: idParamsSchema, body: declineTripSchema }),
   declineTrip,
+);
+
+tripRouter.put(
+  "/trips/:id/location",
+  authenticate,
+  tripLocationLimit,
+  validate({ params: idParamsSchema, body: tripLocationSchema }),
+  shareTripLocation,
+);
+
+tripRouter.post(
+  "/trips/:id/arrived",
+  authenticate,
+  tripActionLimit,
+  validate({ params: idParamsSchema, body: tripLocationSchema }),
+  markArrived,
+);
+
+tripRouter.post(
+  "/trips/:id/complete",
+  authenticate,
+  tripActionLimit,
+  validate({ params: idParamsSchema }),
+  completeTrip,
+);
+
+tripRouter.post(
+  "/trips/:id/no-show",
+  authenticate,
+  tripActionLimit,
+  validate({ params: idParamsSchema }),
+  reportNoShow,
 );
 
 // The driver's manifest: lives here rather than with the commute routes because it lists trips.

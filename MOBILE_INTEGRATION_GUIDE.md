@@ -733,14 +733,14 @@ A trip is one rider's seat on one date's run of a driver's commute. Riders find 
 | ----------- | ---------------------------------------------------------------------------------------------------- |
 | `pending`   | Requested, waiting for the driver. Takes no seat and holds no money. Expires at `expiresAt`.         |
 | `accepted`  | Seat confirmed. The trip's `totalAmount` is **held** in the rider's wallet (not charged yet).        |
-| `boarded`   | The driver scanned the rider on board; the hold became the charge.                                   |
-| `completed` | Trip finished.                                                                                       |
+| `boarded`   | The driver scanned the rider on board; the hold became the charge (plus any wait charge).            |
+| `completed` | Trip finished; the driver has been paid.                                                             |
 | `declined`  | The driver said no. Nothing was held.                                                                |
 | `cancelled` | Cancelled by the rider or driver (`cancelledBy`). Any hold is released; nobody is charged.           |
-| `no_show`   | The rider didn't turn up. The hold is released.                                                      |
+| `no_show`   | The rider was never boarded (`cancelledBy` `driver` or `system`). The hold is released.              |
 | `expired`   | The driver didn't answer a pending request in time (`trips.requestExpiryMinutes`, or by the pickup). |
 
-**Holds:** while a trip is `accepted`, its total is reserved: `GET /wallet` shows it in `heldAmount`, and `availableBalance` (`balance - heldAmount`) is what the rider can still spend. The `balance` itself only drops when the rider boards. A request needs `availableBalance` at least the trip's total.
+**Holds:** while a trip is `accepted`, its total is reserved: `GET /wallet` shows it in `heldAmount`, and `availableBalance` (`balance - heldAmount`) is what the rider can still spend. The `balance` itself only drops when the rider boards. A request needs `availableBalance` at least the trip's total. A wait charge at boarding can take the balance below zero; the rider then can't request trips until they top up.
 
 ### 1. Find Commutes
 
@@ -1083,6 +1083,114 @@ Errors: `403` `Missing permission: read on commutes` (not your commute), `404` `
 
 ---
 
+## Trips (Boarding and Completion)
+
+Money moves only at the scan. Around the scheduled pickup:
+
+1. **Rider:** while the trip is `accepted`, the app shares the rider's location every few seconds (`PUT /trips/{id}/location`), and shows the boarding code (`boardingCode` in `GET /trips/{id}`) as a QR code or text.
+2. **Driver:** on reaching the pickup, marks arrival (`POST /trips/{id}/arrived`). Wait time counts from here.
+3. **Driver:** scans the rider's code with their own location (`POST /trips/board`). The hold becomes the charge, plus any wait charge.
+4. **Driver:** at the drop-off, completes the trip (`POST /trips/{id}/complete`). The driver's wallet is credited.
+5. If the rider never comes, the driver reports a no-show once the boarding window has closed (`POST /trips/{id}/no-show`): the hold is released and nobody pays.
+
+**Boarding window:** from `trips.boardingEarlyMinutes` (default 30) before `scheduledPickupAt` to `trips.boardingLateMinutes` (default 60) after it, whatever the date (a pickup may fall after midnight). **Proximity:** the driver must be within `trips.boardingRadiusMeters` (default 100 m) of the trip's pickup point, and the rider's last shared location must be at most `trips.locationMaxAgeSeconds` (default 120 s) old and within the same radius of the driver.
+
+**Wait charge:** if the driver marked arrival, the wait runs from the later of the arrival and `scheduledPickupAt` to the scan, in whole minutes (`waitMinutes`). Minutes beyond `fares.waitGraceMinutes` (default 5) are charged at `fares.waitPerMinuteRate` (default GHS 0.50) as `waitCharge`: no platform or booking fee, all of it to the driver (`driverEarnings` becomes `fare + waitCharge`). No arrival mark, no wait charge.
+
+**Unfinished trips:** there is no background job. When a trip is next read (lists, detail, manifest, any action), one still `accepted` `trips.staleAfterHours` (default 12) after its `scheduledDropoffAt` becomes `no_show` with `cancelledBy: "system"` (hold released), and one still `boarded` becomes `completed` (the driver is paid). No socket event is sent for these.
+
+### 1. Share the Rider's Location
+
+```http
+PUT /trips/{id}/location
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{ "lat": 5.6051, "lng": -0.1757 }
+```
+
+**The trip's rider only**, for an `accepted` trip, from `trips.boardingEarlyMinutes` before `scheduledPickupAt`. Only the latest location is kept, and nobody else sees it: it's the proof, at the scan, that the rider is at the car. Send it every few seconds while the rider waits (limit: 300 per 15 minutes).
+
+```json
+{
+  "success": true,
+  "message": "Location shared successfully",
+  "data": {
+    "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
+    "lat": 5.6051,
+    "lng": -0.1757,
+    "recordedAt": "2026-10-01T07:31:12.000Z"
+  }
+}
+```
+
+Errors: `403` `Only the trip's rider can share their location for it`, `404`, `409` `Can't share your location for a trip that is boarded` (any status but `accepted`: stop sending), `409` `You can share your location from 2026-10-01T07:01:00.000Z` (too early).
+
+### 2. Mark Arrival (Driver)
+
+```http
+POST /trips/{id}/arrived
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{ "lat": 5.6051, "lng": -0.1757 }
+```
+
+**The trip's driver only**, with their current location: an `accepted` trip inside the boarding window, within the radius of the pickup. Sets `arrivedAt`. Only the first mark counts; marking again returns the trip unchanged (`200`). Returns the trip (`200`, "Arrival marked successfully") as the driver sees it. The rider gets `trip:driver_arrived`.
+
+**Errors:**
+
+| Status | `error`                                                                                      |
+| ------ | -------------------------------------------------------------------------------------------- |
+| 403    | `Only the trip's driver can mark arrival for it`                                             |
+| 409    | `Can't mark arrival for a trip that is pending` (or any status but `accepted`)               |
+| 409    | `Boarding opens at 2026-10-01T07:01:00.000Z` / `Boarding closed at 2026-10-01T08:31:00.000Z` |
+| 409    | `You're too far from the pickup point`                                                       |
+
+### 3. Board the Rider (Scan)
+
+```http
+POST /trips/board
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{ "code": "TR-7KQ2MX", "lat": 5.6051, "lng": -0.1757 }
+```
+
+**Drivers.** `code` is the rider's boarding code (any case). Only codes on the caller's own trips are found: any other code, including another driver's, answers the same `404`. In one step: the held total becomes a `trip_charge`, any wait charge is debited as a `wait_charge`, and the trip becomes `boarded` with `boardedAt`, `waitMinutes`, `waitCharge` and the new `driverEarnings`. Scanning twice charges once (the second answers `409`). Returns the trip (`200`, "Rider boarded successfully") as the driver sees it: no boarding code. The rider gets `trip:boarded`. Limit: 60 scans per 15 minutes per driver.
+
+**Errors** (checked in this order):
+
+| Status | `error`                                                                            |
+| ------ | ---------------------------------------------------------------------------------- |
+| 403    | `Only drivers can board riders`                                                    |
+| 404    | `No trip found for that code`                                                      |
+| 409    | `Can't board a trip that is cancelled` (or any status but `accepted`)              |
+| 409    | `Boarding opens at ...` / `Boarding closed at ...`                                 |
+| 409    | `You're too far from the pickup point`                                             |
+| 409    | `The rider's location is out of date: ask them to open the app` (none, or too old) |
+| 409    | `The rider isn't close enough to the vehicle`                                      |
+
+### 4. Complete the Trip (Driver)
+
+```http
+POST /trips/{id}/complete
+Authorization: Bearer <accessToken>
+```
+
+**The trip's driver only**, for a `boarded` trip. Credits the driver's wallet with `driverEarnings` (a `driver_earning` transaction), once; the rider isn't charged again. Returns the trip (`200`, "Trip completed successfully", `status: "completed"`, `completedAt`). The rider gets `trip:completed`. Errors: `403` `Only the trip's driver can complete it`, `404`, `409` `Can't complete a trip that is completed` (or any status but `boarded`).
+
+### 5. Report a No-Show (Driver)
+
+```http
+POST /trips/{id}/no-show
+Authorization: Bearer <accessToken>
+```
+
+**The trip's driver only**, for an `accepted` trip, once the boarding window has closed (`trips.boardingLateMinutes` after `scheduledPickupAt`). Releases the hold; nobody is charged or paid. Returns the trip (`200`, "No-show reported successfully", `status: "no_show"`, `cancelledBy: "driver"`, `cancellationReason: "Rider did not show up"`). The rider gets `trip:no_show`. Errors: `403` `Only the trip's driver can report a no-show for it`, `404`, `409` `You can report a no-show from 2026-10-01T08:31:00.000Z` (the window is still open), `409` `Can't report a no-show for a trip that is boarded` (or any status but `accepted`).
+
+---
+
 ## Real-Time Events (Socket.IO)
 
 The backend accepts Socket.IO connections on the same host as the REST API (no separate URL — just drop any path segment like `/v1` from your API base URL). Connections must authenticate the same way REST does, using the **same access token**.
@@ -1187,6 +1295,64 @@ Sent to the **rider** when the driver declines their request (`PATCH /trips/{id}
 
 `reason` is `null` when the driver gave none.
 
+### `trip:driver_arrived`
+
+Sent to the **rider** when the driver marks arrival at the pickup (`POST /trips/{id}/arrived`), once. Wait time counts from `arrivedAt` (or the scheduled pickup, if later).
+
+```json
+{
+  "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
+  "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+  "tripDate": "2026-10-01",
+  "status": "accepted",
+  "arrivedAt": "2026-10-01T07:29:40.000Z"
+}
+```
+
+### `trip:boarded`
+
+Sent to the **rider** when the driver scans their code (`POST /trips/board`). The hold is now the charge; `waitCharge` (`0` if none) was debited on top.
+
+```json
+{
+  "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
+  "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+  "tripDate": "2026-10-01",
+  "status": "boarded",
+  "boardedAt": "2026-10-01T07:42:05.000Z",
+  "waitMinutes": 12,
+  "waitCharge": 3.5
+}
+```
+
+### `trip:completed`
+
+Sent to the **rider** when the driver completes the trip (`POST /trips/{id}/complete`). Not sent when an unfinished trip is completed automatically.
+
+```json
+{
+  "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
+  "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+  "tripDate": "2026-10-01",
+  "status": "completed",
+  "completedAt": "2026-10-01T08:05:31.000Z"
+}
+```
+
+### `trip:no_show`
+
+Sent to the **rider** when the driver reports they didn't show up (`POST /trips/{id}/no-show`). The hold is released. Not sent for the system's no-shows.
+
+```json
+{
+  "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
+  "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+  "tripDate": "2026-10-01",
+  "status": "no_show",
+  "reason": "Rider did not show up"
+}
+```
+
 ---
 
 ## Admin Document Review
@@ -1262,20 +1428,23 @@ Requires `verification: update`. This is the **only** endpoint that can set a dr
 
 All limits are **per 15-minute window** and apply in addition to a generous per-IP flood guard (100 requests/IP on most auth endpoints, 300/IP on refresh — these exist mainly to stop abuse, not to affect normal use).
 
-| Endpoint                             | Limit              | Counts               |
-| ------------------------------------ | ------------------ | -------------------- |
-| `POST /auth/login/otp`               | 5 per phone/email  | Every request        |
-| `POST /auth/login/verify`            | 10 per phone/email | Failed attempts only |
-| `POST /auth/login`                   | 10 per email       | Failed attempts only |
-| `POST /auth/password/forgot`         | 5 per email        | Every request        |
-| `POST /auth/password/reset`          | 10 per email       | Failed attempts only |
-| `POST /auth/password/change`         | 5 per account      | Failed attempts only |
-| `POST /auth/refresh`                 | 300 per IP         | Every request        |
-| `POST /trips`                        | 30 per account     | Every request        |
-| `GET /trips`, `GET /trips/available` | 300 per account    | Every request        |
-| `PATCH /trips/{id}/accept`           | 120 per account    | Every request        |
-| `PATCH /trips/{id}/decline`          | 120 per account    | Every request        |
-| `GET /commutes/{id}/trips`           | 120 per account    | Every request        |
+| Endpoint                                            | Limit                                                                    | Counts               |
+| --------------------------------------------------- | ------------------------------------------------------------------------ | -------------------- |
+| `POST /auth/login/otp`                              | 5 per phone/email                                                        | Every request        |
+| `POST /auth/login/verify`                           | 10 per phone/email                                                       | Failed attempts only |
+| `POST /auth/login`                                  | 10 per email                                                             | Failed attempts only |
+| `POST /auth/password/forgot`                        | 5 per email                                                              | Every request        |
+| `POST /auth/password/reset`                         | 10 per email                                                             | Failed attempts only |
+| `POST /auth/password/change`                        | 5 per account                                                            | Failed attempts only |
+| `POST /auth/refresh`                                | 300 per IP                                                               | Every request        |
+| `POST /trips`                                       | 30 per account                                                           | Every request        |
+| `GET /trips`, `GET /trips/available`                | 300 per account                                                          | Every request        |
+| `PATCH /trips/{id}/accept`                          | 120 per account                                                          | Every request        |
+| `PATCH /trips/{id}/decline`                         | 120 per account                                                          | Every request        |
+| `GET /commutes/{id}/trips`                          | 120 per account                                                          | Every request        |
+| `PUT /trips/{id}/location`                          | 300 per account                                                          | Every request        |
+| `POST /trips/board`                                 | 60 per account                                                           | Every request        |
+| `POST /trips/{id}/arrived`, `/complete`, `/no-show` | 120 per account, one budget shared with accept, decline and the manifest | Every request        |
 
 **Response (429):**
 
@@ -1318,6 +1487,11 @@ Standard `RateLimit` / `RateLimit-Policy` response headers (draft-8 format) tell
 | PATCH  | `/trips/{id}/accept`                        | ✓ (driver) | Accept a pending request                             |
 | PATCH  | `/trips/{id}/decline`                       | ✓ (driver) | Decline a pending request                            |
 | GET    | `/commutes/{id}/trips`                      | ✓ (driver) | A commute's trips on a date (manifest)               |
+| PUT    | `/trips/{id}/location`                      | ✓ (rider)  | Share the rider's location on the day                |
+| POST   | `/trips/{id}/arrived`                       | ✓ (driver) | Mark arrival at the pickup                           |
+| POST   | `/trips/board`                              | ✓ (driver) | Scan the rider's boarding code                       |
+| POST   | `/trips/{id}/complete`                      | ✓ (driver) | Complete a boarded trip                              |
+| POST   | `/trips/{id}/no-show`                       | ✓ (driver) | Report a rider who didn't show up                    |
 | PATCH  | `/commutes/{id}`                            | ✓ (driver) | Edit or pause a commute                              |
 | GET    | `/document-types`                           | ✓          | List document types to upload                        |
 | POST   | `/driver/verification/{documentTypeId}`     | ✓          | Upload a document                                    |

@@ -108,8 +108,8 @@ export async function updateDriverCommute(req: Request, res: Response) {
 
   const existing = await findCommuteFor(req, id, "update");
   const guarded = changesRouteOrSchedule(existing, input);
-  // Overdue requests expire first, so they don't block the edit.
-  if (guarded) await tripModel.expireStale({ commuteId: id });
+  // Stale trips are settled first (overdue requests expire, ...), so they don't block the edit.
+  if (guarded) await tripModel.settleStale({ commuteId: id });
   if (guarded && (await tripModel.hasActiveTripsFrom(id, today()))) {
     throw AppError.conflict(
       "This commute has upcoming trips: pause it or cancel them before changing its route or schedule",

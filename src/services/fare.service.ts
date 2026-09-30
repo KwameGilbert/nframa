@@ -52,6 +52,21 @@ export function calculateFare(leg: FareLeg, s: FareSettings) {
   };
 }
 
+export type WaitSettings = Pick<FareSettings, "fares.waitGraceMinutes" | "fares.waitPerMinuteRate">;
+
+// Pure. The wait runs from the driver's arrival (or the scheduled pickup, if they came early) to the boarding
+// scan; no arrival mark means no wait. The minutes past the grace are charged with no fees, all to the driver.
+export function calculateWait(
+  times: { scheduledPickupAt: Date; arrivedAt: Date | null; boardedAt: Date },
+  s: WaitSettings,
+) {
+  if (!times.arrivedAt) return { waitMinutes: 0, waitCharge: 0 };
+  const start = Math.max(times.scheduledPickupAt.getTime(), times.arrivedAt.getTime());
+  const waitMinutes = Math.max(0, Math.floor((times.boardedAt.getTime() - start) / 60_000));
+  const billable = Math.max(0, waitMinutes - s["fares.waitGraceMinutes"]);
+  return { waitMinutes, waitCharge: roundMoney(billable * s["fares.waitPerMinuteRate"]) };
+}
+
 export function getFareSettings(): Promise<FareSettings> {
   return settingModel.getValues(FARE_SETTING_KEYS);
 }

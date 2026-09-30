@@ -85,7 +85,8 @@ export const TRIP_SETTINGS = {
     type: "number",
     min: 0,
     default: 100,
-    description: "How close, in metres, driver and rider must be to the pickup point to board",
+    description:
+      "How close, in metres, the driver must be to the pickup point, and the rider to the driver, to board",
   },
   "trips.locationMaxAgeSeconds": {
     type: "number",
@@ -118,6 +119,13 @@ export const TRIP_SETTINGS = {
     default: 60,
     description:
       "How many minutes after the scheduled pickup the driver can still scan the rider on board",
+  },
+  "trips.staleAfterHours": {
+    type: "number",
+    min: 1,
+    default: 12,
+    description:
+      "Hours after the scheduled drop-off when an unfinished trip is settled: never boarded becomes a no-show, boarded is completed",
   },
   "trips.fallbackSpeedKmh": {
     type: "number",

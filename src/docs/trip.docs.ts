@@ -3,20 +3,24 @@ import { idParamsSchema } from "../schemas/common.schema.js";
 import {
   availableTripListSchema,
   availableTripsQuerySchema,
+  boardTripSchema,
   cancelTripSchema,
   commuteManifestSchema,
   commuteTripsQuerySchema,
   createTripSchema,
   declineTripSchema,
   listTripsQuerySchema,
+  riderLocationSchema,
   tripDetailSchema,
   tripListSchema,
+  tripLocationSchema,
 } from "../schemas/trip.schema.js";
 
 const unauthorized = errorResponse("Missing or invalid access token");
 const TRIP_ID = "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60";
 const tripNotFound = errorResponse("No trip has this id", `Trip not found: ${TRIP_ID}`);
 const COMMUTE_ID = "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34";
+const locationBody = { content: { "application/json": { schema: tripLocationSchema } } };
 
 registry.registerPath({
   method: "get",
@@ -80,7 +84,7 @@ registry.registerPath({
   tags: ["Trips"],
   summary: "List my trips (riders: their own; drivers: trips on their commutes)",
   description:
-    "upcoming: pending, accepted or boarded and not over yet (boarded, or the drop-off still ahead), soonest first. past: everything else, newest first. Pending requests past their expiry show as expired.",
+    "upcoming: pending, accepted or boarded and not over yet (boarded, or the drop-off still ahead), soonest first. past: everything else, newest first. Pending requests past their expiry show as expired, and trips left unfinished trips.staleAfterHours after their scheduled drop-off are settled first (accepted: no_show by the system, hold released; boarded: completed, driver paid).",
   security: [{ bearerAuth: [] }],
   request: { query: listTripsQuerySchema },
   responses: {
@@ -98,7 +102,7 @@ registry.registerPath({
   tags: ["Trips"],
   summary: "Get a trip (its rider, its driver, or an admin with trips: read)",
   description:
-    "The trip with its commute, driver, rider, vehicle, seats left on that date, the other riders with a confirmed seat (first name and photo only) and every confirmed rider's pickup and drop-off as stops in route order. Until the rider's own trip is accepted, the rider sees no other riders and only their own two stops. The boarding code is shown to the rider only. Once the trip is accepted, the driver's phone is shown to the rider, the rider's phone to the driver, and the vehicle's plate to both.",
+    "The trip with its commute, driver, rider, vehicle, seats left on that date, the other riders with a confirmed seat (first name and photo only) and every confirmed rider's pickup and drop-off as stops in route order. Until the rider's own trip is accepted, the rider sees no other riders and only their own two stops. The boarding code is shown to the rider only. Once boarded, it carries waitMinutes and waitCharge, and driverEarnings includes the wait charge. Unfinished trips are settled first, as in GET /trips. Once the trip is accepted, the driver's phone is shown to the rider, the rider's phone to the driver, and the vehicle's plate to both.",
   security: [{ bearerAuth: [] }],
   request: { params: idParamsSchema },
   responses: {
@@ -199,7 +203,7 @@ registry.registerPath({
   tags: ["Trips"],
   summary: "A commute's trips on a date: the driver's manifest (its driver, or commutes: read)",
   description:
-    "Every trip on one date's run of the commute (today by default; any date), soonest pickup first, optionally filtered by status and paginated. Each item has the rider's id, full name and photo; the rider's phone only for the commute's driver (never an admin), once the trip is accepted (or boarded, completed). Never a boarding code. Alongside: the commute's capacity, the seats left on that date, and stops, the route sheet of every accepted and boarded rider's pickup and drop-off in route order with their first name (not paginated or filtered). Pending requests past their expiry show as expired.",
+    "Every trip on one date's run of the commute (today by default; any date), soonest pickup first, optionally filtered by status and paginated. Each item has the rider's id, full name and photo; the rider's phone only for the commute's driver (never an admin), once the trip is accepted (or boarded, completed). Never a boarding code. Alongside: the commute's capacity, the seats left on that date, and stops, the route sheet of every accepted and boarded rider's pickup and drop-off in route order with their first name (not paginated or filtered). Pending requests past their expiry show as expired, and trips left unfinished trips.staleAfterHours after their scheduled drop-off are settled first (accepted: no_show by the system, hold released; boarded: completed, driver paid).",
   security: [{ bearerAuth: [] }],
   request: { params: idParamsSchema, query: commuteTripsQuerySchema },
   responses: {
@@ -211,6 +215,136 @@ registry.registerPath({
       "Missing permission: read on commutes",
     ),
     404: errorResponse("No commute has this id", `Commute not found: ${COMMUTE_ID}`),
+    429: rateLimitedResponse,
+  },
+});
+
+registry.registerPath({
+  method: "put",
+  path: "/trips/{id}/location",
+  tags: ["Trips"],
+  summary: "Share the rider's location while waiting (the trip's rider)",
+  description:
+    "The rider's app sends its location every few seconds while the trip is accepted, from trips.boardingEarlyMinutes before the scheduled pickup. The boarding scan needs it: no older than trips.locationMaxAgeSeconds and within trips.boardingRadiusMeters of the driver. Only the latest location is kept; it is shown to nobody. Not in the activity log.",
+  security: [{ bearerAuth: [] }],
+  request: { params: idParamsSchema, body: locationBody },
+  responses: {
+    200: successResponse("Location shared successfully", riderLocationSchema),
+    400: errorResponse("Invalid trip id, lat or lng"),
+    401: unauthorized,
+    403: errorResponse(
+      "Not the trip's rider",
+      "Only the trip's rider can share their location for it",
+    ),
+    404: tripNotFound,
+    409: errorResponse(
+      'The trip isn\'t accepted ("Can\'t share your location for a trip that is boarded"), or it\'s too early ("You can share your location from 2026-10-01T07:01:00.000Z")',
+      "Can't share your location for a trip that is boarded",
+    ),
+    429: rateLimitedResponse,
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/trips/{id}/arrived",
+  tags: ["Trips"],
+  summary: "Mark arrival at the pickup (the trip's driver)",
+  description:
+    "The driver, at the pickup point, with their current location. Needs an accepted trip inside the boarding window (trips.boardingEarlyMinutes before the scheduled pickup to trips.boardingLateMinutes after it), and the driver within trips.boardingRadiusMeters of the pickup. Wait time counts from this mark (or from the scheduled pickup, if the driver came early). Only the first mark counts: marking again returns the trip unchanged. Returns the trip as the driver sees it. The rider gets the trip:driver_arrived socket event.",
+  security: [{ bearerAuth: [] }],
+  request: { params: idParamsSchema, body: locationBody },
+  responses: {
+    200: successResponse("Arrival marked successfully", tripDetailSchema),
+    400: errorResponse("Invalid trip id, lat or lng"),
+    401: unauthorized,
+    403: errorResponse(
+      "Not the trip's driver (riders and admins included)",
+      "Only the trip's driver can mark arrival for it",
+    ),
+    404: tripNotFound,
+    409: errorResponse(
+      'Not accepted ("Can\'t mark arrival for a trip that is pending"); outside the boarding window ("Boarding opens at ..." / "Boarding closed at ..."); or too far from the pickup ("You\'re too far from the pickup point")',
+      "You're too far from the pickup point",
+    ),
+    429: rateLimitedResponse,
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/trips/board",
+  tags: ["Trips"],
+  summary: "Board a rider by scanning their code (drivers)",
+  description: [
+    "The driver scans the rider's boarding code and sends their own location. Checks, in order: the code belongs to a trip on the caller's commutes (any other code, including another driver's, is the same 404, so codes can't be probed); the trip is accepted; now is inside the boarding window (trips.boardingEarlyMinutes before the scheduled pickup to trips.boardingLateMinutes after it); the driver is within trips.boardingRadiusMeters of the pickup; and the rider's shared location (PUT /trips/{id}/location) is no older than trips.locationMaxAgeSeconds and within trips.boardingRadiusMeters of the driver.",
+    "",
+    "Then, in one transaction: the hold becomes the trip's charge (a trip_charge of totalAmount), and if the driver marked arrival, the wait from max(arrival, scheduled pickup) to now past fares.waitGraceMinutes is charged at fares.waitPerMinuteRate as a separate wait_charge (no fees, all to the driver; it may take the rider's wallet below zero, which blocks new requests until topped up). driverEarnings becomes fare + waitCharge, paid on completion. Two simultaneous scans charge once. Returns the trip as the driver sees it (no boarding code). The rider gets the trip:boarded socket event.",
+  ].join("\n"),
+  security: [{ bearerAuth: [] }],
+  request: { body: { content: { "application/json": { schema: boardTripSchema } } } },
+  responses: {
+    200: successResponse("Rider boarded successfully", tripDetailSchema),
+    400: errorResponse("Invalid code, lat or lng"),
+    401: unauthorized,
+    403: errorResponse("The caller isn't a driver", "Only drivers can board riders"),
+    404: errorResponse(
+      "No trip on the caller's commutes has this code",
+      "No trip found for that code",
+    ),
+    409: errorResponse(
+      'Not accepted ("Can\'t board a trip that is cancelled"); outside the boarding window ("Boarding opens at ..." / "Boarding closed at ..."); the driver too far from the pickup ("You\'re too far from the pickup point"); the rider\'s location missing or stale ("The rider\'s location is out of date: ask them to open the app"); or the rider too far from the driver ("The rider isn\'t close enough to the vehicle")',
+      "The rider's location is out of date: ask them to open the app",
+    ),
+    429: rateLimitedResponse,
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/trips/{id}/complete",
+  tags: ["Trips"],
+  summary: "Complete a boarded trip (the trip's driver)",
+  description:
+    "Credits the driver's wallet with driverEarnings (fare + waitCharge) as a driver_earning, once (a second or simultaneous complete is refused), and marks the trip completed. The rider isn't charged again. The rider gets the trip:completed socket event. A boarded trip nobody completes is completed the same way trips.staleAfterHours after its scheduled drop-off, when it is next read.",
+  security: [{ bearerAuth: [] }],
+  request: { params: idParamsSchema },
+  responses: {
+    200: successResponse("Trip completed successfully", tripDetailSchema),
+    400: errorResponse("Invalid trip id"),
+    401: unauthorized,
+    403: errorResponse(
+      "Not the trip's driver (riders and admins included)",
+      "Only the trip's driver can complete it",
+    ),
+    404: tripNotFound,
+    409: errorResponse("The trip isn't boarded", "Can't complete a trip that is completed"),
+    429: rateLimitedResponse,
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/trips/{id}/no-show",
+  tags: ["Trips"],
+  summary: "Report that the rider didn't show up (the trip's driver)",
+  description:
+    'Only for an accepted trip, once the boarding window has closed (trips.boardingLateMinutes after the scheduled pickup). Releases the hold back to the rider: nobody is charged or paid. The trip becomes no_show with cancelledBy driver and cancellationReason "Rider did not show up". The rider gets the trip:no_show socket event. An accepted trip nobody scans or reports becomes no_show by the system (cancelledBy system) trips.staleAfterHours after its scheduled drop-off, when it is next read.',
+  security: [{ bearerAuth: [] }],
+  request: { params: idParamsSchema },
+  responses: {
+    200: successResponse("No-show reported successfully", tripDetailSchema),
+    400: errorResponse("Invalid trip id"),
+    401: unauthorized,
+    403: errorResponse(
+      "Not the trip's driver (riders and admins included)",
+      "Only the trip's driver can report a no-show for it",
+    ),
+    404: tripNotFound,
+    409: errorResponse(
+      'The boarding window is still open ("You can report a no-show from ..."), or the trip isn\'t accepted ("Can\'t report a no-show for a trip that is boarded")',
+      "You can report a no-show from 2026-10-01T08:37:00.000Z",
+    ),
     429: rateLimitedResponse,
   },
 });

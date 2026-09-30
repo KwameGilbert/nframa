@@ -1,10 +1,13 @@
 import type { Knex } from "knex";
 import db from "../database/knex.js";
 import { BaseModel } from "./BaseModel.js";
+import { settingModel } from "./setting.model.js";
 import { walletModel } from "./wallet.model.js";
+import { calculateWait, type WaitSettings } from "../services/fare.service.js";
 import { EARTH_RADIUS_METERS, type Point } from "../services/geo.js";
 import { AppError } from "../utils/AppError.js";
 import { generateCode } from "../utils/code.js";
+import { roundMoney } from "../utils/money.js";
 import { departureAt, isoWeekday } from "../utils/tripTime.js";
 
 export const TRIP_STATUSES = [
@@ -119,6 +122,9 @@ export type NewTrip = Pick<
   | "fareBreakdown"
 >;
 
+// What the lazy sweeps are narrowed to (one trip, commute, rider or driver).
+type TripCriteria = Partial<Pick<Trip, "id" | "commuteId" | "riderUserId" | "driverUserId">>;
+
 interface Page {
   page: number;
   limit: number;
@@ -169,6 +175,8 @@ interface ManifestRow extends PhoneColumns {
 
 const COMMUTE_UNAVAILABLE = "This commute is not taking bookings";
 const DUPLICATE_TRIP = "You already have a trip on this commute for that date";
+const NO_SHOW_REASON = "Rider did not show up";
+const NEVER_BOARDED_REASON = "The trip was never boarded";
 
 function firstName(fullName: string | null): string | null {
   return fullName?.trim().split(/\s+/)[0] || null;
@@ -355,13 +363,34 @@ class TripModel extends BaseModel<Trip> {
 
   // Pending requests past expiresAt are expired lazily, by whoever reads them next. Safe to run anytime: a
   // pending trip holds no money. criteria narrows it (e.g. to one commute or rider). Returns how many expired.
-  expireStale(
-    criteria: Partial<Pick<Trip, "id" | "commuteId" | "riderUserId" | "driverUserId">> = {},
-  ) {
+  expireStale(criteria: TripCriteria = {}) {
     return this.table
       .where({ ...criteria, status: "pending" })
       .where("expiresAt", "<=", db.fn.now())
       .update({ status: "expired", expiresAt: null, updatedAt: new Date() });
+  }
+
+  // Settles, lazily (there is no cron), what nobody finished: stale pending requests expire, and
+  // trips.staleAfterHours after the scheduled drop-off an accepted trip never scanned becomes a no-show (by the
+  // system, hold released) and a boarded one is completed (the driver is paid). Each trip goes through the same
+  // locked, status-checked transaction as the driver's own action, so running alongside one is safe.
+  async settleStale(criteria: TripCriteria = {}) {
+    await this.expireStale(criteria);
+    const hours = await settingModel.getValue("trips.staleAfterHours");
+    const stale: Pick<Trip, "id" | "status">[] = await this.table
+      .where(criteria)
+      .whereIn("status", ON_BOARD_STATUSES)
+      .where("scheduledDropoffAt", "<=", new Date(Date.now() - hours * 3_600_000))
+      .select("id", "status");
+    for (const trip of stale) {
+      try {
+        if (trip.status === "accepted") await this.reportNoShow(trip.id, "system");
+        else await this.completeTrip(trip.id);
+      } catch (err) {
+        // Settled by someone else in the meantime.
+        if (!(err instanceof AppError && err.statusCode === 409)) throw err;
+      }
+    }
   }
 
   // Commutes a rider can request on a date, nearest start first: active, running that weekday, driver approved
@@ -542,15 +571,26 @@ class TripModel extends BaseModel<Trip> {
     });
   }
 
+  // The rider never came: the hold goes back and nobody is charged or paid.
+  reportNoShow(tripId: string, by: "driver" | "system") {
+    return this.closeTrip(tripId, {
+      status: "no_show",
+      verb: "report a no-show for",
+      from: ["accepted"],
+      by,
+      reason: by === "driver" ? NO_SHOW_REASON : NEVER_BOARDED_REASON,
+    });
+  }
+
   // Ends a trip before boarding. The status is re-checked under the row lock, and an accepted trip's hold goes
   // back to the rider with it.
   private async closeTrip(
     tripId: string,
     close: {
-      status: "cancelled" | "declined";
+      status: "cancelled" | "declined" | "no_show";
       verb: string;
       from: TripStatus[];
-      by: "rider" | "driver";
+      by: "rider" | "driver" | "system";
       reason?: string;
     },
   ): Promise<Trip> {
@@ -568,6 +608,94 @@ class TripModel extends BaseModel<Trip> {
         cancelledBy: close.by,
         cancellationReason: close.reason ?? null,
       });
+    });
+  }
+
+  // The driver marks arrival at the pickup (wait time counts from here). Only the first mark counts: changed is
+  // false when it was already set.
+  markArrived(tripId: string): Promise<{ trip: Trip; changed: boolean }> {
+    return db.transaction(async (trx) => {
+      const trip = await this.lockIn(trx, tripId);
+      if (trip.status !== "accepted") {
+        throw AppError.conflict(`Can't mark arrival for a trip that is ${trip.status}`);
+      }
+      if (trip.arrivedAt) return { trip, changed: false };
+      return { trip: await this.updateIn(trx, tripId, { arrivedAt: new Date() }), changed: true };
+    });
+  }
+
+  // The rider's last shared location, which the boarding scan checks against the driver's.
+  async shareRiderLocation(tripId: string, { lat, lng }: Point) {
+    const riderLocationAt = new Date();
+    await this.table
+      .where({ id: tripId })
+      .update({ riderLat: lat, riderLng: lng, riderLocationAt, updatedAt: riderLocationAt });
+    return { tripId, lat, lng, recordedAt: riderLocationAt };
+  }
+
+  // A trip on one of the driver's commutes by its boarding code. Someone else's code finds nothing.
+  findByBoardingCode(boardingCode: string, driverUserId: string) {
+    return this.findOne({ boardingCode, driverUserId });
+  }
+
+  // The boarding scan, in one transaction taking the trip row, then the rider's wallet: the hold becomes the trip's
+  // charge, and wait past the grace is debited on top (it may take the wallet below zero). The status re-check
+  // under the lock, with transactions_one_per_trip_type as the backstop, makes two simultaneous scans charge once.
+  boardTrip(tripId: string, at: Point, wait: WaitSettings): Promise<Trip> {
+    return db.transaction(async (trx) => {
+      const trip = await this.lockIn(trx, tripId);
+      if (trip.status !== "accepted") {
+        throw AppError.conflict(`Can't board a trip that is ${trip.status}`);
+      }
+      // Accepting holds exactly the total: anything else is a bug, and boarding would undercharge.
+      if (trip.heldAmount !== trip.totalAmount) {
+        throw new Error(
+          `Trip ${tripId} holds ${trip.heldAmount}, not its total ${trip.totalAmount}`,
+        );
+      }
+      const boardedAt = new Date();
+      const { waitMinutes, waitCharge } = calculateWait({ ...trip, boardedAt }, wait);
+      const rider = { userId: trip.riderUserId, tripId };
+      await walletModel.capture(trx, { ...rider, amount: trip.heldAmount });
+      if (waitCharge > 0) {
+        await walletModel.recordIn(trx, {
+          ...rider,
+          type: "wait_charge",
+          direction: "debit",
+          amount: waitCharge,
+        });
+      }
+      return this.updateIn(trx, tripId, {
+        status: "boarded",
+        boardedAt,
+        boardingLat: at.lat,
+        boardingLng: at.lng,
+        waitMinutes,
+        waitCharge,
+        heldAmount: 0,
+        driverEarnings: roundMoney(trip.fare + waitCharge),
+      });
+    });
+  }
+
+  // Pays the driver for a boarded trip (fare plus any wait charge), once: the status is re-checked under the trip
+  // lock, with transactions_one_per_trip_type as the backstop.
+  completeTrip(tripId: string): Promise<Trip> {
+    return db.transaction(async (trx) => {
+      const trip = await this.lockIn(trx, tripId);
+      if (trip.status !== "boarded") {
+        throw AppError.conflict(`Can't complete a trip that is ${trip.status}`);
+      }
+      if (trip.driverEarnings > 0) {
+        await walletModel.recordIn(trx, {
+          userId: trip.driverUserId,
+          tripId,
+          type: "driver_earning",
+          direction: "credit",
+          amount: trip.driverEarnings,
+        });
+      }
+      return this.updateIn(trx, tripId, { status: "completed", completedAt: new Date() });
     });
   }
 
