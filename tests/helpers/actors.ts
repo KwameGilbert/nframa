@@ -84,6 +84,19 @@ export async function signUpByPhone(role: "rider" | "driver") {
   return { ...session, ...phone, fullName };
 }
 
+// A signed-up driver who has already created their profile — commutes and other driver features need one.
+export async function signUpDriverWithProfile() {
+  const driver = await signUpByPhone("driver");
+  const res = await api.post("/driver").set(auth(driver.token)).send({
+    userId: driver.userId,
+    ghanaCardNumber: data.ghanaCardNumber(),
+    address: data.address(),
+  });
+  expectStatus(res, 201);
+  trackForCleanup("carOwnerProfiles", { userId: driver.userId });
+  return driver;
+}
+
 // A rider or driver account created by an admin (no sign-in).
 export async function createPhoneAccount(adminToken: string, role: "rider" | "driver") {
   const res = await api

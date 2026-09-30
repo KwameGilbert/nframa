@@ -217,6 +217,33 @@ export function vehicle(carOwnerUserId: string) {
   };
 }
 
+// Real Accra and Kumasi landmarks, so a commute is a plausible trip.
+const PLACES = [
+  { address: "Accra Mall, Tetteh Quarshie, Accra", lat: 5.6224, lng: -0.1737 },
+  { address: "Kwame Nkrumah Circle, Accra", lat: 5.5706, lng: -0.2186 },
+  { address: "Oxford Street, Osu, Accra", lat: 5.556, lng: -0.182 },
+  { address: "Kotoka International Airport, Accra", lat: 5.6052, lng: -0.1668 },
+  { address: "Madina Market, Accra", lat: 5.6689, lng: -0.1665 },
+  { address: "Kejetia Market, Kumasi", lat: 6.693, lng: -1.624 },
+  { address: "KNUST Campus, Kumasi", lat: 6.6745, lng: -1.5716 },
+];
+
+export function commute() {
+  const start = pick(PLACES);
+  const end = pick(PLACES.filter((place) => place !== start));
+  return {
+    startAddress: start.address,
+    startLat: start.lat,
+    startLng: start.lng,
+    endAddress: end.address,
+    endLat: end.lat,
+    endLng: end.lng,
+    departureTime: `0${randomInt(5, 10)}:${pick(["00", "15", "30", "45"])}`,
+    recurrenceDays: [1, 2, 3, 4, 5],
+    capacity: randomInt(1, 5),
+  };
+}
+
 export function otherColor(color: string) {
   return pick(COLORS.filter((c) => c !== color));
 }

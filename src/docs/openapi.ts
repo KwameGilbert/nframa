@@ -1,14 +1,14 @@
 import { OpenApiGeneratorV3 } from "@asteasolutions/zod-to-openapi";
 import { registry } from "./registry.js";
+import "./health.docs.js";
 import "./activityLog.docs.js";
 import "./adminUser.docs.js";
 import "./auth.docs.js";
+import "./driverCommute.docs.js";
 import "./driverProfile.docs.js";
-import "./health.docs.js";
 import "./riderProfile.docs.js";
 import "./role.docs.js";
 import "./rolePermission.docs.js";
-import "./savedCommute.docs.js";
 import "./setting.docs.js";
 import "./user.docs.js";
 import "./vehicle.docs.js";
