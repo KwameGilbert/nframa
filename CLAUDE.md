@@ -44,6 +44,8 @@ Spawn one agent to plan if there already isnt a plan yet, one to execute the pla
 
 `.husky/pre-commit` runs `pnpm test`, which is now the real suite (see Tests below): every commit takes ~40s, needs the database, and adds test records to it. `lint-staged` is installed but not wired into the hook.
 
+Run tests for the modules you are working on. Test your changes thoroughly and make sure they work as expected. No need to run all the tests even if you didnt touch that module so only run tests on modules that are affected in changes you make
+
 Never co author claude in git commits, just make the commit directly.
 
 **Run `pnpm migrate` / `pnpm migrate:rollback` automatically only when necessary.** Write and edit migration files as needed, but leave running them to the user — they run migrations themselves.
