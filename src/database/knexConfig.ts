@@ -1,7 +1,7 @@
 import type { Knex } from "knex";
 import { config as loadEnv } from "dotenv";
 
-loadEnv({ path: `.env.${process.env.NODE_ENV ?? "development"}` });
+loadEnv();
 
 const connection: Knex.PgConnectionConfig = {
   host: process.env.DB_HOST,
