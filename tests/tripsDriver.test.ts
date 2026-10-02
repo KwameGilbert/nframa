@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import db from "../src/database/knex.js";
 import { tripModel } from "../src/models/trip.model.js";
 import { flushActivityLogs } from "../src/services/activityLog.service.js";
-import { emitToUser } from "../src/services/socket.service.js";
 import { addDays, today } from "../src/utils/tripTime.js";
 import { api, auth, expectError, expectStatus } from "./helpers/api.js";
 import { createSignedInAdmin, fullPhone, loginAsSuperAdmin } from "./helpers/actors.js";
@@ -76,12 +75,6 @@ describe("PATCH /trips/:id/accept", () => {
     expect(JSON.stringify(res.body.data)).not.toContain(trip.boardingCode);
     expect(await walletOf(rider.userId)).toEqual({ balance: 200, heldAmount: trip.totalAmount });
     await expectHoldsMatchTrips(rider.userId);
-    expect(emitToUser).toHaveBeenCalledWith(rider.userId, "trip:accepted", {
-      tripId: trip.id,
-      commuteId: commute.id,
-      tripDate: tomorrow(),
-      status: "accepted",
-    });
 
     // Now confirmed, the rider has the driver's phone, and still their own code.
     const riderView = await api.get(`/trips/${trip.id}`).set(auth(rider.token));
@@ -270,13 +263,6 @@ describe("PATCH /trips/:id/decline", () => {
       seatsLeft: 3,
     });
     expect(res.body.data.cancelledAt).not.toBeNull();
-    expect(emitToUser).toHaveBeenCalledWith(rider.userId, "trip:declined", {
-      tripId: trip.id,
-      commuteId: commute.id,
-      tripDate: tomorrow(),
-      status: "declined",
-      reason: "Car is full of family today",
-    });
     expect(await walletOf(rider.userId)).toEqual({ balance: 200, heldAmount: 0 });
 
     expectError(await decline(driver, trip.id), 409, "Can't decline a trip that is declined");

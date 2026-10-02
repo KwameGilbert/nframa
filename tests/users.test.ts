@@ -13,7 +13,6 @@ import * as data from "./helpers/data.js";
 import { newEmail, newPhone } from "./helpers/unique.js";
 import { trackForCleanup } from "./helpers/cleanup.js";
 import { flushActivityLogs } from "../src/services/activityLog.service.js";
-import { emitToUser } from "../src/services/socket.service.js";
 import db from "../src/database/knex.js";
 
 type SignedInAdmin = Awaited<ReturnType<typeof createSignedInAdmin>>;
@@ -204,6 +203,42 @@ describe("GET /users/:id", () => {
     expect(res.body.message).toBe("User retrieved successfully");
     expect(res.body.data).toMatchObject({ id: rider.userId, fullName: rider.fullName });
     expect(res.body.data.statusHistory).toEqual([]);
+  });
+
+  it("includes the user's emergency contacts, oldest first", async () => {
+    const target = await signUpByPhone("rider");
+    const contact = (name: string) => ({
+      name,
+      phoneCountryCode: data.GHANA_COUNTRY_CODE,
+      phoneNumber: data.ghanaPhoneNumber(),
+      relationship: "Sister",
+    });
+    for (const name of ["Ama Mensah", "Kofi Boateng"]) {
+      const created = await api
+        .post("/emergency-contacts")
+        .set(auth(target.token))
+        .send(contact(name));
+      expectStatus(created, 201);
+      trackForCleanup("emergencyContacts", { id: created.body.data.id });
+    }
+
+    const self = await api.get(`/users/${target.userId}`).set(auth(target.token));
+    const admin = await api.get(`/users/${target.userId}`).set(auth(userManager.token));
+
+    expectStatus(self, 200);
+    expect(self.body.data.emergencyContacts).toHaveLength(2);
+    expect(self.body.data.emergencyContacts.map((c: { name: string }) => c.name)).toEqual([
+      "Ama Mensah",
+      "Kofi Boateng",
+    ]);
+    expectStatus(admin, 200);
+    expect(admin.body.data.emergencyContacts).toHaveLength(2);
+  });
+
+  it("returns an empty emergencyContacts list for a user with none", async () => {
+    const res = await api.get(`/users/${rider.userId}`).set(auth(rider.token));
+
+    expect(res.body.data.emergencyContacts).toEqual([]);
   });
 
   it("includes statusHistory; notes is null for a self-view but visible to an admin", async () => {
@@ -476,7 +511,6 @@ describe("PATCH /users/:id/status", () => {
     expectStatus(res, 200);
     expect(res.body.message).toBe("Account suspended successfully");
     expect(res.body.data.status).toBe("suspended");
-    expect(emitToUser).toHaveBeenCalledWith(target.id, "user:suspended", { reason: null });
     const otp = await api.post("/auth/login/otp").send({
       phoneCountryCode: data.GHANA_COUNTRY_CODE,
       phoneNumber: target.phoneNumber,

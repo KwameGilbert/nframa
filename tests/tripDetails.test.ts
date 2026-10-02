@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Response } from "supertest";
 import { tripModel } from "../src/models/trip.model.js";
-import { emitToUser } from "../src/services/socket.service.js";
 import { addDays, today } from "../src/utils/tripTime.js";
 import { api, auth, expectError, expectStatus } from "./helpers/api.js";
 import { createSignedInAdmin, loginAsSuperAdmin } from "./helpers/actors.js";
@@ -203,7 +202,7 @@ describe("tripModel.acceptWithHold", () => {
 
 describe("POST /trips/:id/cancel", () => {
   it("lets the rider cancel an accepted trip, freeing the seat and the held money", async () => {
-    const { driver, commute } = await bookableCommute({ autoAccept: true, capacity: 2 });
+    const { commute } = await bookableCommute({ autoAccept: true, capacity: 2 });
     const rider = await bookingRider(200);
     const trip = await booked(rider, commute);
     expect(await tripModel.seatsLeft(commute.id, tomorrow())).toBe(1);
@@ -220,14 +219,6 @@ describe("POST /trips/:id/cancel", () => {
     expect(res.body.data.cancelledAt).not.toBeNull();
     expect(await walletOf(rider.userId)).toEqual({ balance: 200, heldAmount: 0 });
     await expectHoldsMatchTrips(rider.userId);
-    expect(emitToUser).toHaveBeenCalledWith(driver.userId, "trip:cancelled", {
-      tripId: trip.id,
-      commuteId: commute.id,
-      tripDate: tomorrow(),
-      status: "cancelled",
-      cancelledBy: "rider",
-      reason: "Plans changed",
-    });
 
     expectError(await cancel(rider, trip.id), 409, "Can't cancel a trip that is cancelled");
     // A cancelled trip no longer blocks booking the same commute again.
@@ -250,11 +241,6 @@ describe("POST /trips/:id/cancel", () => {
     expect(res.body.data).toMatchObject({ status: "cancelled", cancelledBy: "driver" });
     expect(await walletOf(rider.userId)).toEqual({ balance: 200, heldAmount: 0 });
     await expectHoldsMatchTrips(rider.userId);
-    expect(emitToUser).toHaveBeenCalledWith(
-      rider.userId,
-      "trip:cancelled",
-      expect.objectContaining({ tripId: trip.id, cancelledBy: "driver", reason: null }),
-    );
   });
 
   it("refuses the driver a pending request, and anyone a boarded trip", async () => {

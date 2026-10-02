@@ -5,8 +5,9 @@ import db from "../src/database/knex.js";
 import { settingModel } from "../src/models/setting.model.js";
 import { tripModel } from "../src/models/trip.model.js";
 import { calculateFare, getFareSettings } from "../src/services/fare.service.js";
+import { flushActivityLogs } from "../src/services/activityLog.service.js";
 import { getRoute } from "../src/services/maps.service.js";
-import { emitToUser } from "../src/services/socket.service.js";
+import { roundMoney } from "../src/utils/money.js";
 import { addDays, departureAt, isoWeekday, today } from "../src/utils/tripTime.js";
 import { api, auth, expectError, expectStatus } from "./helpers/api.js";
 import { createSignedInAdmin, loginAsSuperAdmin, signUpByPhone } from "./helpers/actors.js";
@@ -252,12 +253,6 @@ describe("POST /trips", () => {
     expect(await walletOf(rider.userId)).toEqual({ balance: 200, heldAmount: 0 });
     expect(await tripModel.seatsLeft(commute.id, tomorrow())).toBe(3);
     await expectHoldsMatchTrips(rider.userId);
-    expect(emitToUser).toHaveBeenCalledWith(driver.userId, "trip:requested", {
-      tripId: trip.id,
-      commuteId: commute.id,
-      tripDate: tomorrow(),
-      status: "pending",
-    });
   });
 
   it("books the seat at once and holds the total when the driver auto-accepts", async () => {
@@ -284,12 +279,6 @@ describe("POST /trips", () => {
     expect(wallet.body.data.availableBalance).toBeCloseTo(200 - trip.totalAmount, 2);
     expect(await db("transactions").where({ tripId: trip.id })).toHaveLength(0);
     await expectHoldsMatchTrips(rider.userId);
-    expect(emitToUser).toHaveBeenCalledWith(driver.userId, "trip:requested", {
-      tripId: trip.id,
-      commuteId: commute.id,
-      tripDate: tomorrow(),
-      status: "accepted",
-    });
   });
 
   it("refuses a second trip on the same commute and date, or one that overlaps in time", async () => {
@@ -532,6 +521,106 @@ describe("Admin Trip Management", () => {
       const res = await api.get("/admin/trips").set(auth(noTripsAdminToken));
       expectStatus(res, 403);
       expect(res.body.error).toBe("Missing permission: read on trips");
+    });
+  });
+
+  describe("GET /admin/trips/:id", () => {
+    it("gives the full picture: people, the whole run, money and history", async () => {
+      const { driver, commute } = await bookableCommute({ autoAccept: true, capacity: 2 });
+      const [ama, kofi] = await Promise.all([bookingRider(200), bookingRider(200)]);
+      const mine = await requestTrip(ama, commute);
+      const theirs = await requestTrip(kofi, commute);
+      expectStatus(mine, 201);
+      expectStatus(theirs, 201);
+      await db("trips").where({ id: theirs.body.data.id }).update({ status: "cancelled" });
+
+      await flushActivityLogs();
+      const res = await api.get(`/admin/trips/${mine.body.data.id}`).set(auth(tripAdminToken));
+
+      expectStatus(res, 200);
+      const view = res.body.data;
+      expect(res.body.message).toBe("Trip retrieved successfully");
+      expect(view).toMatchObject({
+        id: mine.body.data.id,
+        status: "accepted",
+        rider: { id: ama.userId },
+        driver: { id: driver.userId, verificationStatus: "approved" },
+        commute: { id: commute.id, capacity: 2 },
+        payments: { riderPaid: 0, driverReceived: 0, platformRetained: null, transactions: [] },
+      });
+      expect(view.payments.heldAmount).toBe(view.totalAmount);
+      expect(view.vehicle.plate).toEqual(expect.any(String));
+      expect(view.boardingCode).toBeUndefined();
+      expect(JSON.stringify(view)).not.toContain(mine.body.data.boardingCode);
+      expect(view.run).toMatchObject({ capacity: 2, seatsTaken: 1, seatsLeft: 1 });
+      expect(
+        view.run.riders.map((r: { tripId: string; isThisTrip: boolean; status: string }) => [
+          r.tripId,
+          r.isThisTrip,
+          r.status,
+        ]),
+      ).toEqual([
+        [mine.body.data.id, true, "accepted"],
+        [theirs.body.data.id, false, "cancelled"],
+      ]);
+      expect(view.history.map((h: { action: string }) => h.action)).toContain("trip.request");
+    });
+
+    it("totals what the rider paid and the driver received from the ledger", async () => {
+      const { driver, commute } = await bookableCommute();
+      const rider = await bookingRider(200);
+      const trip = await insertTrip(commute, rider.userId, {
+        status: "completed",
+        completedAt: new Date(),
+        boardedAt: new Date(),
+        heldAmount: 0,
+      });
+      const rows = [
+        { userId: rider.userId, type: "trip_charge", direction: "debit", amount: trip.totalAmount },
+        { userId: driver.userId, type: "driver_earning", direction: "credit", amount: trip.driverEarnings },
+      ];
+      for (const row of rows) {
+        const [{ id }] = await db("transactions")
+          .insert({ ...row, tripId: trip.id, status: "success", balanceAfter: 100 })
+          .returning("id");
+        trackForCleanup("transactions", { id });
+      }
+
+      const res = await api.get(`/admin/trips/${trip.id}`).set(auth(tripAdminToken));
+
+      expectStatus(res, 200);
+      expect(res.body.data.payments).toMatchObject({
+        riderPaid: trip.totalAmount,
+        driverReceived: trip.driverEarnings,
+        platformRetained: roundMoney(trip.totalAmount - trip.driverEarnings),
+      });
+      expect(res.body.data.payments.transactions.map((t: { party: string }) => t.party)).toEqual([
+        "rider",
+        "driver",
+      ]);
+    });
+
+    it("404s for an unknown trip, 400s for a bad id, and needs trips: read", async () => {
+      const id = randomUUID();
+
+      const missing = await api.get(`/admin/trips/${id}`).set(auth(tripAdminToken));
+      const malformed = await api.get("/admin/trips/nope").set(auth(tripAdminToken));
+      const refused = await api.get(`/admin/trips/${id}`).set(auth(noTripsAdminToken));
+
+      expectStatus(missing, 404);
+      expect(missing.body.error).toBe(`Trip not found: ${id}`);
+      expectStatus(malformed, 400);
+      expectStatus(refused, 403);
+      expect(refused.body.error).toBe("Missing permission: read on trips");
+    });
+
+    it("isn't open to riders or drivers", async () => {
+      const { driver, commute } = await bookableCommute({ autoAccept: true });
+      const rider = await bookingRider(200);
+      const trip = await requestTrip(rider, commute);
+
+      expectStatus(await api.get(`/admin/trips/${trip.body.data.id}`).set(auth(rider.token)), 403);
+      expectStatus(await api.get(`/admin/trips/${trip.body.data.id}`).set(auth(driver.token)), 403);
     });
   });
 

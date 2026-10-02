@@ -46,8 +46,8 @@ export async function listEmergencyContacts(req: Request, res: Response) {
 
 export async function createEmergencyContact(req: Request, res: Response) {
   const input = req.validated.body as CreateEmergencyContactInput;
-  const { userId: _userId, ...fields } = input;
-  const ownerId = input.userId ?? callerId(req);
+  const { userId, ...fields } = input;
+  const ownerId = userId ?? callerId(req);
 
   await assertSelfOrPermission(req, ownerId, "users", "create");
 

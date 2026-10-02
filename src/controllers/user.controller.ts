@@ -3,6 +3,7 @@ import { userModel, type User } from "../models/user.model.js";
 import { roleModel } from "../models/role.model.js";
 import { authSessionModel } from "../models/authSession.model.js";
 import { driverProfileModel } from "../models/driverProfile.model.js";
+import { emergencyContactModel } from "../models/emergencyContact.model.js";
 import { userStatusHistoryModel } from "../models/userStatusHistory.model.js";
 import { activityLogModel } from "../models/activityLog.model.js";
 import { assertPermission, assertSelfOrPermission } from "../middlewares/authorize.js";
@@ -101,12 +102,15 @@ export async function getUser(req: Request, res: Response) {
   await assertSelfOrPermission(req, user.id, moduleFor(user), "read");
 
   const isSelf = req.auth?.id === user.id;
-  const history = await userStatusHistoryModel.getHistory(id);
+  const [history, emergencyContacts] = await Promise.all([
+    userStatusHistoryModel.getHistory(id),
+    emergencyContactModel.listForUser(id),
+  ]);
   // notes is staff-only — an account holder viewing their own record still sees why (reason) and when, just
   // not internal commentary. An admin viewing someone else's account (the only other way to reach this) sees it.
   const statusHistory = isSelf ? history.map((entry) => ({ ...entry, notes: null })) : history;
 
-  sendSuccess(res, "User retrieved successfully", { ...user, statusHistory });
+  sendSuccess(res, "User retrieved successfully", { ...user, statusHistory, emergencyContacts });
 
   if (!isSelf) {
     logActivity(req, {

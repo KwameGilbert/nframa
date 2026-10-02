@@ -1,0 +1,58 @@
+@baseUrl = http://localhost:3000
+
+# Access token (from POST /auth/login or /auth/login/verify).
+@token = PASTE_ACCESS_TOKEN_HERE
+
+### List emergency contacts (caller's own)
+GET {{baseUrl}}/emergency-contacts
+Authorization: Bearer {{token}}
+
+### List emergency contacts for a specific user (needs users: read if not caller)
+GET {{baseUrl}}/emergency-contacts?userId=PASTE_USER_ID_HERE
+Authorization: Bearer {{token}}
+
+### Create emergency contact for self
+# @name createContact
+POST {{baseUrl}}/emergency-contacts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Ama Mensah",
+  "phoneCountryCode": "+233",
+  "phoneNumber": "541436414",
+  "relationship": "Sister"
+}
+
+@contactId = {{createContact.response.body.data.id}}
+
+### Create emergency contact for another user (admin with users: create)
+POST {{baseUrl}}/emergency-contacts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "userId": "PASTE_USER_ID_HERE",
+  "name": "Kofi Mensah",
+  "phoneCountryCode": "+233",
+  "phoneNumber": "501234567",
+  "relationship": "Brother"
+}
+
+### Get emergency contact by ID
+GET {{baseUrl}}/emergency-contacts/{{contactId}}
+Authorization: Bearer {{token}}
+
+### Update emergency contact
+PATCH {{baseUrl}}/emergency-contacts/{{contactId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Ama Mensah-Boateng",
+  "relationship": "Wife"
+}
+
+### Delete emergency contact
+DELETE {{baseUrl}}/emergency-contacts/{{contactId}}
+Authorization: Bearer {{token}}

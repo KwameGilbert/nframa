@@ -398,3 +398,119 @@ export const commuteManifestSchema = z.object({
     }),
   pagination,
 });
+
+const adminPerson = z.object({
+  id: z.uuid(),
+  fullName: z.string().nullable().meta({ example: "Ama Owusu" }),
+  profilePicture: z.string().nullable(),
+  status: z.string().nullable().meta({ description: "Account status", example: "active" }),
+  memberSince: z.iso.datetime().nullable().meta({ description: "When the account was created" }),
+  deletedAt: z.iso.datetime().nullable().meta({ description: "Set if the account was deleted" }),
+});
+
+// GET /admin/trips/:id (docs only).
+export const adminTripDetailSchema = tripSchema.extend({
+  riderLocation: z
+    .object({ lat: latitude(5.6051), lng: longitude(-0.1757), recordedAt: z.iso.datetime() })
+    .nullable()
+    .meta({ description: "The rider's last shared location; null if they never shared one" }),
+  boardingLocation: z
+    .object({ lat: latitude(5.6051), lng: longitude(-0.1757) })
+    .nullable()
+    .meta({ description: "Where the driver was when they scanned the rider; null until boarded" }),
+  commute: z.object({
+    id: z.uuid(),
+    ...commuteEnds,
+    recurrenceDays: z.array(z.number().int()).meta({ description: "ISO weekdays, 1 = Monday" }),
+    capacity: z.number().int().meta({ example: 3 }),
+    isActive: z.boolean(),
+    distanceMeters: z.number().int().nullable(),
+    durationSeconds: z.number().int().nullable(),
+  }),
+  rider: adminPerson,
+  driver: adminPerson.extend({
+    verificationStatus: z.string().nullable().meta({ example: "approved" }),
+    isOnline: z.boolean().nullable(),
+    autoAcceptBookings: z.boolean().nullable(),
+  }),
+  vehicle: vehicleSummary
+    .extend({ plate: z.string().meta({ example: "GR 4821-23" }) })
+    .nullable()
+    .meta({ description: "The driver's newest active vehicle, verified ones first; null if none" }),
+  run: z.object({
+    capacity: z.number().int(),
+    seatsTaken: z.number().int().meta({ description: "Accepted, boarded or completed trips" }),
+    seatsLeft: z.number().int(),
+    riders: z
+      .array(
+        z.object({
+          tripId: z.uuid(),
+          isThisTrip: z.boolean(),
+          status: tripStatusSchema,
+          rider: z.object({
+            id: z.uuid(),
+            fullName: z.string().nullable(),
+            profilePicture: z.string().nullable(),
+          }),
+          pickupAddress: z.string(),
+          dropoffAddress: z.string(),
+          scheduledPickupAt: z.iso.datetime(),
+          totalAmount: money(20.75),
+          requestedAt: z.iso.datetime(),
+          acceptedAt: z.iso.datetime().nullable(),
+          boardedAt: z.iso.datetime().nullable(),
+          completedAt: z.iso.datetime().nullable(),
+          cancelledAt: z.iso.datetime().nullable(),
+          cancelledBy: z.enum(["rider", "driver", "system", "admin"]).nullable(),
+        }),
+      )
+      .meta({
+        description:
+          "Every trip on this commute and date, whatever its status, oldest request first — who joined, who didn't",
+      }),
+  }),
+  payments: z.object({
+    riderPaid: money(20.75, "Net successful debits less credits on the rider's wallet for this trip"),
+    driverReceived: money(17.95, "Net successful credits on the driver's wallet for this trip"),
+    heldAmount: money(0, "Still held in the rider's wallet"),
+    platformRetained: z.number().nullable().meta({
+      description:
+        "riderPaid - driverReceived once the trip is completed (platform and booking fees); null before",
+      example: 2.8,
+    }),
+    transactions: z
+      .array(
+        z.object({
+          id: z.uuid(),
+          party: z.enum(["rider", "driver"]),
+          userId: z.uuid(),
+          type: z.enum(["topup", "trip_charge", "wait_charge", "driver_earning", "refund"]),
+          direction: z.enum(["credit", "debit"]),
+          amount: money(20.75),
+          currency: z.string().meta({ example: "GHS" }),
+          status: z.enum(["pending", "success", "failed"]),
+          balanceAfter: z.number().nullable(),
+          createdAt: z.iso.datetime(),
+        }),
+      )
+      .meta({ description: "The trip's ledger rows, oldest first" }),
+  }),
+  history: z
+    .array(
+      z.object({
+        id: z.uuid().meta({ description: "Id of the activity log entry" }),
+        action: z.string().meta({ example: "trip.accept" }),
+        description: z.string(),
+        actor: z
+          .object({
+            id: z.uuid(),
+            fullName: z.string().nullable(),
+            role: z.string().nullable(),
+          })
+          .nullable(),
+        changedFields: z.array(z.string()).nullable(),
+        createdAt: z.iso.datetime(),
+      }),
+    )
+    .meta({ description: "The 50 most recent logged changes to this trip, newest first" }),
+});

@@ -25,6 +25,7 @@ import {
 import {
   acceptTrip,
   adminCancelTrip,
+  adminGetTrip,
   adminListTrips,
   boardTrip,
   cancelTrip,
@@ -49,6 +50,14 @@ tripRouter.get(
   requirePermission("trips", "read"),
   validate({ query: adminListTripsQuerySchema }),
   adminListTrips,
+);
+
+tripRouter.get(
+  "/admin/trips/:id",
+  authenticate,
+  requirePermission("trips", "read"),
+  validate({ params: idParamsSchema }),
+  adminGetTrip,
 );
 
 tripRouter.post(

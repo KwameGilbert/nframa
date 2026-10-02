@@ -2,6 +2,7 @@ import type { Knex } from "knex";
 import db from "../database/knex.js";
 import { BaseModel } from "./BaseModel.js";
 import { settingModel } from "./setting.model.js";
+import { transactionModel } from "./transaction.model.js";
 import { walletModel } from "./wallet.model.js";
 import { calculateWait, type WaitSettings } from "../services/fare.service.js";
 import { EARTH_RADIUS_METERS, type Point } from "../services/geo.js";
@@ -760,6 +761,52 @@ class TripModel extends BaseModel<Trip> {
       seatsLeft,
       riders,
     };
+  }
+
+  // Everything an admin sees on GET /admin/trips/:id: the trip with its commute, both people, the vehicle, every
+  // trip on the same run (who joined), and the money the trip moved. Unshaped: the controller decides what to show.
+  async findAdminOverview(id: string) {
+    const detail = await this.findDetail(id);
+    if (!detail) return undefined;
+    const { trip } = detail;
+
+    const [commute, people, profile, run, seatsTaken, ledger] = await Promise.all([
+      db("driverCommutes").where({ id: trip.commuteId }).first(),
+      db("users")
+        .whereIn("id", [trip.riderUserId, trip.driverUserId])
+        .select("id", "fullName", "profilePicture", "status", "createdAt", "deletedAt"),
+      db("carOwnerProfiles")
+        .where({ userId: trip.driverUserId })
+        .first("verificationStatus", "isOnline", "autoAcceptBookings"),
+      db("trips as t")
+        .join("users as r", "r.id", "t.riderUserId")
+        .where({ "t.commuteId": trip.commuteId, "t.tripDate": trip.tripDate })
+        .orderBy([
+          { column: "t.createdAt", order: "asc" },
+          { column: "t.id", order: "asc" },
+        ])
+        .select(
+          "t.id",
+          "t.status",
+          "t.riderUserId",
+          "r.fullName as riderFullName",
+          "r.profilePicture as riderProfilePicture",
+          "t.pickupAddress",
+          "t.dropoffAddress",
+          "t.scheduledPickupAt",
+          "t.totalAmount",
+          "t.acceptedAt",
+          "t.boardedAt",
+          "t.completedAt",
+          "t.cancelledAt",
+          "t.cancelledBy",
+          "t.createdAt",
+        ),
+      this.seatsTaken(trip.commuteId, trip.tripDate),
+      transactionModel.listForTrip(id),
+    ]);
+
+    return { detail, commute, people, profile, run, seatsTaken, ledger };
   }
 
   // The riders holding a seat on one date's run (accepted or boarded), with their pickup and drop-off.
