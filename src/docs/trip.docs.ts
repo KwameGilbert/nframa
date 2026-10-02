@@ -2,6 +2,7 @@ import { errorResponse, rateLimitedResponse, registry, successResponse } from ".
 import { idParamsSchema } from "../schemas/common.schema.js";
 import {
   adminListTripsQuerySchema,
+  adminTripDetailSchema,
   availableTripListSchema,
   availableTripsQuerySchema,
   boardTripSchema,
@@ -365,6 +366,24 @@ registry.registerPath({
     400: errorResponse("Invalid query filter"),
     401: unauthorized,
     403: errorResponse("Missing permission: read on trips"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/admin/trips/{id}",
+  tags: ["Trips"],
+  summary: "Get everything about one trip (admins)",
+  description:
+    "Needs trips: read. A full overview: the trip with its fare breakdown, timeline and locations; its commute; the rider and the driver (account status, driver verification) and the vehicle; the whole run (every trip on the same commute and date, with status, so you can see who joined, who was declined or cancelled, and the seats taken); the money (what the rider paid, what the driver received, what is still held, what the platform kept once completed, and every ledger row); and the change history from the audit trail. Left out on purpose: the boarding code, and phone numbers and emails (look the people up with GET /users/{id}, which needs users: read).",
+  security: [{ bearerAuth: [] }],
+  request: { params: idParamsSchema },
+  responses: {
+    200: successResponse("Trip retrieved successfully", adminTripDetailSchema),
+    400: errorResponse("Invalid trip id"),
+    401: unauthorized,
+    403: errorResponse("Missing permission: read on trips", "Missing permission: read on trips"),
+    404: tripNotFound,
   },
 });
 
