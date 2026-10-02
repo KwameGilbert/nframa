@@ -6,7 +6,7 @@ import { app } from "./app.js";
 import { socketAuthenticate, type SocketData } from "./middlewares/socketAuthenticate.js";
 import { initSocketService } from "./services/socket.service.js";
 
-config({ path: `.env.${process.env.NODE_ENV ?? "development"}` });
+config({ path: `.env` });
 
 // Initialize process-level error handling
 const processLogger = createLogger("process");
