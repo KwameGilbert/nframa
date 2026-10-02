@@ -21,9 +21,9 @@ const userSuspendedPayloadSchema = z.object({
     description: "The reason the admin provided for suspension (nullable)",
     example: "Repeated ride cancellations"
   }),
-});
+}).strict();
 
-registry.registerComponent("schemas", "UserSuspendedEvent", userSuspendedPayloadSchema);
+registry.registerComponent("schemas", "UserSuspendedEvent", userSuspendedPayloadSchema as unknown as any);
 
 // ============================================================================
 // Driver Verification Events
@@ -47,7 +47,7 @@ const driverVerificationStatusChangedPayloadSchema = z.object({
 registry.registerComponent(
   "schemas",
   "DriverVerificationStatusChangedEvent",
-  driverVerificationStatusChangedPayloadSchema
+  driverVerificationStatusChangedPayloadSchema as unknown as any
 );
 
 // ============================================================================
@@ -81,7 +81,7 @@ const tripRequestedPayloadSchema = tripEventBaseSchema.extend({
   }),
 });
 
-registry.registerComponent("schemas", "TripRequestedEvent", tripRequestedPayloadSchema);
+registry.registerComponent("schemas", "TripRequestedEvent", tripRequestedPayloadSchema as unknown as any);
 
 // trip:cancelled — sent to the party that didn't cancel
 const tripCancelledPayloadSchema = tripEventBaseSchema.extend({
@@ -96,14 +96,14 @@ const tripCancelledPayloadSchema = tripEventBaseSchema.extend({
   }),
 });
 
-registry.registerComponent("schemas", "TripCancelledEvent", tripCancelledPayloadSchema);
+registry.registerComponent("schemas", "TripCancelledEvent", tripCancelledPayloadSchema as unknown as any);
 
 // trip:accepted — sent to rider when driver accepts their request
 const tripAcceptedPayloadSchema = tripEventBaseSchema.extend({
   status: z.literal("accepted"),
 });
 
-registry.registerComponent("schemas", "TripAcceptedEvent", tripAcceptedPayloadSchema);
+registry.registerComponent("schemas", "TripAcceptedEvent", tripAcceptedPayloadSchema as unknown as any);
 
 // trip:declined — sent to rider when driver declines their pending request
 const tripDeclinedPayloadSchema = tripEventBaseSchema.extend({
@@ -114,7 +114,7 @@ const tripDeclinedPayloadSchema = tripEventBaseSchema.extend({
   }),
 });
 
-registry.registerComponent("schemas", "TripDeclinedEvent", tripDeclinedPayloadSchema);
+registry.registerComponent("schemas", "TripDeclinedEvent", tripDeclinedPayloadSchema as unknown as any);
 
 // trip:driver_arrived — sent to rider when driver marks arrival at pickup
 const tripDriverArrivedPayloadSchema = tripEventBaseSchema.extend({
@@ -125,7 +125,7 @@ const tripDriverArrivedPayloadSchema = tripEventBaseSchema.extend({
   }),
 });
 
-registry.registerComponent("schemas", "TripDriverArrivedEvent", tripDriverArrivedPayloadSchema);
+registry.registerComponent("schemas", "TripDriverArrivedEvent", tripDriverArrivedPayloadSchema as unknown as any);
 
 // trip:boarded — sent to rider when driver scans boarding code (rider money is now charged)
 const tripBoardedPayloadSchema = tripEventBaseSchema.extend({
@@ -144,7 +144,7 @@ const tripBoardedPayloadSchema = tripEventBaseSchema.extend({
   }),
 });
 
-registry.registerComponent("schemas", "TripBoardedEvent", tripBoardedPayloadSchema);
+registry.registerComponent("schemas", "TripBoardedEvent", tripBoardedPayloadSchema as unknown as any);
 
 // trip:completed — sent to rider when driver completes the trip (driver is paid)
 const tripCompletedPayloadSchema = tripEventBaseSchema.extend({
@@ -155,7 +155,7 @@ const tripCompletedPayloadSchema = tripEventBaseSchema.extend({
   }),
 });
 
-registry.registerComponent("schemas", "TripCompletedEvent", tripCompletedPayloadSchema);
+registry.registerComponent("schemas", "TripCompletedEvent", tripCompletedPayloadSchema as unknown as any);
 
 // trip:no_show — sent to rider when driver reports they didn't show up (hold is released)
 const tripNoShowPayloadSchema = tripEventBaseSchema.extend({
@@ -166,7 +166,7 @@ const tripNoShowPayloadSchema = tripEventBaseSchema.extend({
   }),
 });
 
-registry.registerComponent("schemas", "TripNoShowEvent", tripNoShowPayloadSchema);
+registry.registerComponent("schemas", "TripNoShowEvent", tripNoShowPayloadSchema as unknown as any);
 
 // ============================================================================
 // Connection & Error Handling
@@ -258,7 +258,7 @@ const socketEventsReferenceSchema = z.object({
   }),
 });
 
-registry.registerComponent("schemas", "SocketEventsReference", socketEventsReferenceSchema);
+registry.registerComponent("schemas", "SocketEventsReference", socketEventsReferenceSchema as unknown as any);
 
 // Note: This file registers socket event schemas for reference in Swagger UI.
 // Socket.IO events are not REST endpoints, so they appear as components, not paths.

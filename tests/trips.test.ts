@@ -9,7 +9,7 @@ import { getRoute } from "../src/services/maps.service.js";
 import { emitToUser } from "../src/services/socket.service.js";
 import { addDays, departureAt, isoWeekday, today } from "../src/utils/tripTime.js";
 import { api, auth, expectError, expectStatus } from "./helpers/api.js";
-import { signUpByPhone } from "./helpers/actors.js";
+import { createSignedInAdmin, loginAsSuperAdmin, signUpByPhone } from "./helpers/actors.js";
 import { trackForCleanup } from "./helpers/cleanup.js";
 import * as data from "./helpers/data.js";
 import {
@@ -490,6 +490,87 @@ describe("POST /trips", () => {
         404,
         `Commute not found: ${id}`,
       );
+    });
+  });
+});
+
+describe("Admin Trip Management", () => {
+  let superAdminToken: string;
+  let tripAdminToken: string;
+  let noTripsAdminToken: string;
+
+  beforeAll(async () => {
+    const admin = await loginAsSuperAdmin();
+    superAdminToken = admin.token;
+    const [tripAdmin, noTripsAdmin] = await Promise.all([
+      createSignedInAdmin(superAdminToken, { trips: { read: true, delete: true } }),
+      createSignedInAdmin(superAdminToken, { users: { read: true } }),
+    ]);
+    tripAdminToken = tripAdmin.token;
+    noTripsAdminToken = noTripsAdmin.token;
+  });
+
+  describe("GET /admin/trips", () => {
+    it("lists all trips with pagination and filters", async () => {
+      const { commute } = await bookableCommute();
+      const rider = await bookingRider(100);
+      const resTrip = await requestTrip(rider, commute);
+      expectStatus(resTrip, 201);
+      const tripId = resTrip.body.data.id;
+
+      const res = await api
+        .get("/admin/trips")
+        .set(auth(tripAdminToken))
+        .query({ riderUserId: rider.userId });
+
+      expectStatus(res, 200);
+      expect(res.body.data.items.length).toBeGreaterThanOrEqual(1);
+      expect(res.body.data.items.some((t: { id: string }) => t.id === tripId)).toBe(true);
+    });
+
+    it("requires trips: read permission", async () => {
+      const res = await api.get("/admin/trips").set(auth(noTripsAdminToken));
+      expectStatus(res, 403);
+      expect(res.body.error).toBe("Missing permission: read on trips");
+    });
+  });
+
+  describe("POST /admin/trips/:tripId/cancel", () => {
+    it("allows admin to cancel a trip and releases hold", async () => {
+      const { commute } = await bookableCommute();
+      const rider = await bookingRider(100);
+      const resTrip = await requestTrip(rider, commute);
+      expectStatus(resTrip, 201);
+      const tripId = resTrip.body.data.id;
+
+      const cancelRes = await api
+        .post(`/admin/trips/${tripId}/cancel`)
+        .set(auth(tripAdminToken))
+        .send({ reason: "Admin cancelled test" });
+
+      if (cancelRes.status !== 200) {
+        console.error("DEBUG cancelRes:", cancelRes.status, cancelRes.body);
+      }
+      expectStatus(cancelRes, 200);
+      expect(cancelRes.body.data.status).toBe("cancelled");
+      expect(cancelRes.body.data.cancelledBy).toBe("admin");
+      expect(cancelRes.body.data.cancellationReason).toBe("Admin cancelled test");
+
+      // Check the trip is cancelled in DB
+      const trip = await tripModel.findById(tripId);
+      expect(trip?.status).toBe("cancelled");
+      expect(trip?.cancelledBy).toBe("admin");
+    });
+
+    it("requires trips: delete permission", async () => {
+      const id = randomUUID();
+      const res = await api
+        .post(`/admin/trips/${id}/cancel`)
+        .set(auth(noTripsAdminToken))
+        .send({ reason: "Test" });
+
+      expectStatus(res, 403);
+      expect(res.body.error).toBe("Missing permission: delete on trips");
     });
   });
 });

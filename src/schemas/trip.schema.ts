@@ -235,11 +235,32 @@ export const tripSchema = z.object({
   boardedAt: z.iso.datetime().nullable().meta({ description: "When the driver scanned the rider" }),
   completedAt: z.iso.datetime().nullable(),
   cancelledAt: z.iso.datetime().nullable(),
-  cancelledBy: z.enum(["rider", "driver", "system"]).nullable(),
+  cancelledBy: z.enum(["rider", "driver", "system", "admin"]).nullable(),
   cancellationReason: z.string().nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
+
+export const adminListTripsQuerySchema = z.object({
+  status: tripStatusSchema.optional().meta({ description: "Only trips with this status" }),
+  riderUserId: z.uuid().optional().meta({ description: "Only trips requested by this rider" }),
+  driverUserId: z.uuid().optional().meta({ description: "Only trips on this driver's commutes" }),
+  commuteId: z.uuid().optional().meta({ description: "Only trips on this commute" }),
+  tripDate: tripDateSchema.optional().meta({ description: "Only trips on this service date" }),
+  search: z.string().trim().min(1).optional().meta({
+    description:
+      "Case-insensitive search across pickup/dropoff addresses, boarding code, rider and driver names and emails",
+  }),
+  ...pageFields,
+});
+
+export type AdminListTripsQuery = z.infer<typeof adminListTripsQuerySchema>;
+
+export const tripIdParamsSchema = z.object({
+  tripId: z.uuid().meta({ description: "The trip's unique ID" }),
+});
+
+export type TripIdParams = z.infer<typeof tripIdParamsSchema>;
 
 export const tripListItemSchema = tripSchema.extend({
   commute: z.object({

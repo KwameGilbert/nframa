@@ -22,9 +22,9 @@ export default defineConfig({
     // allow far more than the 5s default — the account-lockout test alone makes 11 password checks.
     testTimeout: 60_000,
     hookTimeout: 60_000,
-    // Tests in a file run concurrently (up to 5 at a time): most of their time is spent waiting on the
+    // Tests in a file run concurrently (up to 2 at a time): most of their time is spent waiting on the
     // database, which may be remote. So every test sets up its own records and never relies on another test.
-    sequence: { concurrent: true },
+    sequence: { concurrent: 2 },
     // Vitest clears mock history before each test by default, which with concurrent tests would wipe codes
     // another test has just been sent. helpers/outbox.ts looks messages up by recipient, so keep them all.
     clearMocks: false,

@@ -136,8 +136,8 @@ export async function updateUser(req: Request, res: Response) {
 
   // Handle file upload: if req.file exists (from multipart or base64), upload to storage and get URL
   let profilePictureUrl = profilePicture;
-  if ((req as Record<string, unknown>).file) {
-    const file = (req as Record<string, unknown>).file as Express.Multer.File;
+  if ((req as unknown as Record<string, unknown>).file) {
+    const file = (req as unknown as Record<string, unknown>).file as Express.Multer.File;
     const uploaded = await uploadFile(file.buffer, `profiles/${id}`, file.originalname);
     profilePictureUrl = uploaded.fileUrl;
   }
@@ -262,12 +262,13 @@ export async function getUserStatusHistory(req: Request, res: Response) {
 // detail through a side door. Combines both directions: what this account did (actor) and what was done to
 // it (target) — GET /admin/activity-logs?targetType=user&targetId=<id> alone only covers the latter.
 export async function getUserActivityLogs(req: Request, res: Response) {
-  const { id } = req.validated.params as { id: string };
+  const { id, userId } = req.validated.params as { id?: string; userId?: string };
+  const targetId = (userId ?? id)!;
   const { page, limit } = req.validated.query as UserActivityLogsQuery;
 
-  await findUserOrThrow(id);
+  await findUserOrThrow(targetId);
 
-  const { items, stats } = await activityLogModel.forUser(id, { page, limit });
+  const { items, stats } = await activityLogModel.forUser(targetId, { page, limit });
 
   sendSuccess(res, "User activity logs retrieved successfully", {
     items,
@@ -285,7 +286,7 @@ export async function getUserActivityLogs(req: Request, res: Response) {
     action: "activityLogs.user.list",
     description: `Viewed ${items.length} activity log entr${items.length === 1 ? "y" : "ies"} for a user (page ${page})`,
     targetType: "user",
-    targetId: id,
+    targetId,
   });
 }
 

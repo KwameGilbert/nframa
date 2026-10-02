@@ -25,7 +25,10 @@ const base: Knex.Config = {
 
 const config: Record<string, Knex.Config> = {
   development: base,
-  test: base,
+  test: {
+    ...base,
+    pool: { min: 1, max: 3 },
+  },
   production: {
     ...base,
     pool: { min: 2, max: 10 },

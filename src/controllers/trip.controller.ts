@@ -23,6 +23,7 @@ import { sendCreated, sendSuccess } from "../utils/response.js";
 import { addDays, departureAt, isoWeekday, timeOfDay, today } from "../utils/tripTime.js";
 import type {
   AvailableTripsQuery,
+  AdminListTripsQuery,
   BoardTripInput,
   CancelTripInput,
   CommuteTripsQuery,
@@ -699,4 +700,60 @@ export async function reportNoShow(req: Request, res: Response) {
     before: tripView(before, null),
     after: tripView(after, null),
   });
+}
+
+export async function adminListTrips(req: Request, res: Response) {
+  const query = req.validated.query as AdminListTripsQuery;
+  const { items, totalItems } = await tripModel.listAll(query);
+
+  sendSuccess(res, "Trips retrieved successfully", paginated(items, totalItems, query));
+
+  logActivity(req, {
+    ...TRIP_ACTIVITY,
+    action: "trip.list",
+    description: `Viewed ${items.length} trip${items.length === 1 ? "" : "s"} (page ${query.page})`,
+  });
+}
+
+export async function adminCancelTrip(req: Request, res: Response) {
+  try {
+    const params = req.validated.params as { id?: string; tripId?: string };
+    const id = (params.tripId ?? params.id)!;
+    const { reason } = req.validated.body as CancelTripInput;
+
+    await tripModel.settleStale({ id });
+    const before = await tripModel.findDetail(id);
+    if (!before) {
+      throw AppError.notFound(`Trip not found: ${id}`);
+    }
+    const { riderUserId, driverUserId } = before.trip;
+
+    await tripModel.cancelTrip(id, { by: "admin", reason });
+    const after = (await tripModel.findDetail(id)) as TripDetail;
+
+    sendSuccess(res, "Trip cancelled successfully", tripView(after, null));
+
+    emitToUser(riderUserId, "trip:cancelled", {
+      ...tripEvent(after),
+      cancelledBy: "admin",
+      reason: after.trip.cancellationReason,
+    });
+    emitToUser(driverUserId, "trip:cancelled", {
+      ...tripEvent(after),
+      cancelledBy: "admin",
+      reason: after.trip.cancellationReason,
+    });
+
+    logActivity(req, {
+      ...TRIP_ACTIVITY,
+      action: "trip.cancel",
+      description: `Cancelled a trip (as admin)` + (reason ? `: ${reason}` : ""),
+      targetId: id,
+      before: tripView(before, null),
+      after: tripView(after, null),
+    });
+  } catch (err) {
+    console.error("DEBUG adminCancelTrip error:", err);
+    throw err;
+  }
 }

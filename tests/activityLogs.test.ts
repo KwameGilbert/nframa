@@ -337,3 +337,29 @@ describe("GET /admin/activity-logs/:id", () => {
     expect(res.body.error).toBe(`Activity log not found: ${id}`);
   });
 });
+
+describe("GET /activity-logs/user/:userId", () => {
+  it("returns activity logs for a user by user ID param", async () => {
+    const rider = await signUpByPhone("rider");
+    await flushActivityLogs();
+
+    const res = await api
+      .get(`/activity-logs/user/${rider.userId}`)
+      .set(auth(auditor.token));
+
+    expectStatus(res, 200);
+    expect(res.body.message).toBe("User activity logs retrieved successfully");
+    const actions = res.body.data.items.map((item: { action: string }) => item.action);
+    expect(actions).toContain("auth.signup");
+  });
+
+  it("needs activityLogs: read", async () => {
+    const rider = await signUpByPhone("rider");
+    const res = await api
+      .get(`/activity-logs/user/${rider.userId}`)
+      .set(auth(settingsManager.token));
+
+    expectStatus(res, 403);
+    expect(res.body.error).toBe("Missing permission: read on activityLogs");
+  });
+});

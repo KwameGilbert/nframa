@@ -143,6 +143,8 @@ async function sendOtp(
   } else {
     await sendEmail(identifier, `Your Nframa ${label}`, `<p>${message}</p>`);
   }
+
+  return code;
 }
 
 async function consumeOtp(identifier: string, purpose: string, code: string) {
@@ -301,9 +303,10 @@ export async function requestLoginOtp(req: Request, res: Response) {
   const input = req.validated.body as RequestOtpInput;
   const { user, identifier, channel, role } = await resolveOtpTarget(input);
 
-  await sendOtp(identifier, channel, toPurpose(role), "verification code");
+  const code = await sendOtp(identifier, channel, toPurpose(role), "verification code");
 
-  sendSuccess(res, "Verification code sent");
+  const isDev = process.env.NODE_ENV === "development";
+  sendSuccess(res, "Verification code sent", isDev ? { otp: code, code } : null);
   // Nobody has proven who they are yet, so there's no actor — only the account the code is for.
   logAuthActivity(req, {
     action: "auth.otp.request",

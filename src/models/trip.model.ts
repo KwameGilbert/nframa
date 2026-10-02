@@ -9,6 +9,7 @@ import { AppError } from "../utils/AppError.js";
 import { generateCode } from "../utils/code.js";
 import { roundMoney } from "../utils/money.js";
 import { departureAt, isoWeekday } from "../utils/tripTime.js";
+import type { AdminListTripsQuery } from "../schemas/trip.schema.js";
 
 export const TRIP_STATUSES = [
   "pending",
@@ -70,7 +71,7 @@ export interface Trip {
   acceptedAt: Date | null;
   completedAt: Date | null;
   cancelledAt: Date | null;
-  cancelledBy: "rider" | "driver" | "system" | null;
+  cancelledBy: "rider" | "driver" | "system" | "admin" | null;
   cancellationReason: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -554,8 +555,11 @@ class TripModel extends BaseModel<Trip> {
     });
   }
 
-  // Riders cancel pending or accepted trips; drivers only accepted ones (a pending request is declined).
-  cancelTrip(tripId: string, { by, reason }: { by: "rider" | "driver"; reason?: string }) {
+  // Riders cancel pending or accepted trips; drivers only accepted ones (a pending request is declined); admins can cancel pending or accepted trips.
+  cancelTrip(
+    tripId: string,
+    { by, reason }: { by: "rider" | "driver" | "system" | "admin"; reason?: string },
+  ) {
     const from: TripStatus[] = by === "driver" ? ["accepted"] : ["pending", "accepted"];
     return this.closeTrip(tripId, { status: "cancelled", verb: "cancel", from, by, reason });
   }
@@ -590,7 +594,7 @@ class TripModel extends BaseModel<Trip> {
       status: "cancelled" | "declined" | "no_show";
       verb: string;
       from: TripStatus[];
-      by: "rider" | "driver" | "system";
+      by: "rider" | "driver" | "system" | "admin";
       reason?: string;
     },
   ): Promise<Trip> {
@@ -844,6 +848,89 @@ class TripModel extends BaseModel<Trip> {
         .orderBy([
           { column: "t.scheduledPickupAt", order },
           { column: "t.id", order },
+        ])
+        .limit(limit)
+        .offset((page - 1) * limit) as Promise<TripListRow[]>,
+    ]);
+
+    return {
+      totalItems: counted.total,
+      items: rows.map((row) => {
+        const trip = this.sanitize(row);
+        return {
+          ...publicTrip(trip),
+          commute: {
+            startAddress: row.commuteStartAddress,
+            endAddress: row.commuteEndAddress,
+            departureAt: departureAt(trip.tripDate, row.commuteDepartureTime),
+          },
+          driver: { fullName: row.driverFullName, profilePicture: row.driverProfilePicture },
+          rider: {
+            firstName: firstName(row.riderFullName),
+            profilePicture: row.riderProfilePicture,
+          },
+        };
+      }),
+    };
+  }
+
+  // Admin list of all trips with filters and pagination.
+  async listAll({
+    status,
+    riderUserId,
+    driverUserId,
+    commuteId,
+    tripDate,
+    search,
+    page,
+    limit,
+  }: AdminListTripsQuery) {
+    const matching = () =>
+      db("trips as t")
+        .modify((query) => {
+          if (status) query.where("t.status", status);
+          if (riderUserId) query.where("t.riderUserId", riderUserId);
+          if (driverUserId) query.where("t.driverUserId", driverUserId);
+          if (commuteId) query.where("t.commuteId", commuteId);
+          if (tripDate) query.where("t.tripDate", tripDate);
+          if (search) {
+            const term = `%${search.replace(/[\\%_]/g, "\\$&")}%`;
+            query.where((q) =>
+              q
+                .whereILike("t.pickupAddress", term)
+                .orWhereILike("t.dropoffAddress", term)
+                .orWhereILike("t.boardingCode", term)
+                .orWhereILike("d.fullName", term)
+                .orWhereILike("d.email", term)
+                .orWhereILike("r.fullName", term)
+                .orWhereILike("r.email", term),
+            );
+          }
+        });
+
+    const countQuery = matching()
+      .leftJoin("users as d", "d.id", "t.driverUserId")
+      .leftJoin("users as r", "r.id", "t.riderUserId");
+
+    const [counted, rows] = await Promise.all([
+      countQuery.first(db.raw("count(*)::int as total")) as Promise<{ total: number }>,
+      matching()
+        .join("driverCommutes as c", "c.id", "t.commuteId")
+        .join("users as d", "d.id", "t.driverUserId")
+        .join("users as r", "r.id", "t.riderUserId")
+        .select(
+          "t.*",
+          "c.startAddress as commuteStartAddress",
+          "c.endAddress as commuteEndAddress",
+          "c.departureTime as commuteDepartureTime",
+          "d.fullName as driverFullName",
+          "d.profilePicture as driverProfilePicture",
+          "r.fullName as riderFullName",
+          "r.profilePicture as riderProfilePicture",
+        )
+        .orderBy([
+          { column: "t.scheduledPickupAt", order: "desc" },
+          { column: "t.id", order: "desc" },
         ])
         .limit(limit)
         .offset((page - 1) * limit) as Promise<TripListRow[]>,

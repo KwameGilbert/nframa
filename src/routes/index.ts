@@ -20,8 +20,9 @@ import { activityLogRouter } from "./activityLog.routes.js";
 export const router = Router();
 
 router.use(healthRouter);
-// Before adminUserRouter: GET /admin/:userId would otherwise match "/admin/activity-logs" and 400 it.
+// Before adminUserRouter: GET /admin/:userId would otherwise match "/admin/activity-logs", "/admin/trips", etc.
 router.use(activityLogRouter);
+router.use(tripRouter);
 router.use(userRouter);
 // Before driverProfileRouter: GET/POST /driver/:userId would otherwise match "/driver/verification..."
 // first (same segment count, registered-order wins), 400ing every verification-document request.
@@ -36,6 +37,5 @@ router.use(adminUserRouter);
 router.use(settingRouter);
 router.use(fareRouter);
 router.use(walletRouter);
-router.use(tripRouter);
 router.use(authRouter);
 router.use(docsRouter);

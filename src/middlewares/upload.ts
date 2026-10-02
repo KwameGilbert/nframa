@@ -65,7 +65,7 @@ export function uploadSingleFile(fieldName: string) {
       }
 
       // Try to parse as data URI: data:mime/type;base64,...
-      let match = BASE64_PATTERN.exec(base64String);
+      const match = BASE64_PATTERN.exec(base64String);
       let mimeType: string;
       let base64Data: string;
 
@@ -107,14 +107,14 @@ export function uploadSingleFile(fieldName: string) {
       const ext = mimeType.split("/")[1] || "bin";
       const filename = `${Date.now()}.${ext}`;
 
-      (req as Record<string, unknown>).file = {
+      (req as unknown as Record<string, unknown>).file = {
         fieldname: fieldName,
         originalname: filename,
         encoding: "base64",
         mimetype: mimeType,
         buffer,
         size: buffer.length,
-      };
+      } as Express.Multer.File;
 
       return next();
     }

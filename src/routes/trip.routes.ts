@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { validate } from "../middlewares/validate.js";
 import { authenticate } from "../middlewares/authenticate.js";
+import { requirePermission } from "../middlewares/authorize.js";
 import {
   tripActionLimit,
   tripBoardLimit,
@@ -10,6 +11,7 @@ import {
 } from "../middlewares/rateLimit.js";
 import { idParamsSchema } from "../schemas/common.schema.js";
 import {
+  adminListTripsQuerySchema,
   availableTripsQuerySchema,
   boardTripSchema,
   cancelTripSchema,
@@ -17,10 +19,13 @@ import {
   createTripSchema,
   declineTripSchema,
   listTripsQuerySchema,
+  tripIdParamsSchema,
   tripLocationSchema,
 } from "../schemas/trip.schema.js";
 import {
   acceptTrip,
+  adminCancelTrip,
+  adminListTrips,
   boardTrip,
   cancelTrip,
   completeTrip,
@@ -36,6 +41,23 @@ import {
 } from "../controllers/trip.controller.js";
 
 export const tripRouter = Router();
+
+// Admin routes for trips
+tripRouter.get(
+  "/admin/trips",
+  authenticate,
+  requirePermission("trips", "read"),
+  validate({ query: adminListTripsQuerySchema }),
+  adminListTrips,
+);
+
+tripRouter.post(
+  "/admin/trips/:tripId/cancel",
+  authenticate,
+  requirePermission("trips", "delete"),
+  validate({ params: tripIdParamsSchema, body: cancelTripSchema }),
+  adminCancelTrip,
+);
 
 // Who may do what depends on the caller's role and, for one trip, on whether they are its rider or driver,
 // so the controller checks it.

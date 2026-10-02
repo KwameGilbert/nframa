@@ -65,7 +65,7 @@ export async function up(knex: Knex): Promise<void> {
     table.timestamp("acceptedAt").nullable();
     table.timestamp("completedAt").nullable();
     table.timestamp("cancelledAt").nullable();
-    table.text("cancelledBy").nullable().checkIn(["rider", "driver", "system"]);
+    table.text("cancelledBy").nullable().checkIn(["rider", "driver", "system", "admin"]);
     table.text("cancellationReason").nullable();
     table.timestamp("createdAt").notNullable().defaultTo(knex.fn.now());
     table.timestamp("updatedAt").notNullable().defaultTo(knex.fn.now());

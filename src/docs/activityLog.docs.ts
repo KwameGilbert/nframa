@@ -3,7 +3,9 @@ import { idParamsSchema } from "../schemas/common.schema.js";
 import {
   activityLogListResponseSchema,
   activityLogResponseSchema,
+  activityLogUserParamsSchema,
   listActivityLogsQuerySchema,
+  userActivityLogsQuerySchema,
 } from "../schemas/activityLog.schema.js";
 
 registry.registerPath({
@@ -40,5 +42,29 @@ registry.registerPath({
       "Activity log not found",
       "Activity log not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
     ),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/activity-logs/user/{userId}",
+  tags: ["Activity Logs"],
+  summary: "Get one user's activity logs by user ID",
+  description:
+    "Both directions of the audit trail for this user — entries where the user is the actor (sign-ins, uploads, changes made) and entries where the user is the target (profile changes, suspensions done to them). Needs activityLogs: read.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: activityLogUserParamsSchema,
+    query: userActivityLogsQuerySchema,
+  },
+  responses: {
+    200: successResponse(
+      "User activity logs retrieved successfully",
+      activityLogListResponseSchema,
+    ),
+    400: errorResponse("userId is not a UUID"),
+    401: errorResponse("Missing or invalid access token"),
+    403: errorResponse("Missing permission: read on activityLogs"),
+    404: errorResponse("User not found", "User not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34"),
   },
 });

@@ -1,6 +1,7 @@
 import { errorResponse, rateLimitedResponse, registry, successResponse } from "./registry.js";
 import { idParamsSchema } from "../schemas/common.schema.js";
 import {
+  adminListTripsQuerySchema,
   availableTripListSchema,
   availableTripsQuerySchema,
   boardTripSchema,
@@ -12,6 +13,7 @@ import {
   listTripsQuerySchema,
   riderLocationSchema,
   tripDetailSchema,
+  tripIdParamsSchema,
   tripListSchema,
   tripLocationSchema,
 } from "../schemas/trip.schema.js";
@@ -346,5 +348,47 @@ registry.registerPath({
       "You can report a no-show from 2026-10-01T08:37:00.000Z",
     ),
     429: rateLimitedResponse,
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/admin/trips",
+  tags: ["Trips"],
+  summary: "List all trips across the platform (admins)",
+  description:
+    "Allows admins with trips: read to view and filter all trips on the platform by status, rider, driver, commute, date, or search term. Results are paginated and ordered newest first.",
+  security: [{ bearerAuth: [] }],
+  request: { query: adminListTripsQuerySchema },
+  responses: {
+    200: successResponse("Trips retrieved successfully", tripListSchema),
+    400: errorResponse("Invalid query filter"),
+    401: unauthorized,
+    403: errorResponse("Missing permission: read on trips"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/admin/trips/{tripId}/cancel",
+  tags: ["Trips"],
+  summary: "Cancel any pending or accepted trip (admins)",
+  description:
+    "Allows admins with trips: delete to cancel a trip. If the trip was accepted, any held funds are released back to the rider's wallet. Both rider and driver receive socket notifications.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: tripIdParamsSchema,
+    body: { content: { "application/json": { schema: cancelTripSchema } } },
+  },
+  responses: {
+    200: successResponse("Trip cancelled successfully", tripDetailSchema),
+    400: errorResponse("Invalid tripId or reason"),
+    401: unauthorized,
+    403: errorResponse("Missing permission: delete on trips"),
+    404: tripNotFound,
+    409: errorResponse(
+      "The trip can't be cancelled in its status (boarded, already completed/cancelled)",
+      "Can't cancel a trip that is boarded",
+    ),
   },
 });
