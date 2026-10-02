@@ -1,4 +1,4 @@
-@baseUrl = http://localhost:3000
+@baseUrl = https://nframa.onrender.com
 
 # Prerequisites:
 # - pnpm migrate:rollback then pnpm migrate must have been run (otpCodes/authSessions tables)

@@ -306,7 +306,7 @@ export async function requestLoginOtp(req: Request, res: Response) {
   const code = await sendOtp(identifier, channel, toPurpose(role), "verification code");
 
   const isDev = process.env.NODE_ENV === "development";
-  sendSuccess(res, "Verification code sent", isDev ? { otp: code, code } : null);
+  sendSuccess(res, "Verification code sent", isDev ? { code } : null);
   // Nobody has proven who they are yet, so there's no actor — only the account the code is for.
   logAuthActivity(req, {
     action: "auth.otp.request",
