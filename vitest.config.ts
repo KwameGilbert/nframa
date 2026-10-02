@@ -24,7 +24,7 @@ export default defineConfig({
     hookTimeout: 60_000,
     // Tests in a file run concurrently (up to 2 at a time): most of their time is spent waiting on the
     // database, which may be remote. So every test sets up its own records and never relies on another test.
-    sequence: { concurrent: 2 },
+    sequence: { concurrent: false },
     // Vitest clears mock history before each test by default, which with concurrent tests would wipe codes
     // another test has just been sent. helpers/outbox.ts looks messages up by recipient, so keep them all.
     clearMocks: false,
