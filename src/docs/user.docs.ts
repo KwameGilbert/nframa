@@ -7,7 +7,7 @@ import {
   userIdParamsSchema,
   userResponseSchema,
   userStatusHistoryResponseSchema,
-  userWithStatusHistoryResponseSchema,
+  userDetailResponseSchema,
 } from "../schemas/user.schema.js";
 import {
   activityLogListResponseSchema,
@@ -57,13 +57,13 @@ registry.registerPath({
   tags: ["Users"],
   summary: "Get a user by id (the user themselves, or an admin with users: read)",
   description:
-    "Deleted users are still returned, with deletedAt set. Includes statusHistory (every suspend/reactivate transition, newest first) — when the caller is the account holder themselves, each entry's notes is null (staff-only); an admin viewing someone else's account sees it as recorded.",
+    "Deleted users are still returned, with deletedAt set. Includes statusHistory (every suspend/reactivate transition, newest first) — when the caller is the account holder themselves, each entry's notes is null (staff-only); an admin viewing someone else's account sees it as recorded. Also includes emergencyContacts (oldest first).",
   security: [{ bearerAuth: [] }],
   request: {
     params: userIdParamsSchema,
   },
   responses: {
-    200: successResponse("User retrieved successfully", userWithStatusHistoryResponseSchema),
+    200: successResponse("User retrieved successfully", userDetailResponseSchema),
     400: errorResponse("Validation error"),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse(

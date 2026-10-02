@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { emergencyContactResponseSchema } from "./emergencyContact.schema.js";
 import { emailSchema, idParamsSchema, phoneCountryCodeSchema } from "./common.schema.js";
 
 const fullNameSchema = z.string().min(1).meta({ example: "Ama Mensah" });
@@ -127,10 +128,13 @@ export const userResponseSchema = z.object({
 });
 
 // GET /users/:id only — not the base userResponseSchema, so login, GET /auth/me, GET /users (list), and the
-// nested user field on driver/rider/admin responses don't all carry this extra query along for the ride.
-export const userWithStatusHistoryResponseSchema = userResponseSchema.extend({
+// nested user field on driver/rider/admin responses don't all carry these extra queries along for the ride.
+export const userDetailResponseSchema = userResponseSchema.extend({
   statusHistory: z.array(userStatusHistoryResponseSchema).meta({
     description:
       "Every suspend/reactivate transition, newest first. When the account holder is viewing their own record, each entry's notes is null — notes is staff-only; an admin viewing someone else's account sees it as recorded.",
+  }),
+  emergencyContacts: z.array(emergencyContactResponseSchema).meta({
+    description: "The user's emergency contacts, oldest first. Empty when they have none.",
   }),
 });
