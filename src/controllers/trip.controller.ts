@@ -3,6 +3,7 @@ import { publicTrip, tripModel, type Trip } from "../models/trip.model.js";
 import { driverCommuteModel } from "../models/driverCommute.model.js";
 import { driverProfileModel } from "../models/driverProfile.model.js";
 import { riderProfileModel } from "../models/riderProfile.model.js";
+import { activityLogModel } from "../models/activityLog.model.js";
 import { settingModel } from "../models/setting.model.js";
 import { userModel } from "../models/user.model.js";
 import { walletModel } from "../models/wallet.model.js";
@@ -19,6 +20,7 @@ import {
 import { commuteRoute, getRoute } from "../services/maps.service.js";
 import { emitToUser } from "../services/socket.service.js";
 import { AppError } from "../utils/AppError.js";
+import { roundMoney } from "../utils/money.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 import { addDays, departureAt, isoWeekday, timeOfDay, today } from "../utils/tripTime.js";
 import type {
@@ -712,6 +714,147 @@ export async function adminListTrips(req: Request, res: Response) {
     ...TRIP_ACTIVITY,
     action: "trip.list",
     description: `Viewed ${items.length} trip${items.length === 1 ? "" : "s"} (page ${query.page})`,
+  });
+}
+
+type AdminOverview = NonNullable<Awaited<ReturnType<typeof tripModel.findAdminOverview>>>;
+type HistoryEntry = Awaited<ReturnType<typeof activityLogModel.historyFor>>[number];
+
+// Net money a user's successful ledger rows moved for this trip: debits count against them, credits for them.
+function netMoney(ledger: AdminOverview["ledger"], userId: string, direction: "debit" | "credit") {
+  const sign = (row: { direction: string }) => (row.direction === direction ? 1 : -1);
+  return roundMoney(
+    ledger
+      .filter((row) => row.userId === userId && row.status === "success")
+      .reduce((sum, row) => sum + sign(row) * row.amount, 0),
+  );
+}
+
+// The admin's full picture of one trip. Unlike tripView it is not narrowed to a viewer: every rider on the run, the
+// whole ledger and the change history. Left out on purpose: the boarding code (the rider's to show, the driver's
+// to scan) and phone numbers and emails (an admin reaches those through GET /users/:id with users: read).
+function adminTripView(overview: AdminOverview, history: HistoryEntry[]) {
+  const { detail, commute, people, profile, run, seatsTaken, ledger } = overview;
+  const { trip, vehicle } = detail;
+  const person = (id: string) => people.find((p) => p.id === id);
+  const account = (id: string) => {
+    const user = person(id);
+    return {
+      id,
+      fullName: user?.fullName ?? null,
+      profilePicture: user?.profilePicture ?? null,
+      status: user?.status ?? null,
+      memberSince: user?.createdAt ?? null,
+      deletedAt: user?.deletedAt ?? null,
+    };
+  };
+  const riderPaid = netMoney(ledger, trip.riderUserId, "debit");
+  const driverReceived = netMoney(ledger, trip.driverUserId, "credit");
+
+  return {
+    ...publicTrip(trip),
+    riderLocation:
+      trip.riderLat === null || trip.riderLng === null
+        ? null
+        : { lat: trip.riderLat, lng: trip.riderLng, recordedAt: trip.riderLocationAt },
+    boardingLocation:
+      trip.boardingLat === null || trip.boardingLng === null
+        ? null
+        : { lat: trip.boardingLat, lng: trip.boardingLng },
+    commute: {
+      id: trip.commuteId,
+      startAddress: commute.startAddress,
+      startLat: Number(commute.startLat),
+      startLng: Number(commute.startLng),
+      endAddress: commute.endAddress,
+      endLat: Number(commute.endLat),
+      endLng: Number(commute.endLng),
+      departureAt: detail.commute.departureAt,
+      recurrenceDays: commute.recurrenceDays,
+      capacity: commute.capacity,
+      isActive: commute.isActive,
+      distanceMeters: commute.distanceMeters,
+      durationSeconds: commute.durationSeconds,
+    },
+    rider: account(trip.riderUserId),
+    driver: {
+      ...account(trip.driverUserId),
+      verificationStatus: profile?.verificationStatus ?? null,
+      isOnline: profile?.isOnline ?? null,
+      autoAcceptBookings: profile?.autoAcceptBookings ?? null,
+    },
+    vehicle,
+    run: {
+      capacity: commute.capacity,
+      seatsTaken,
+      seatsLeft: detail.seatsLeft,
+      riders: run.map((row) => ({
+        tripId: row.id,
+        isThisTrip: row.id === trip.id,
+        status: row.status,
+        rider: {
+          id: row.riderUserId,
+          fullName: row.riderFullName,
+          profilePicture: row.riderProfilePicture,
+        },
+        pickupAddress: row.pickupAddress,
+        dropoffAddress: row.dropoffAddress,
+        scheduledPickupAt: row.scheduledPickupAt,
+        totalAmount: Number(row.totalAmount),
+        requestedAt: row.createdAt,
+        acceptedAt: row.acceptedAt,
+        boardedAt: row.boardedAt,
+        completedAt: row.completedAt,
+        cancelledAt: row.cancelledAt,
+        cancelledBy: row.cancelledBy,
+      })),
+    },
+    payments: {
+      riderPaid,
+      driverReceived,
+      heldAmount: trip.heldAmount,
+      platformRetained: trip.status === "completed" ? roundMoney(riderPaid - driverReceived) : null,
+      transactions: ledger.map((row) => ({
+        id: row.id,
+        party: row.userId === trip.riderUserId ? "rider" : "driver",
+        userId: row.userId,
+        type: row.type,
+        direction: row.direction,
+        amount: row.amount,
+        currency: row.currency,
+        status: row.status,
+        balanceAfter: row.balanceAfter,
+        createdAt: row.createdAt,
+      })),
+    },
+    history: history.map(({ id, action, description, actor, changedFields, createdAt }) => ({
+      id,
+      action,
+      description,
+      actor,
+      changedFields,
+      createdAt,
+    })),
+  };
+}
+
+export async function adminGetTrip(req: Request, res: Response) {
+  const { id } = req.validated.params as { id: string };
+
+  await tripModel.settleStale({ id });
+  const overview = await tripModel.findAdminOverview(id);
+  if (!overview) {
+    throw AppError.notFound(`Trip not found: ${id}`);
+  }
+  const history = await activityLogModel.historyFor("trip", id, 50);
+
+  sendSuccess(res, "Trip retrieved successfully", adminTripView(overview, history));
+
+  logActivity(req, {
+    ...TRIP_ACTIVITY,
+    action: "trip.view",
+    description: "Viewed a trip's full details",
+    targetId: id,
   });
 }
 
