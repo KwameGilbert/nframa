@@ -6,7 +6,6 @@ import { settingModel } from "../src/models/setting.model.js";
 import { tripModel } from "../src/models/trip.model.js";
 import { calculateFare, getFareSettings } from "../src/services/fare.service.js";
 import { getRoute } from "../src/services/maps.service.js";
-import { emitToUser } from "../src/services/socket.service.js";
 import { addDays, departureAt, isoWeekday, today } from "../src/utils/tripTime.js";
 import { api, auth, expectError, expectStatus } from "./helpers/api.js";
 import { createSignedInAdmin, loginAsSuperAdmin, signUpByPhone } from "./helpers/actors.js";
@@ -252,12 +251,6 @@ describe("POST /trips", () => {
     expect(await walletOf(rider.userId)).toEqual({ balance: 200, heldAmount: 0 });
     expect(await tripModel.seatsLeft(commute.id, tomorrow())).toBe(3);
     await expectHoldsMatchTrips(rider.userId);
-    expect(emitToUser).toHaveBeenCalledWith(driver.userId, "trip:requested", {
-      tripId: trip.id,
-      commuteId: commute.id,
-      tripDate: tomorrow(),
-      status: "pending",
-    });
   });
 
   it("books the seat at once and holds the total when the driver auto-accepts", async () => {
@@ -284,12 +277,6 @@ describe("POST /trips", () => {
     expect(wallet.body.data.availableBalance).toBeCloseTo(200 - trip.totalAmount, 2);
     expect(await db("transactions").where({ tripId: trip.id })).toHaveLength(0);
     await expectHoldsMatchTrips(rider.userId);
-    expect(emitToUser).toHaveBeenCalledWith(driver.userId, "trip:requested", {
-      tripId: trip.id,
-      commuteId: commute.id,
-      tripDate: tomorrow(),
-      status: "accepted",
-    });
   });
 
   it("refuses a second trip on the same commute and date, or one that overlaps in time", async () => {

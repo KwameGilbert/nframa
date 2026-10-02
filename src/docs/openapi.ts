@@ -36,8 +36,6 @@ export const openApiDocument = withErrorExamples(
         "**Rate limits:** auth endpoints return `429` when a limit is hit; the `RateLimit` / `RateLimit-Policy` response headers show the limit and when it resets.",
         "",
         "**Emails** are case-insensitive — they're lowercased on the way in.",
-        "",
-        "**Real-time (Socket.IO):** the API accepts Socket.IO connections (same host, same access token in `auth.token`) for push events (10 events total, from 3 controllers). Connection, payloads, and event details are in `SOCKET_EVENTS.md` at the repo root. **For mobile apps:** See `SOCKET_EVENTS.md` for the backend's event contract, and `driver/SOCKET_INTEGRATION_TASKS.md` (or `customer/SOCKET_INTEGRATION_TASKS.md`) for the mobile side's implementation checklist.",
       ].join("\n"),
     },
   }),

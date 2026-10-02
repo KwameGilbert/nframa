@@ -53,7 +53,7 @@ registry.registerPath({
   description: [
     "Checks, in order: the caller is a rider with a rider profile; the commute exists, is active and its driver approved; it isn't the caller's own; it runs on tripDate's weekday and tripDate is within the booking window; pickup and drop-off are each within trips.routeToleranceKm of the commute's start-to-end line, with pickup before drop-off in the direction of travel; the scheduled pickup (departure plus the share of the commute's driving time up to the pickup) is still ahead; the rider's available balance covers the total; and the rider has no other trip overlapping in time.",
     "",
-    "The price is worked out from the driving route between pickup and drop-off (fare plus platform and booking fees; the driver earns the fare). If the driver accepts bookings automatically, the trip is accepted at once: a seat is taken and the total is held in the rider's wallet (not yet charged). Otherwise it is pending: no seat, no hold, and it expires after trips.requestExpiryMinutes (or at the pickup time, if sooner) unless the driver answers. The driver gets the trip:requested socket event either way.",
+    "The price is worked out from the driving route between pickup and drop-off (fare plus platform and booking fees; the driver earns the fare). If the driver accepts bookings automatically, the trip is accepted at once: a seat is taken and the total is held in the rider's wallet (not yet charged). Otherwise it is pending: no seat, no hold, and it expires after trips.requestExpiryMinutes (or at the pickup time, if sooner) unless the driver answers.",
     "",
     'The response message says which happened: "Trip booked successfully" (accepted automatically) or "Trip requested successfully" (pending).',
   ].join("\n"),
@@ -122,7 +122,7 @@ registry.registerPath({
   tags: ["Trips"],
   summary: "Cancel a trip (its rider before boarding, or its driver once accepted)",
   description:
-    "The rider can cancel a pending or accepted trip; the driver an accepted one. Cancelling an accepted trip frees its seat and releases the held money back to the rider's available balance (nothing is charged). The other party gets the trip:cancelled socket event.",
+    "The rider can cancel a pending or accepted trip; the driver an accepted one. Cancelling an accepted trip frees its seat and releases the held money back to the rider's available balance (nothing is charged).",
   security: [{ bearerAuth: [] }],
   request: {
     params: idParamsSchema,
@@ -150,7 +150,7 @@ registry.registerPath({
   tags: ["Trips"],
   summary: "Accept a pending trip request (the trip's driver)",
   description:
-    "In one transaction: locks the commute (so simultaneous accepts on it run one at a time and can never hand out the same seat), re-checks that the commute is active, its driver still approved, active and not deleted, the request still pending and unexpired, and a seat left, then holds the trip's total in the rider's wallet and marks it accepted. If the rider's available balance no longer covers the total, nothing is held and the trip stays pending. A request past its expiry is marked expired and refused. Returns the trip as the driver sees it: never the boarding code, but the rider's phone now that it's accepted. The rider gets the trip:accepted socket event.",
+    "In one transaction: locks the commute (so simultaneous accepts on it run one at a time and can never hand out the same seat), re-checks that the commute is active, its driver still approved, active and not deleted, the request still pending and unexpired, and a seat left, then holds the trip's total in the rider's wallet and marks it accepted. If the rider's available balance no longer covers the total, nothing is held and the trip stays pending. A request past its expiry is marked expired and refused. Returns the trip as the driver sees it: never the boarding code, but the rider's phone now that it's accepted.",
   security: [{ bearerAuth: [] }],
   request: { params: idParamsSchema },
   responses: {
@@ -176,7 +176,7 @@ registry.registerPath({
   tags: ["Trips"],
   summary: "Decline a pending trip request (the trip's driver)",
   description:
-    "Only a pending request can be declined; an accepted trip is cancelled with POST /trips/{id}/cancel instead. A pending request holds no money and takes no seat, so nothing moves. The reason (optional) is stored as cancellationReason, with cancelledBy driver. The rider gets the trip:declined socket event.",
+    "Only a pending request can be declined; an accepted trip is cancelled with POST /trips/{id}/cancel instead. A pending request holds no money and takes no seat, so nothing moves. The reason (optional) is stored as cancellationReason, with cancelledBy driver.",
   security: [{ bearerAuth: [] }],
   request: {
     params: idParamsSchema,
@@ -253,7 +253,7 @@ registry.registerPath({
   tags: ["Trips"],
   summary: "Mark arrival at the pickup (the trip's driver)",
   description:
-    "The driver, at the pickup point, with their current location. Needs an accepted trip inside the boarding window (trips.boardingEarlyMinutes before the scheduled pickup to trips.boardingLateMinutes after it), and the driver within trips.boardingRadiusMeters of the pickup. Wait time counts from this mark (or from the scheduled pickup, if the driver came early). Only the first mark counts: marking again returns the trip unchanged. Returns the trip as the driver sees it. The rider gets the trip:driver_arrived socket event.",
+    "The driver, at the pickup point, with their current location. Needs an accepted trip inside the boarding window (trips.boardingEarlyMinutes before the scheduled pickup to trips.boardingLateMinutes after it), and the driver within trips.boardingRadiusMeters of the pickup. Wait time counts from this mark (or from the scheduled pickup, if the driver came early). Only the first mark counts: marking again returns the trip unchanged. Returns the trip as the driver sees it.",
   security: [{ bearerAuth: [] }],
   request: { params: idParamsSchema, body: locationBody },
   responses: {
@@ -281,7 +281,7 @@ registry.registerPath({
   description: [
     "The driver scans the rider's boarding code and sends their own location. Checks, in order: the code belongs to a trip on the caller's commutes (any other code, including another driver's, is the same 404, so codes can't be probed); the trip is accepted; now is inside the boarding window (trips.boardingEarlyMinutes before the scheduled pickup to trips.boardingLateMinutes after it); the driver is within trips.boardingRadiusMeters of the pickup; and the rider's shared location (PUT /trips/{id}/location) is no older than trips.locationMaxAgeSeconds and within trips.boardingRadiusMeters of the driver.",
     "",
-    "Then, in one transaction: the hold becomes the trip's charge (a trip_charge of totalAmount), and if the driver marked arrival, the wait from max(arrival, scheduled pickup) to now past fares.waitGraceMinutes is charged at fares.waitPerMinuteRate as a separate wait_charge (no fees, all to the driver; it may take the rider's wallet below zero, which blocks new requests until topped up). driverEarnings becomes fare + waitCharge, paid on completion. Two simultaneous scans charge once. Returns the trip as the driver sees it (no boarding code). The rider gets the trip:boarded socket event.",
+    "Then, in one transaction: the hold becomes the trip's charge (a trip_charge of totalAmount), and if the driver marked arrival, the wait from max(arrival, scheduled pickup) to now past fares.waitGraceMinutes is charged at fares.waitPerMinuteRate as a separate wait_charge (no fees, all to the driver; it may take the rider's wallet below zero, which blocks new requests until topped up). driverEarnings becomes fare + waitCharge, paid on completion. Two simultaneous scans charge once. Returns the trip as the driver sees it (no boarding code).",
   ].join("\n"),
   security: [{ bearerAuth: [] }],
   request: { body: { content: { "application/json": { schema: boardTripSchema } } } },
@@ -308,7 +308,7 @@ registry.registerPath({
   tags: ["Trips"],
   summary: "Complete a boarded trip (the trip's driver)",
   description:
-    "Credits the driver's wallet with driverEarnings (fare + waitCharge) as a driver_earning, once (a second or simultaneous complete is refused), and marks the trip completed. The rider isn't charged again. The rider gets the trip:completed socket event. A boarded trip nobody completes is completed the same way trips.staleAfterHours after its scheduled drop-off, when it is next read.",
+    "Credits the driver's wallet with driverEarnings (fare + waitCharge) as a driver_earning, once (a second or simultaneous complete is refused), and marks the trip completed. The rider isn't charged again. A boarded trip nobody completes is completed the same way trips.staleAfterHours after its scheduled drop-off, when it is next read.",
   security: [{ bearerAuth: [] }],
   request: { params: idParamsSchema },
   responses: {
@@ -331,7 +331,7 @@ registry.registerPath({
   tags: ["Trips"],
   summary: "Report that the rider didn't show up (the trip's driver)",
   description:
-    'Only for an accepted trip, once the boarding window has closed (trips.boardingLateMinutes after the scheduled pickup). Releases the hold back to the rider: nobody is charged or paid. The trip becomes no_show with cancelledBy driver and cancellationReason "Rider did not show up". The rider gets the trip:no_show socket event. An accepted trip nobody scans or reports becomes no_show by the system (cancelledBy system) trips.staleAfterHours after its scheduled drop-off, when it is next read.',
+    'Only for an accepted trip, once the boarding window has closed (trips.boardingLateMinutes after the scheduled pickup). Releases the hold back to the rider: nobody is charged or paid. The trip becomes no_show with cancelledBy driver and cancellationReason "Rider did not show up". An accepted trip nobody scans or reports becomes no_show by the system (cancelledBy system) trips.staleAfterHours after its scheduled drop-off, when it is next read.',
   security: [{ bearerAuth: [] }],
   request: { params: idParamsSchema },
   responses: {
@@ -374,7 +374,7 @@ registry.registerPath({
   tags: ["Trips"],
   summary: "Cancel any pending or accepted trip (admins)",
   description:
-    "Allows admins with trips: delete to cancel a trip. If the trip was accepted, any held funds are released back to the rider's wallet. Both rider and driver receive socket notifications.",
+    "Allows admins with trips: delete to cancel a trip. If the trip was accepted, any held funds are released back to the rider's wallet.",
   security: [{ bearerAuth: [] }],
   request: {
     params: tripIdParamsSchema,

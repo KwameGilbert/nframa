@@ -1,10 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import db from "../src/database/knex.js";
 import { settingModel } from "../src/models/setting.model.js";
 import { tripModel, type Trip } from "../src/models/trip.model.js";
 import { walletModel } from "../src/models/wallet.model.js";
 import { flushActivityLogs } from "../src/services/activityLog.service.js";
-import { emitToUser } from "../src/services/socket.service.js";
 import { roundMoney } from "../src/utils/money.js";
 import { loggableResponse } from "../src/middlewares/httpLogger.js";
 import { addDays, today } from "../src/utils/tripTime.js";
@@ -133,9 +132,6 @@ async function expectInvariants(...userIds: string[]) {
   }
 }
 
-const eventsTo = (userId: string, event: string) =>
-  vi.mocked(emitToUser).mock.calls.filter(([to, name]) => to === userId && name === event);
-
 describe("PUT /trips/:id/location", () => {
   it("stores the rider's location for their own accepted trip today, and nothing else", async () => {
     const [{ driver, commute }, s] = await Promise.all([bookableCommute(), settings()]);
@@ -226,19 +222,11 @@ describe("POST /trips/:id/arrived", () => {
     expect(res.body.data).toMatchObject({ status: "accepted", boardingCode: null });
     const arrivedAt = res.body.data.arrivedAt;
     expect(arrivedAt).not.toBeNull();
-    expect(eventsTo(rider.userId, "trip:driver_arrived")).toEqual([
-      [
-        rider.userId,
-        "trip:driver_arrived",
-        expect.objectContaining({ tripId: trip.id, commuteId: commute.id, status: "accepted" }),
-      ],
-    ]);
 
     // A repeat mark changes nothing, even from elsewhere.
     const again = await arrive(driver, trip.id, north(pickup, 5000));
     expectStatus(again, 200);
     expect(again.body.data.arrivedAt).toBe(arrivedAt);
-    expect(eventsTo(rider.userId, "trip:driver_arrived")).toHaveLength(1);
 
     await db("trips").where({ id: trip.id }).update({ status: "boarded" });
     expectError(
@@ -298,13 +286,6 @@ describe("a whole trip through the API", () => {
         status: "success",
       },
     ]);
-    expect(eventsTo(rider.userId, "trip:boarded")).toEqual([
-      [
-        rider.userId,
-        "trip:boarded",
-        expect.objectContaining({ tripId: id, status: "boarded", waitCharge: 0, waitMinutes: 0 }),
-      ],
-    ]);
     await expectInvariants(rider.userId);
 
     // Only the rider ever sees the code: not the driver's view, nor the manifest.
@@ -336,7 +317,6 @@ describe("a whole trip through the API", () => {
       },
     ]);
     expect((await walletOf(rider.userId)).balance).toBe(roundMoney(200 - totalAmount));
-    expect(eventsTo(rider.userId, "trip:completed")).toHaveLength(1);
     await expectInvariants(rider.userId, driver.userId);
 
     await flushActivityLogs();
@@ -684,17 +664,6 @@ describe("POST /trips/:id/no-show", () => {
     });
     expect(await walletOf(rider.userId)).toEqual({ balance: 100, heldAmount: 0 });
     expect(await ledger(driver.userId)).toEqual([]);
-    expect(eventsTo(rider.userId, "trip:no_show")).toEqual([
-      [
-        rider.userId,
-        "trip:no_show",
-        expect.objectContaining({
-          tripId: trip.id,
-          status: "no_show",
-          reason: "Rider did not show up",
-        }),
-      ],
-    ]);
     expectError(
       await noShow(driver, trip.id),
       409,

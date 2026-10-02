@@ -13,7 +13,6 @@ import * as data from "./helpers/data.js";
 import { newEmail, newPhone } from "./helpers/unique.js";
 import { trackForCleanup } from "./helpers/cleanup.js";
 import { flushActivityLogs } from "../src/services/activityLog.service.js";
-import { emitToUser } from "../src/services/socket.service.js";
 import db from "../src/database/knex.js";
 
 type SignedInAdmin = Awaited<ReturnType<typeof createSignedInAdmin>>;
@@ -476,7 +475,6 @@ describe("PATCH /users/:id/status", () => {
     expectStatus(res, 200);
     expect(res.body.message).toBe("Account suspended successfully");
     expect(res.body.data.status).toBe("suspended");
-    expect(emitToUser).toHaveBeenCalledWith(target.id, "user:suspended", { reason: null });
     const otp = await api.post("/auth/login/otp").send({
       phoneCountryCode: data.GHANA_COUNTRY_CODE,
       phoneNumber: target.phoneNumber,

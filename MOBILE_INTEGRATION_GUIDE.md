@@ -16,10 +16,9 @@ Every response has the shape `{ "success": true, "message": "...", "data": ... }
 5. [Driver Approval & Verification Status](#driver-approval--verification-status)
 6. [Trips (Rider Booking)](#trips-rider-booking)
 7. [Trips (Driver Side)](#trips-driver-side)
-8. [Real-Time Events (Socket.IO)](#real-time-events-socketio)
-9. [Admin Document Review](#admin-document-review)
-10. [Error Codes & Handling](#error-codes--handling)
-11. [Rate Limiting](#rate-limiting)
+8. [Admin Document Review](#admin-document-review)
+9. [Error Codes & Handling](#error-codes--handling)
+10. [Rate Limiting](#rate-limiting)
 
 ---
 
@@ -719,7 +718,7 @@ GET /driver/{userId}
 Authorization: Bearer <accessToken>
 ```
 
-Returns the full `{ driver: {...} }` shape from earlier, including `verificationStatus` and the nested `documents` array — poll this (or `GET /driver/verification`) to reflect status changes in the UI, or use the `driver:verification_status_changed` socket event below to avoid polling entirely.
+Returns the full `{ driver: {...} }` shape from earlier, including `verificationStatus` and the nested `documents` array — poll this (or `GET /driver/verification`) to reflect status changes in the UI.
 
 ---
 
@@ -1097,7 +1096,7 @@ Money moves only at the scan. Around the scheduled pickup:
 
 **Wait charge:** if the driver marked arrival, the wait runs from the later of the arrival and `scheduledPickupAt` to the scan, in whole minutes (`waitMinutes`). Minutes beyond `fares.waitGraceMinutes` (default 5) are charged at `fares.waitPerMinuteRate` (default GHS 0.50) as `waitCharge`: no platform or booking fee, all of it to the driver (`driverEarnings` becomes `fare + waitCharge`). No arrival mark, no wait charge.
 
-**Unfinished trips:** there is no background job. When a trip is next read (lists, detail, manifest, any action), one still `accepted` `trips.staleAfterHours` (default 12) after its `scheduledDropoffAt` becomes `no_show` with `cancelledBy: "system"` (hold released), and one still `boarded` becomes `completed` (the driver is paid). No socket event is sent for these.
+**Unfinished trips:** there is no background job. When a trip is next read (lists, detail, manifest, any action), one still `accepted` `trips.staleAfterHours` (default 12) after its `scheduledDropoffAt` becomes `no_show` with `cancelledBy: "system"` (hold released), and one still `boarded` becomes `completed` (the driver is paid).
 
 ### 1. Share the Rider's Location
 
@@ -1188,170 +1187,6 @@ Authorization: Bearer <accessToken>
 ```
 
 **The trip's driver only**, for an `accepted` trip, once the boarding window has closed (`trips.boardingLateMinutes` after `scheduledPickupAt`). Releases the hold; nobody is charged or paid. Returns the trip (`200`, "No-show reported successfully", `status: "no_show"`, `cancelledBy: "driver"`, `cancellationReason: "Rider did not show up"`). The rider gets `trip:no_show`. Errors: `403` `Only the trip's driver can report a no-show for it`, `404`, `409` `You can report a no-show from 2026-10-01T08:31:00.000Z` (the window is still open), `409` `Can't report a no-show for a trip that is boarded` (or any status but `accepted`).
-
----
-
-## Real-Time Events (Socket.IO)
-
-The backend accepts Socket.IO connections on the same host as the REST API (no separate URL — just drop any path segment like `/v1` from your API base URL). Connections must authenticate the same way REST does, using the **same access token**.
-
-### Connecting
-
-```js
-import { io } from "socket.io-client";
-
-const socket = io(baseUrl, {
-  auth: { token: accessToken },
-  transports: ["websocket"],
-});
-```
-
-The token goes in the `auth` payload of the handshake — **not** a header, **not** a query string. An access token expires after 15 minutes same as on REST; there's currently no automatic reconnect-with-refreshed-token behavior, so a long-lived connection should reconnect with a fresh token after refreshing it via `POST /auth/refresh`.
-
-**Connection rejected** (`connect_error` fires) if the token is missing, invalid, or expired — same failure modes as a REST 401.
-
-Every authenticated connection is placed in a room private to that account (`user:{yourUserId}`) — you don't join anything yourself, and you'll only ever receive events addressed to your own account.
-
-### `user:suspended`
-
-Fired when an admin suspends the connected account (`PATCH /users/{id}/status` with `status: "suspended"`). Not fired on reactivation.
-
-```json
-{ "reason": "Repeated ride cancellations" }
-```
-
-`reason` is whatever the admin entered when suspending (nullable — an admin can suspend without giving one). Treat receipt of this event as a forced sign-out: the account's sessions are already revoked server-side, so any subsequent REST call will start failing once the current access token expires.
-
-### `driver:verification_status_changed`
-
-Fired whenever a driver's overall `verificationStatus` changes — either automatically (a document gets reviewed) or from an admin's explicit approval/rejection (`PATCH /admin/driver/{userId}/verification`). Only fires on an actual change, never redundantly.
-
-```json
-{
-  "userId": "550e8400-e29b-41d4-a716-446655440000",
-  "verificationStatus": "approved",
-  "previousStatus": "pending"
-}
-```
-
-Both `verificationStatus` and `previousStatus` are one of the [verification status values](#verification-status-values) above. This is a direct replacement for polling `GET /driver/{userId}` — **note**: the current driver app polls `pending-review.tsx` every 30 seconds for this exact information; switching that screen to listen for this event instead of polling is separate, not-yet-done frontend work that this event enables.
-
-### `trip:requested`
-
-Sent to the **driver** when a rider requests a seat on one of their commutes (`POST /trips`). `status` is `pending` when the driver still has to answer, or `accepted` if they accept bookings automatically.
-
-```json
-{
-  "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
-  "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
-  "tripDate": "2026-10-01",
-  "status": "pending"
-}
-```
-
-### `trip:cancelled`
-
-Sent to the **other party** when a trip is cancelled (`POST /trips/{id}/cancel`): to the driver when the rider cancels, to the rider when the driver cancels.
-
-```json
-{
-  "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
-  "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
-  "tripDate": "2026-10-01",
-  "status": "cancelled",
-  "cancelledBy": "rider",
-  "reason": "Plans changed"
-}
-```
-
-`reason` is `null` when none was given. Refetch `GET /trips/{id}` for the full trip.
-
-### `trip:accepted`
-
-Sent to the **rider** when the driver accepts their request (`PATCH /trips/{id}/accept`). The seat is confirmed and the total is now held. Not sent for requests accepted automatically (the `POST /trips` response already says `accepted`).
-
-```json
-{
-  "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
-  "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
-  "tripDate": "2026-10-01",
-  "status": "accepted"
-}
-```
-
-### `trip:declined`
-
-Sent to the **rider** when the driver declines their request (`PATCH /trips/{id}/decline`). Nothing was held, so nothing is released.
-
-```json
-{
-  "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
-  "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
-  "tripDate": "2026-10-01",
-  "status": "declined",
-  "reason": "Car is full of family today"
-}
-```
-
-`reason` is `null` when the driver gave none.
-
-### `trip:driver_arrived`
-
-Sent to the **rider** when the driver marks arrival at the pickup (`POST /trips/{id}/arrived`), once. Wait time counts from `arrivedAt` (or the scheduled pickup, if later).
-
-```json
-{
-  "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
-  "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
-  "tripDate": "2026-10-01",
-  "status": "accepted",
-  "arrivedAt": "2026-10-01T07:29:40.000Z"
-}
-```
-
-### `trip:boarded`
-
-Sent to the **rider** when the driver scans their code (`POST /trips/board`). The hold is now the charge; `waitCharge` (`0` if none) was debited on top.
-
-```json
-{
-  "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
-  "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
-  "tripDate": "2026-10-01",
-  "status": "boarded",
-  "boardedAt": "2026-10-01T07:42:05.000Z",
-  "waitMinutes": 12,
-  "waitCharge": 3.5
-}
-```
-
-### `trip:completed`
-
-Sent to the **rider** when the driver completes the trip (`POST /trips/{id}/complete`). Not sent when an unfinished trip is completed automatically.
-
-```json
-{
-  "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
-  "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
-  "tripDate": "2026-10-01",
-  "status": "completed",
-  "completedAt": "2026-10-01T08:05:31.000Z"
-}
-```
-
-### `trip:no_show`
-
-Sent to the **rider** when the driver reports they didn't show up (`POST /trips/{id}/no-show`). The hold is released. Not sent for the system's no-shows.
-
-```json
-{
-  "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
-  "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
-  "tripDate": "2026-10-01",
-  "status": "no_show",
-  "reason": "Rider did not show up"
-}
-```
 
 ---
 
