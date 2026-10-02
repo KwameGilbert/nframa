@@ -76,6 +76,7 @@ const RESOURCES: Record<string, { table?: string; module?: string }> = {
   "/driver": { table: "carOwnerProfiles", module: "users" },
   "/driver/verification": { module: "verification" },
   "/drivers": { table: "carOwnerProfiles", module: "users" },
+  "/emergency-contacts": { table: "emergencyContacts", module: "users" },
   "/rider": { table: "riderProfiles", module: "users" },
   "/roles": { table: "roles", module: "roles" },
   "/settings": { table: "settings", module: "settings" },

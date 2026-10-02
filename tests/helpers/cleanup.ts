@@ -29,6 +29,7 @@ const DELETE_ORDER = [
   "verificationDocumentHistory",
   "verificationDocuments",
   "vehicles",
+  "emergencyContacts",
   "driverCommutes",
   "carOwnerProfiles",
   "riderProfiles",
