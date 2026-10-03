@@ -8,7 +8,7 @@ import { riderProfileModel } from "../models/riderProfile.model.js";
 import { otpCodeModel, OTP_EXPIRY_MINUTES, OTP_MAX_ATTEMPTS } from "../models/otpCode.model.js";
 import { authSessionModel } from "../models/authSession.model.js";
 import { sendSms } from "../services/sms.service.js";
-import { sendEmail } from "../services/email.service.js";
+import { sendOtpEmail } from "../services/email.service.js";
 import { generateOtpCode, hashOtpCode } from "../utils/otp.js";
 import { hashPassword, verifyPassword } from "../utils/password.js";
 import { generateRefreshToken, hashRefreshToken } from "../utils/refreshToken.js";
@@ -141,7 +141,7 @@ async function sendOtp(
   if (channel === "sms") {
     await sendSms(identifier, message);
   } else {
-    await sendEmail(identifier, `Your Nframa ${label}`, `<p>${message}</p>`);
+    await sendOtpEmail(identifier, label, code, OTP_EXPIRY_MINUTES);
   }
 
   return code;

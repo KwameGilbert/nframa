@@ -1,8 +1,9 @@
 import { vi } from "vitest";
 import { sendSms } from "../../src/services/sms.service.js";
-import { sendEmail } from "../../src/services/email.service.js";
+import { sendViaResend } from "../../src/services/resend.service.js";
 
-// sendSms and sendEmail are mocked in tests/setup.ts; these read what the app would have sent.
+// sendSms and sendViaResend (Resend, behind email.service.ts) are mocked in tests/setup.ts; these read what the
+// app would have sent.
 
 function messagesTo(recipient: string): string[] {
   return [
@@ -11,9 +12,9 @@ function messagesTo(recipient: string): string[] {
       .mock.calls.filter(([to]) => to === recipient)
       .map(([, message]) => message),
     ...vi
-      .mocked(sendEmail)
-      .mock.calls.filter(([to]) => to === recipient)
-      .map(([, , html]) => html),
+      .mocked(sendViaResend)
+      .mock.calls.filter(([{ to }]) => to === recipient)
+      .map(([{ html }]) => html),
   ];
 }
 

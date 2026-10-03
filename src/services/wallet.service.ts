@@ -4,6 +4,7 @@ import { verifyTransaction } from "./paystack.service.js";
 import { toPesewas } from "../utils/money.js";
 import { AppError } from "../utils/AppError.js";
 import { createLogger } from "../config/logger.js";
+import { sendTopUpEmail } from "./email.service.js";
 
 const logger = createLogger("app");
 
@@ -47,7 +48,12 @@ export async function confirmTopUp(topUp: Transaction): Promise<TopUpOutcome> {
     return failed(topUp, reason);
   }
 
-  return (await walletModel.settleTopUp(topUp.providerReference)) ?? unchanged;
+  const settled = await walletModel.settleTopUp(topUp.providerReference);
+  // Only the call that credited it sends the receipt, so repeated or simultaneous deliveries send one.
+  if (settled?.credited) {
+    void sendTopUpEmail(topUp.userId, settled.transaction.amount, settled.transaction.currency);
+  }
+  return settled ?? unchanged;
 }
 
 async function failed(topUp: Transaction, reason: string): Promise<TopUpOutcome> {

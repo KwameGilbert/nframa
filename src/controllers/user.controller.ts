@@ -8,6 +8,7 @@ import { userStatusHistoryModel } from "../models/userStatusHistory.model.js";
 import { activityLogModel } from "../models/activityLog.model.js";
 import { assertPermission, assertSelfOrPermission } from "../middlewares/authorize.js";
 import { logActivity } from "../services/activityLog.service.js";
+import { sendAccountStatusEmail } from "../services/email.service.js";
 import { emitToUser } from "../services/socket.service.js";
 import { uploadFile } from "../services/storage.service.js";
 import { AppError } from "../utils/AppError.js";
@@ -227,6 +228,7 @@ export async function updateUserStatus(req: Request, res: Response) {
   if (status === "suspended") {
     emitToUser(id, "user:suspended", { reason: reason ?? null });
   }
+  void sendAccountStatusEmail(id, status, reason);
 
   logActivity(req, {
     ...USER_ACTIVITY,

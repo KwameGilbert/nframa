@@ -6,6 +6,7 @@ import { driverProfileModel } from "../models/driverProfile.model.js";
 import { uploadFile, deleteFile } from "../services/storage.service.js";
 import { assertSelfOrPermission } from "../middlewares/authorize.js";
 import { logActivity } from "../services/activityLog.service.js";
+import { sendDriverVerificationEmail } from "../services/email.service.js";
 import { emitToUser } from "../services/socket.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendSuccess, sendCreated } from "../utils/response.js";
@@ -278,6 +279,7 @@ export async function updateDriverVerificationStatus(req: Request, res: Response
       verificationStatus: input.verificationStatus,
       previousStatus: existing.driver.verificationStatus,
     });
+    void sendDriverVerificationEmail(userId, input.verificationStatus);
   }
 
   logActivity(req, {
@@ -370,6 +372,7 @@ async function recalculateDriverVerificationStatus(req: Request, userId: string)
       verificationStatus: newStatus,
       previousStatus: driverProfile.verificationStatus,
     });
+    void sendDriverVerificationEmail(userId, newStatus);
 
     // Its own entry: the admin reviewed one document, but this changed the driver as a whole.
     logActivity(req, {
