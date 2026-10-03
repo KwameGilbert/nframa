@@ -706,7 +706,7 @@ describe("safety mails when staff cancel", () => {
     expectStatus(triggered, 201);
 
     const res = await api
-      .patch(`/admin/safety/incidents/${triggered.body.data.id}/cancel`)
+      .post(`/admin/safety/incidents/${triggered.body.data.id}/cancel`)
       .set(auth(superAdmin.token))
       .send({ resolutionNotes: "Duplicate" });
 

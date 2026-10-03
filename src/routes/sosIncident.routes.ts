@@ -59,7 +59,7 @@ sosIncidentRouter.get(
   adminGetIncident,
 );
 
-sosIncidentRouter.patch(
+sosIncidentRouter.post(
   "/admin/safety/incidents/:id/cancel",
   authenticate,
   requirePermission("sos", "update"),

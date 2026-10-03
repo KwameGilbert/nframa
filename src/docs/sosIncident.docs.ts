@@ -65,7 +65,7 @@ registry.registerPath({
   tags: ["Safety & SOS"],
   summary: "Cancel your own SOS alert (false alarm)",
   description:
-    "For an alert pressed by accident. Only the person who raised the alert can use this (staff use PATCH /admin/safety/incidents/{id}/cancel), and only while it is triggered or underReview: once emergency services have been contacted only operations can close it, so a person can't call off help that is already on its way. The optional cancellationReason is kept for staff and never shown back to the person. Alerts the safety desk (socket event sos:cancelled). If a dispatcher moves the alert at the same moment, exactly one of the two wins and the other gets 409. Rate limited per account (60 per 15 minutes).",
+    "For an alert pressed by accident. Only the person who raised the alert can use this (staff use POST /admin/safety/incidents/{id}/cancel), and only while it is triggered or underReview: once emergency services have been contacted only operations can close it, so a person can't call off help that is already on its way. The optional cancellationReason is kept for staff and never shown back to the person. Alerts the safety desk (socket event sos:cancelled). If a dispatcher moves the alert at the same moment, exactly one of the two wins and the other gets 409. Rate limited per account (60 per 15 minutes).",
   security: [{ bearerAuth: [] }],
   request: {
     params: sosIncidentParamsSchema,
@@ -135,7 +135,7 @@ registry.registerPath({
   tags: ["Safety & SOS"],
   summary: "Update emergency incident status (needs sos: update)",
   description:
-    "Moves an alert forward through underReview, servicesContacted and resolved. A step can be skipped, never undone, and a resolved or cancelled alert can't change any more. resolutionNotes are optional and staff-only; resolving records which admin resolved it and when. Tells the person (socket event sos:statusChanged to their user room, and an email if their account has one) and the rest of the safety desk. Use PATCH /admin/safety/incidents/{id}/cancel to call an alert off instead. If two dispatchers act at the same moment, exactly one wins and the other gets 409.",
+    "Moves an alert forward through underReview, servicesContacted and resolved. A step can be skipped, never undone, and a resolved or cancelled alert can't change any more. resolutionNotes are optional and staff-only; resolving records which admin resolved it and when. Tells the person (socket event sos:statusChanged to their user room, and an email if their account has one) and the rest of the safety desk. Use POST /admin/safety/incidents/{id}/cancel to call an alert off instead. If two dispatchers act at the same moment, exactly one wins and the other gets 409.",
   security: [{ bearerAuth: [] }],
   request: {
     params: sosIncidentParamsSchema,
@@ -160,7 +160,7 @@ registry.registerPath({
 });
 
 registry.registerPath({
-  method: "patch",
+  method: "post",
   path: "/admin/safety/incidents/{id}/cancel",
   tags: ["Safety & SOS"],
   summary: "Cancel an emergency incident as staff (needs sos: update)",

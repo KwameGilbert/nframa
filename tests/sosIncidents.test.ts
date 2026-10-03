@@ -622,11 +622,11 @@ async function seedIncident(status = "triggered") {
 }
 
 function adminCancel(admin: { token: string }, id: string, body?: object) {
-  const req = api.patch(`/admin/safety/incidents/${id}/cancel`).set(auth(admin.token));
+  const req = api.post(`/admin/safety/incidents/${id}/cancel`).set(auth(admin.token));
   return body ? req.send(body) : req;
 }
 
-describe("PATCH /admin/safety/incidents/:id/cancel", () => {
+describe("POST /admin/safety/incidents/:id/cancel", () => {
   it("lets staff call an alert off, recording who and why, and tells the person and the desk", async () => {
     const incident = await seedIncident();
 
@@ -780,7 +780,7 @@ describe("PATCH /admin/safety/incidents/:id/cancel", () => {
     for (const caller of [reader, outsiderAdmin, usersAdmin, rider]) {
       expectStatus(await adminCancel(caller, incident.id), 403);
     }
-    const anonymous = await api.patch(`/admin/safety/incidents/${incident.id}/cancel`);
+    const anonymous = await api.post(`/admin/safety/incidents/${incident.id}/cancel`);
     expectStatus(anonymous, 401);
     expect((await adminView(incident.id)).body.data.status).toBe("triggered");
   });

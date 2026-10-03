@@ -22,7 +22,7 @@ Content-Type: application/json
 @incidentId = {{triggerSos.response.body.data.id}}
 
 ### Cancel an incident as staff (needs sos: update; works from any status still in play)
-PATCH {{baseUrl}}/admin/safety/incidents/{{incidentId}}/cancel
+POST {{baseUrl}}/admin/safety/incidents/{{incidentId}}/cancel
 Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
