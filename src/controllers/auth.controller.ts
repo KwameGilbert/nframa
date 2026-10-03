@@ -8,7 +8,7 @@ import { riderProfileModel } from "../models/riderProfile.model.js";
 import { otpCodeModel, OTP_EXPIRY_MINUTES, OTP_MAX_ATTEMPTS } from "../models/otpCode.model.js";
 import { authSessionModel } from "../models/authSession.model.js";
 import { sendSms } from "../services/sms.service.js";
-import { sendOtpEmail } from "../services/email.service.js";
+import { sendOtpEmail, sendPasswordChangedEmail } from "../services/email.service.js";
 import { generateOtpCode, hashOtpCode } from "../utils/otp.js";
 import { hashPassword, verifyPassword } from "../utils/password.js";
 import { generateRefreshToken, hashRefreshToken } from "../utils/refreshToken.js";
@@ -467,6 +467,7 @@ export async function resetPassword(req: Request, res: Response) {
   await authSessionModel.revokeAllForUser(user.id);
 
   sendSuccess(res, "Password reset successfully. Sign in with your new password.");
+  void sendPasswordChangedEmail(user.id);
 
   logAuthActivity(req, {
     action: "auth.password.reset",
@@ -500,6 +501,7 @@ export async function changePassword(req: Request, res: Response) {
   const tokens = await issueTokens(credentials.id, req.auth.userType, credentials.role, req);
 
   sendSuccess(res, "Password changed successfully", tokens);
+  void sendPasswordChangedEmail(credentials.id);
 
   logAuthActivity(req, {
     action: "auth.password.change",

@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { adminUserModel } from "../models/adminUser.model.js";
 import { userModel } from "../models/user.model.js";
 import { logActivity } from "../services/activityLog.service.js";
+import { sendAdminAccessEmail } from "../services/email.service.js";
 import { hashPassword } from "../utils/password.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
@@ -49,6 +50,7 @@ export async function createAdminUser(req: Request, res: Response) {
   }
 
   sendCreated(res, "Admin user created successfully", result);
+  void sendAdminAccessEmail(input.userId, "granted", result?.adminUser.role?.name ?? null);
 
   logActivity(req, {
     ...ADMIN_ACTIVITY,
@@ -92,6 +94,17 @@ export async function updateAdminUser(req: Request, res: Response) {
   }
 
   sendSuccess(res, "Admin user updated successfully", result);
+
+  const roleChanged = input.roleId !== undefined && input.roleId !== existing.adminUser.roleId;
+  const statusChanged = input.status !== undefined && input.status !== existing.adminUser.status;
+  if (roleChanged || statusChanged) {
+    void sendAdminAccessEmail(
+      userId,
+      "changed",
+      result.adminUser.role?.name ?? null,
+      statusChanged ? result.adminUser.status : undefined,
+    );
+  }
 
   logActivity(req, {
     ...ADMIN_ACTIVITY,

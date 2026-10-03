@@ -8,7 +8,11 @@ import { userStatusHistoryModel } from "../models/userStatusHistory.model.js";
 import { activityLogModel } from "../models/activityLog.model.js";
 import { assertPermission, assertSelfOrPermission } from "../middlewares/authorize.js";
 import { logActivity } from "../services/activityLog.service.js";
-import { sendAccountStatusEmail } from "../services/email.service.js";
+import {
+  sendAccountDeletedEmail,
+  sendAccountStatusEmail,
+  sendContactChangedEmail,
+} from "../services/email.service.js";
 import { emitToUser } from "../services/socket.service.js";
 import { uploadFile } from "../services/storage.service.js";
 import { AppError } from "../utils/AppError.js";
@@ -68,6 +72,7 @@ export async function softDeleteAccount(req: Request, target: User) {
   await userModel.softDelete(target.id);
   // Existing access tokens die within 15 minutes; this makes sure none of them can be refreshed.
   await authSessionModel.revokeAllForUser(target.id);
+  void sendAccountDeletedEmail(target.id);
 }
 
 // Riders and drivers only — see findAllRidersAndDrivers. Admin accounts are listed via GET /admin instead,
@@ -172,6 +177,12 @@ export async function updateUser(req: Request, res: Response) {
   }
 
   sendSuccess(res, "User updated successfully", user);
+
+  // To the address the account had, so the previous owner of a changed email or phone hears about it.
+  if (target.email && (emailChanged || phoneChanged)) {
+    const changed = [emailChanged && "email address", phoneChanged && "phone number"];
+    void sendContactChangedEmail(target.email, changed.filter(Boolean).join(" and "));
+  }
 
   logActivity(req, {
     ...USER_ACTIVITY,

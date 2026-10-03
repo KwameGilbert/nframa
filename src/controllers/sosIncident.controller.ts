@@ -3,6 +3,7 @@ import { emergencyContactModel } from "../models/emergencyContact.model.js";
 import { sosIncidentModel, type SosIncident } from "../models/sosIncident.model.js";
 import { tripModel } from "../models/trip.model.js";
 import { logActivity } from "../services/activityLog.service.js";
+import { sendSosEmail } from "../services/email.service.js";
 import { emitToSafetyDesk, emitToUser } from "../services/socket.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
@@ -97,6 +98,7 @@ export async function triggerSos(req: Request, res: Response) {
   sendCreated(res, "Emergency SOS alert triggered successfully", userView(incident));
 
   emitToSafetyDesk("sos:triggered", alertOf(incident));
+  void sendSosEmail(userId, "triggered");
 
   logActivity(req, {
     ...SOS_ACTIVITY,
@@ -213,6 +215,7 @@ export async function adminUpdateIncidentStatus(req: Request, res: Response) {
   // The person's status screen follows along live; other dispatchers see who moved it.
   emitToUser(incident.userId, "sos:statusChanged", statusChangeOf(incident));
   emitToSafetyDesk("sos:statusChanged", statusChangeOf(incident));
+  void sendSosEmail(incident.userId, incident.status);
 
   logActivity(req, {
     ...SOS_ACTIVITY,

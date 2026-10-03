@@ -18,6 +18,7 @@ import {
   type Point,
 } from "../services/geo.js";
 import { commuteRoute, getRoute } from "../services/maps.service.js";
+import { sendTripEmail } from "../services/email.service.js";
 import { emitToUser } from "../services/socket.service.js";
 import { AppError } from "../utils/AppError.js";
 import { roundMoney } from "../utils/money.js";
@@ -395,6 +396,7 @@ export async function requestTrip(req: Request, res: Response) {
   );
 
   emitToUser(commute.userId, "trip:requested", tripEvent(detail));
+  void sendTripEmail(commute.userId, "requested", detail.trip);
   logActivity(req, {
     ...TRIP_ACTIVITY,
     action: "trip.request",
@@ -454,6 +456,7 @@ export async function cancelTrip(req: Request, res: Response) {
     cancelledBy: by,
     reason: after.trip.cancellationReason,
   });
+  void sendTripEmail(by === "rider" ? driverUserId : riderUserId, "cancelled", after.trip, by);
   logActivity(req, {
     ...TRIP_ACTIVITY,
     action: "trip.cancel",
@@ -474,6 +477,7 @@ export async function acceptTrip(req: Request, res: Response) {
   sendSuccess(res, "Trip accepted successfully", tripView(after, before.trip.driverUserId));
 
   emitToUser(after.trip.riderUserId, "trip:accepted", tripEvent(after));
+  void sendTripEmail(after.trip.riderUserId, "accepted", after.trip);
   logActivity(req, {
     ...TRIP_ACTIVITY,
     action: "trip.accept",
@@ -498,6 +502,7 @@ export async function declineTrip(req: Request, res: Response) {
     ...tripEvent(after),
     reason: after.trip.cancellationReason,
   });
+  void sendTripEmail(after.trip.riderUserId, "declined", after.trip);
   logActivity(req, {
     ...TRIP_ACTIVITY,
     action: "trip.decline",
@@ -663,6 +668,8 @@ export async function completeTrip(req: Request, res: Response) {
     ...tripEvent(after),
     completedAt: after.trip.completedAt,
   });
+  void sendTripEmail(after.trip.riderUserId, "completedRider", after.trip);
+  void sendTripEmail(after.trip.driverUserId, "completedDriver", after.trip);
   logActivity(req, {
     ...TRIP_ACTIVITY,
     action: "trip.complete",
@@ -694,6 +701,7 @@ export async function reportNoShow(req: Request, res: Response) {
     ...tripEvent(after),
     reason: after.trip.cancellationReason,
   });
+  void sendTripEmail(after.trip.riderUserId, "noShow", after.trip);
   logActivity(req, {
     ...TRIP_ACTIVITY,
     action: "trip.no_show",
@@ -886,6 +894,8 @@ export async function adminCancelTrip(req: Request, res: Response) {
       cancelledBy: "admin",
       reason: after.trip.cancellationReason,
     });
+    void sendTripEmail(riderUserId, "cancelled", after.trip, "admin");
+    void sendTripEmail(driverUserId, "cancelled", after.trip, "admin");
 
     logActivity(req, {
       ...TRIP_ACTIVITY,

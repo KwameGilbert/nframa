@@ -4,7 +4,7 @@ import { verifyTransaction } from "./paystack.service.js";
 import { toPesewas } from "../utils/money.js";
 import { AppError } from "../utils/AppError.js";
 import { createLogger } from "../config/logger.js";
-import { sendTopUpEmail } from "./email.service.js";
+import { sendTopUpEmail, sendTopUpFailedEmail } from "./email.service.js";
 
 const logger = createLogger("app");
 
@@ -58,7 +58,10 @@ export async function confirmTopUp(topUp: Transaction): Promise<TopUpOutcome> {
 
 async function failed(topUp: Transaction, reason: string): Promise<TopUpOutcome> {
   const marked = await transactionModel.markFailed(topUp.id, reason);
-  if (marked) return { transaction: marked, credited: false, failedNow: reason };
+  if (marked) {
+    void sendTopUpFailedEmail(topUp.userId, topUp.amount, topUp.currency);
+    return { transaction: marked, credited: false, failedNow: reason };
+  }
   // Settled or failed meanwhile by another call: report what it is now.
   return { transaction: (await transactionModel.findById(topUp.id)) ?? topUp, credited: false };
 }
