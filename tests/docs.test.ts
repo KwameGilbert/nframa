@@ -139,7 +139,7 @@ describe("OpenAPI error examples", () => {
       .filter((e) => e.status === 403 && String(e.example?.error).endsWith(" on users"))
       .map((e) => e.path);
     for (const path of onUsers) {
-      expect(path, "guarded by the users module").toMatch(/^\/(users|drivers?|rider|vehicles|emergency-contacts)/);
+      expect(path, "guarded by the users module").toMatch(/^\/(users|drivers?|rider|vehicles|emergency-contacts|reviews|safety|admin\/safety)/);
     }
   });
 

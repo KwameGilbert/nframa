@@ -140,6 +140,22 @@ class WalletModel extends BaseModel<Wallet> {
     return this.recordIn(trx, { userId, tripId, type: "trip_charge", direction: "debit", amount });
   }
 
+  // A rider's tip to a driver for a trip: a debit and a credit in one database transaction. Unlike a wait charge, a tip
+  // never takes the rider below what they can spend (balance - heldAmount), and the check runs under the wallet lock.
+  async transferTip(
+    trx: Knex.Transaction,
+    { fromUserId, toUserId, tripId, amount }: { fromUserId: string; toUserId: string; tripId: string; amount: number },
+  ): Promise<void> {
+    const rounded = positiveMoney(amount);
+    await lockWallet(trx, fromUserId);
+    const wallet = await trx("wallets").where({ userId: fromUserId }).first("balance", "heldAmount");
+    if (roundMoney(Number(wallet.balance) - Number(wallet.heldAmount)) < rounded) {
+      throw AppError.conflict("Insufficient wallet balance");
+    }
+    await this.recordIn(trx, { userId: fromUserId, tripId, type: "tip", direction: "debit", amount: rounded });
+    await this.recordIn(trx, { userId: toUserId, tripId, type: "tip", direction: "credit", amount: rounded });
+  }
+
   // Credits a pending top-up once its payment is confirmed. Idempotent: the transaction row is locked first,
   // so of two simultaneous calls for the same reference one credits and the other sees it already settled.
   // A transaction that isn't pending (already credited, or failed) is returned unchanged.

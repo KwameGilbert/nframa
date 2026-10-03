@@ -1,0 +1,63 @@
+@baseUrl = http://localhost:3000
+
+# Rider or Driver Access Token (from /auth/login or /auth/login/verify)
+@userToken = PASTE_USER_TOKEN_HERE
+
+# Admin Access Token (with users permissions)
+@adminToken = PASTE_ADMIN_TOKEN_HERE
+
+### Trigger SOS Emergency Alert (Rider or Driver)
+# @name triggerSos
+POST {{baseUrl}}/safety/sos
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "latitude": 5.60372,
+  "longitude": -0.17837,
+  "address": "Accra Mall, Tetteh Quarshie Interchange, Accra",
+  "reason": "Personal/Medical Emergency"
+}
+
+@incidentId = {{triggerSos.response.body.data.id}}
+
+### Get Active SOS Alert for Current User
+GET {{baseUrl}}/safety/sos/active
+Authorization: Bearer {{userToken}}
+
+### Cancel Active SOS Alert (User false alarm)
+PATCH {{baseUrl}}/safety/sos/{{incidentId}}/cancel
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "cancellationReason": "False alarm - button was pressed accidentally."
+}
+
+### Admin: List Emergency Incidents
+GET {{baseUrl}}/admin/safety/incidents?status=triggered
+Authorization: Bearer {{adminToken}}
+
+### Admin: Get Incident Details by ID
+GET {{baseUrl}}/admin/safety/incidents/{{incidentId}}
+Authorization: Bearer {{adminToken}}
+
+### Admin: Update Incident Status (e.g. underReview, servicesContacted, resolved)
+PATCH {{baseUrl}}/admin/safety/incidents/{{incidentId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "status": "underReview",
+  "resolutionNotes": "Operations dispatcher assigned. Calling rider and emergency contacts."
+}
+
+### Admin: Mark Incident Resolved
+PATCH {{baseUrl}}/admin/safety/incidents/{{incidentId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "status": "resolved",
+  "resolutionNotes": "Police assistance arrived on scene. Passenger confirmed safe."
+}

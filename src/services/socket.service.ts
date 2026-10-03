@@ -1,5 +1,7 @@
 import type { Server } from "socket.io";
 import { createLogger } from "../config/logger.js";
+import { rolePermissionModel } from "../models/rolePermission.model.js";
+import type { SocketData } from "../middlewares/socketAuthenticate.js";
 
 const socketLogger = createLogger("socket");
 
@@ -24,5 +26,38 @@ export function emitToUser(userId: string, event: string, payload?: unknown): vo
     io.to(`user:${userId}`).emit(event, payload);
   } catch (err) {
     socketLogger.error({ err, userId, event }, "Failed to emit socket event");
+  }
+}
+
+// Admins who can read users (the permission behind the SOS dispatch queue) join this room to be alerted the moment
+// an emergency is raised, cancelled or moved on. Rooms are only joined at connect time, so a role change applies
+// the next time the admin connects (access tokens last 15 minutes, so apps reconnect often).
+export const SAFETY_DESK_ROOM = "admin:safety";
+
+export function emitToSafetyDesk(event: string, payload?: unknown): void {
+  if (!io) {
+    socketLogger.debug({ event }, "Socket.IO not initialized — skipping emit");
+    return;
+  }
+  try {
+    io.to(SAFETY_DESK_ROOM).emit(event, payload);
+  } catch (err) {
+    socketLogger.error({ err, event }, "Failed to emit socket event");
+  }
+}
+
+// Every account joins its own room; an active admin with users: read also joins the safety desk.
+export async function joinSocketRooms(socket: {
+  data: SocketData;
+  join: (room: string) => unknown;
+}): Promise<void> {
+  const { userId, userType } = socket.data;
+  socket.join(`user:${userId}`);
+
+  if (userType === "admin") {
+    const permissions = await rolePermissionModel.findForActiveAdmin(userId);
+    if (permissions.users?.read) {
+      socket.join(SAFETY_DESK_ROOM);
+    }
   }
 }

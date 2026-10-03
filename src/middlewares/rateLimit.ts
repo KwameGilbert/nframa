@@ -67,5 +67,7 @@ export const tripBrowseLimit = limitBy(byUser, 300);
 export const tripActionLimit = limitBy(byUser, 120);
 // Riders' apps share their location every few seconds while waiting on the day of a trip.
 export const tripLocationLimit = limitBy(byUser, 300);
+// Per account. An SOS is one button and must never be refused to someone in danger, so this is only a flood guard.
+export const sosLimit = limitBy(byUser, 60);
 // Every scan counts, so a driver can't guess boarding codes.
 export const tripBoardLimit = limitBy(byUser, 60);

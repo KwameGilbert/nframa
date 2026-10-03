@@ -6,6 +6,7 @@ export const TRANSACTION_TYPES = [
   "wait_charge",
   "driver_earning",
   "refund",
+  "tip",
 ] as const;
 export const TRANSACTION_DIRECTIONS = ["credit", "debit"] as const;
 export const TRANSACTION_STATUSES = ["pending", "success", "failed"] as const;
@@ -16,7 +17,7 @@ export type TransactionStatus = (typeof TRANSACTION_STATUSES)[number];
 
 const transactionTypeSchema = z.enum(TRANSACTION_TYPES).meta({
   description:
-    "topup: money added through Paystack; trip_charge / wait_charge: a trip's fare and wait time; driver_earning: a driver's share of a trip; refund: money returned",
+    "topup: money added through Paystack; trip_charge / wait_charge: a trip's fare and wait time; driver_earning: a driver's share of a trip; refund: money returned; tip: a rider's tip to a driver (a debit on the rider's wallet and a credit on the driver's)",
   example: "topup",
 });
 

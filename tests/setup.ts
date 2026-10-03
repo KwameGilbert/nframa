@@ -29,6 +29,8 @@ vi.mock("../src/services/storage.service.js", () => ({
 vi.mock("../src/services/socket.service.js", () => ({
   initSocketService: vi.fn(),
   emitToUser: vi.fn(),
+  emitToSafetyDesk: vi.fn(),
+  joinSocketRooms: vi.fn(),
 }));
 
 // No test calls Google: getGoogleRoute returns a deterministic route (1.3x the straight line, 10 m/s) and the

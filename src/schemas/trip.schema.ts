@@ -484,7 +484,7 @@ export const adminTripDetailSchema = tripSchema.extend({
           id: z.uuid(),
           party: z.enum(["rider", "driver"]),
           userId: z.uuid(),
-          type: z.enum(["topup", "trip_charge", "wait_charge", "driver_earning", "refund"]),
+          type: z.enum(["topup", "trip_charge", "wait_charge", "driver_earning", "refund", "tip"]),
           direction: z.enum(["credit", "debit"]),
           amount: money(20.75),
           currency: z.string().meta({ example: "GHS" }),

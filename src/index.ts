@@ -4,7 +4,7 @@ import { Server } from "socket.io";
 import { createLogger } from "./config/logger.js";
 import { app } from "./app.js";
 import { socketAuthenticate, type SocketData } from "./middlewares/socketAuthenticate.js";
-import { initSocketService } from "./services/socket.service.js";
+import { initSocketService, joinSocketRooms } from "./services/socket.service.js";
 
 config();
 
@@ -36,10 +36,17 @@ io.use(socketAuthenticate);
 
 // Handle Socket.IO connections — every socket that reaches here has already been authenticated by
 // socketAuthenticate above, so socket.data is populated. Each account gets one room (see socket.service.ts's
-// emitToUser), joined here rather than in the middleware so auth and room-membership stay separate concerns.
-io.on("connection", (socket) => {
+// emitToUser), and admins who can read users also join the safety desk, joined here rather than in the middleware
+// so auth and room-membership stay separate concerns.
+io.on("connection", async (socket) => {
   const { userId, userType, role } = socket.data;
-  socket.join(`user:${userId}`);
+  try {
+    await joinSocketRooms(socket);
+  } catch (err) {
+    socketLogger.error({ err, userId }, "Failed to join socket rooms");
+    socket.disconnect(true);
+    return;
+  }
   socketLogger.info({ socketId: socket.id, userId, userType, role }, "Socket connected");
 
   socket.on("disconnect", (reason) => {
