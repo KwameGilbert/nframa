@@ -1,0 +1,19 @@
+---
+paths:
+  - "tests/**"
+---
+
+# Tests (`tests/`)
+
+Vitest + supertest, one file per module (`auth`, `users`, `adminUsers`, `roles`, `rolePermissions`, `driverProfiles`, `riderProfiles`, `vehicles`, `settings`, `verification`, `wallet`, `paymentMethods`, `payoutMethods`, `tripsFoundation`, `trips` (browse and request), `tripDetails` (detail, cancel, lists), `tripsDriver` (accept, decline, manifest, commute edit guard), `tripsBoarding` (location, arrival, boarding and wait billing, complete, no-show, sweep, their races), `health`; `reRegistration` covers deleted accounts signing up again). They call the app in-process (`tests/helpers/api.ts`) — no server needed — against a **real database**: the one in `.env.test` if that file exists, otherwise `.env.development` (`vitest.config.ts`). They sign in as the seeded super admin, so `BOOTSTRAP_ADMIN_PASSWORD` must be set and the DB migrated and seeded.
+
+Rules every test follows — keep them when adding tests:
+
+- **Every record a test creates gets deleted at the end of that test file's run.** Call `trackForCleanup(table, criteria)` (`tests/helpers/cleanup.ts`) right after any create (`tests/helpers/trips.ts` builds trips straight in the DB and tracks them; its `bookableCommute`/`bookingRider` track every trip of the accounts they make) — the shared factories in `actors.ts` already do this, so most tests get it for free. `tests/setup.ts`'s `afterAll` runs `cleanupTestData()` before closing that file's connection pool, deleting everything tracked in a fixed, FK-safe order (children before the parents they reference — see `DELETE_ORDER` in `cleanup.ts`). Never track the seeded super admin (`loginAsSuperAdmin`) — it must survive every run. A test that deletes its own record as part of what it's testing (a DELETE endpoint, a soft-delete) can still track it; the cleanup pass finding it already gone is a harmless no-op.
+- **Never change a pre-existing record you didn't create**, even in a test that expects a refusal. If the guard broke, the change would land on real data. Target a record the test created (e.g. an _invited_ admin on the super admin role), or send a no-op body (the current description, the permissions it already has).
+- **Realistic data** from `tests/helpers/data.ts` — Ghanaian names and phone numbers, Accra/Kumasi addresses, Ghana plates, `@example.com` emails (reserved, so never deliverable). Phone numbers, emails, plates, role names and setting keys come from `tests/helpers/unique.ts`, which reads the DB to pick values nothing uses yet — a reused phone number or email would sign a test into someone else's account.
+- **No real SMS or email.** `tests/setup.ts` mocks `sms.service` and `resend.service` (so `email.service` and its templates run for real) for every file; `tests/helpers/outbox.ts` reads the OTP/reset codes from the mocks.
+- **Tests in a file run concurrently** (`sequence.concurrent`, 5 at a time — the DB is remote, ~200ms a query), so each test creates what it changes and never depends on another test. `clearMocks` is off for the same reason: clearing before each test would wipe codes other in-flight tests were just sent.
+- Build accounts with `tests/helpers/actors.ts` (`signUpByPhone`, `createSignedInAdmin(token, { settings: { read: true } })`, ...), which go through the API like a real client. Super admin sessions opened by a test file are logged out when it finishes.
+- CI (`.github/workflows/ci.yml`) runs lint, typecheck, build, then `pnpm migrate` + `pnpm seed` + `pnpm test` against a fresh Postgres 17 service container, with every env var set in the workflow (CI-only values). A new required env var needs adding there too.
+- Rate limiters are in-memory per test file, so a file can make ~100 calls to the credential endpoints (`authIpLimit`) before its own requests start getting 429s. Every `signUpByPhone` is two of those, so a file can create about 45 accounts; that's why the trip tests are split across three files.
