@@ -8,6 +8,8 @@ import "./driverCommute.docs.js";
 import "./driverProfile.docs.js";
 import "./emergencyContact.docs.js";
 import "./fare.docs.js";
+import "./payout.docs.js";
+import "./paymentMethod.docs.js";
 import "./review.docs.js";
 import "./riderProfile.docs.js";
 import "./role.docs.js";

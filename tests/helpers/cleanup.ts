@@ -24,6 +24,9 @@ export function trackForCleanup(table: string, criteria: Criteria): void {
 // parent is deleted; they're listed anyway so the order stays self-documenting.
 const DELETE_ORDER = [
   "tripReviews", // cascades with its trip or user; listed first so the order stays self-documenting
+  "payoutHistory", // FK on payoutMethods and users
+  "payoutMethods", // FK on paymentMethods and users
+  "paymentMethods", // FK on users
   "transactions", // ON DELETE RESTRICT on users and trips: a ledger never vanishes with its user or trip
   "trips", // ON DELETE RESTRICT on users and driverCommutes
   "wallets",
