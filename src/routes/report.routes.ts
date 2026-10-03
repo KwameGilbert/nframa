@@ -51,7 +51,7 @@ reportRouter.get(
   getMyReport,
 );
 
-reportRouter.patch(
+reportRouter.post(
   "/reports/:id/withdraw",
   authenticate,
   validate({ params: reportParamsSchema }),

@@ -114,7 +114,7 @@ tripRouter.post(
   cancelTrip,
 );
 
-tripRouter.patch(
+tripRouter.post(
   "/trips/:id/accept",
   authenticate,
   tripActionLimit,
@@ -122,7 +122,7 @@ tripRouter.patch(
   acceptTrip,
 );
 
-tripRouter.patch(
+tripRouter.post(
   "/trips/:id/decline",
   authenticate,
   tripActionLimit,

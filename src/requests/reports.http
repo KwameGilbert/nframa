@@ -50,7 +50,7 @@ GET {{baseUrl}}/reports/{{reportId}}
 Authorization: Bearer {{userToken}}
 
 ### Withdraw my report (while open or under review)
-PATCH {{baseUrl}}/reports/{{reportId}}/withdraw
+POST {{baseUrl}}/reports/{{reportId}}/withdraw
 Authorization: Bearer {{userToken}}
 
 ### Staff: the queue (unresolved first, urgent first). Filters: status, severity, category, reporterUserId, reportedUserId, tripId, from, to

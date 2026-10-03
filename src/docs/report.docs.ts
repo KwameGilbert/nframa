@@ -89,7 +89,7 @@ registry.registerPath({
 });
 
 registry.registerPath({
-  method: "patch",
+  method: "post",
   path: "/reports/{id}/withdraw",
   tags: [TAG],
   summary: "Withdraw my report",

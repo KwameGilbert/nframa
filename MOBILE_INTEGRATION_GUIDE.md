@@ -981,7 +981,7 @@ Drivers get `trip:requested` for every new request on their commutes. A `pending
 ### 1. Accept a Request
 
 ```http
-PATCH /trips/{id}/accept
+POST /trips/{id}/accept
 Authorization: Bearer <accessToken>
 ```
 
@@ -1001,7 +1001,7 @@ Authorization: Bearer <accessToken>
 ### 2. Decline a Request
 
 ```http
-PATCH /trips/{id}/decline
+POST /trips/{id}/decline
 Authorization: Bearer <accessToken>
 Content-Type: application/json
 
@@ -1276,8 +1276,8 @@ All limits are **per 15-minute window** and apply in addition to a generous per-
 | `POST /auth/refresh`                                | 300 per IP                                                               | Every request        |
 | `POST /trips`                                       | 30 per account                                                           | Every request        |
 | `GET /trips`, `GET /trips/available`                | 300 per account                                                          | Every request        |
-| `PATCH /trips/{id}/accept`                          | 120 per account                                                          | Every request        |
-| `PATCH /trips/{id}/decline`                         | 120 per account                                                          | Every request        |
+| `POST /trips/{id}/accept`                          | 120 per account                                                          | Every request        |
+| `POST /trips/{id}/decline`                         | 120 per account                                                          | Every request        |
 | `GET /commutes/{id}/trips`                          | 120 per account                                                          | Every request        |
 | `PUT /trips/{id}/location`                          | 300 per account                                                          | Every request        |
 | `POST /trips/board`                                 | 60 per account                                                           | Every request        |

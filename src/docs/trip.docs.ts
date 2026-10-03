@@ -146,7 +146,7 @@ registry.registerPath({
 });
 
 registry.registerPath({
-  method: "patch",
+  method: "post",
   path: "/trips/{id}/accept",
   tags: ["Trips"],
   summary: "Accept a pending trip request (the trip's driver)",
@@ -172,7 +172,7 @@ registry.registerPath({
 });
 
 registry.registerPath({
-  method: "patch",
+  method: "post",
   path: "/trips/{id}/decline",
   tags: ["Trips"],
   summary: "Decline a pending trip request (the trip's driver)",

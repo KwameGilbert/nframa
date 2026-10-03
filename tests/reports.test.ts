@@ -347,7 +347,7 @@ describe("POST /trips/:tripId/reports", () => {
   it("lets the same issue be filed again once the last report is closed", async () => {
     const trip = await tripWith("accepted");
     const first = await report(rider, trip.id, { category: "harassment", description: text });
-    expectStatus(await api.patch(`/reports/${first.id}/withdraw`).set(auth(rider.token)), 200);
+    expectStatus(await api.post(`/reports/${first.id}/withdraw`).set(auth(rider.token)), 200);
 
     const second = await report(rider, trip.id, { category: "harassment", description: text });
 
@@ -551,11 +551,11 @@ describe("GET /reports and GET /reports/:id", () => {
   });
 });
 
-describe("PATCH /reports/:id/withdraw", () => {
+describe("POST /reports/:id/withdraw", () => {
   it.each(["open", "underReview"])("takes back a report that is %s, and tells the desk", async (from) => {
     const seeded = await seedReport({ status: from });
 
-    const res = await api.patch(`/reports/${seeded.id}/withdraw`).set(auth(rider.token));
+    const res = await api.post(`/reports/${seeded.id}/withdraw`).set(auth(rider.token));
 
     expectStatus(res, 200);
     expect(res.body.data.status).toBe("withdrawn");
@@ -567,7 +567,7 @@ describe("PATCH /reports/:id/withdraw", () => {
   it.each(["resolved", "dismissed", "withdrawn"])("is refused for a report that is already %s", async (status) => {
     const seeded = await seedReport({ status });
 
-    const res = await api.patch(`/reports/${seeded.id}/withdraw`).set(auth(rider.token));
+    const res = await api.post(`/reports/${seeded.id}/withdraw`).set(auth(rider.token));
 
     expectStatus(res, 409);
     expect(res.body.error).toBe(`Can't withdraw a report that is ${status}`);
@@ -577,16 +577,16 @@ describe("PATCH /reports/:id/withdraw", () => {
     const seeded = await seedReport();
 
     for (const caller of [driver, stranger]) {
-      expectStatus(await api.patch(`/reports/${seeded.id}/withdraw`).set(auth(caller.token)), 404);
+      expectStatus(await api.post(`/reports/${seeded.id}/withdraw`).set(auth(caller.token)), 404);
     }
-    expectStatus(await api.patch(`/reports/${seeded.id}/withdraw`), 401);
+    expectStatus(await api.post(`/reports/${seeded.id}/withdraw`), 401);
   });
 
   it("lets exactly one win when the reporter withdraws as staff close it", async () => {
     const seeded = await seedReport();
 
     const [withdrawn, closed] = await Promise.all([
-      api.patch(`/reports/${seeded.id}/withdraw`).set(auth(rider.token)),
+      api.post(`/reports/${seeded.id}/withdraw`).set(auth(rider.token)),
       staffMove(staff, seeded.id, { status: "resolved" }),
     ]);
 

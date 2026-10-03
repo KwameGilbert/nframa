@@ -34,7 +34,7 @@ sosIncidentRouter.post(
 
 sosIncidentRouter.get("/safety/sos/active", authenticate, getActiveSos);
 
-sosIncidentRouter.patch(
+sosIncidentRouter.post(
   "/safety/sos/:id/cancel",
   authenticate,
   sosLimit,

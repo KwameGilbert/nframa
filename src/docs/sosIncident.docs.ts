@@ -60,7 +60,7 @@ registry.registerPath({
 });
 
 registry.registerPath({
-  method: "patch",
+  method: "post",
   path: "/safety/sos/{id}/cancel",
   tags: ["Safety & SOS"],
   summary: "Cancel your own SOS alert (false alarm)",

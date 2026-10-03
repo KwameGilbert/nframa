@@ -156,3 +156,35 @@ describe("OpenAPI error examples", () => {
     expect(res.body.error).toBe(example);
   });
 });
+
+describe("OpenAPI HTTP verbs", () => {
+  const ACTIONS = ["accept", "decline", "cancel", "withdraw", "complete", "arrived", "board", "no-show"];
+
+  async function operations() {
+    const res = await api.get("/openapi.json");
+    expectStatus(res, 200);
+    const found: { method: string; path: string; hasBody: boolean }[] = [];
+    for (const [path, item] of Object.entries<Record<string, { requestBody?: unknown }>>(res.body.paths)) {
+      for (const [method, operation] of Object.entries(item)) {
+        found.push({ method, path, hasBody: operation.requestBody !== undefined });
+      }
+    }
+    return found;
+  }
+
+  it("never uses PATCH or PUT for a request that has no body", async () => {
+    const bodyless = (await operations())
+      .filter(({ method, hasBody }) => (method === "patch" || method === "put") && !hasBody)
+      .map(({ method, path }) => `${method.toUpperCase()} ${path}`);
+
+    expect(bodyless).toEqual([]);
+  });
+
+  it("makes actions POST: PATCH is only for partially updating a record", async () => {
+    const wrong = (await operations())
+      .filter(({ method, path }) => (method === "patch" || method === "put") && ACTIONS.includes(path.split("/").at(-1) ?? ""))
+      .map(({ method, path }) => `${method.toUpperCase()} ${path}`);
+
+    expect(wrong).toEqual([]);
+  });
+});

@@ -244,7 +244,7 @@ describe("a whole trip through the API", () => {
     const requested = await requestTrip(rider, commute);
     expectStatus(requested, 201);
     const { id, boardingCode, totalAmount, fare } = requested.body.data;
-    expectStatus(await api.patch(`/trips/${id}/accept`).set(auth(driver.token)), 200);
+    expectStatus(await api.post(`/trips/${id}/accept`).set(auth(driver.token)), 200);
     // Today's run, picked up a minute ago.
     await db("trips")
       .where({ id })

@@ -51,7 +51,7 @@ function move(admin: { token: string }, id: string, body: object) {
 }
 
 function cancel(caller: { token: string }, id: string, body?: object) {
-  const req = api.patch(`/safety/sos/${id}/cancel`).set(auth(caller.token));
+  const req = api.post(`/safety/sos/${id}/cancel`).set(auth(caller.token));
   return body ? req.send(body) : req;
 }
 
@@ -274,7 +274,7 @@ describe("GET /safety/sos/active", () => {
   });
 });
 
-describe("PATCH /safety/sos/:id/cancel", () => {
+describe("POST /safety/sos/:id/cancel", () => {
   it("lets the person cancel their alert, and tells the safety desk", async () => {
     const rider = await newRider();
     const incident = await raise(rider);
@@ -383,7 +383,7 @@ describe("PATCH /safety/sos/:id/cancel", () => {
     expectStatus(missing, 404);
     expect(missing.body.error).toBe(`SOS incident not found: ${id}`);
     expectStatus(await cancel(rider, "nope"), 400);
-    expectStatus(await api.patch(`/safety/sos/${id}/cancel`), 401);
+    expectStatus(await api.post(`/safety/sos/${id}/cancel`), 401);
   });
 });
 

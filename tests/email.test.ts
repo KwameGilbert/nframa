@@ -525,7 +525,7 @@ describe("trip mails", () => {
     const request = await waitForMail(driverEmail, "New booking request", tripDate);
     expect(request.html).toContain("Danquah Circle, Osu, Accra");
 
-    expectStatus(await api.patch(`/trips/${id}/accept`).set(asDriver()), 200);
+    expectStatus(await api.post(`/trips/${id}/accept`).set(asDriver()), 200);
     const accepted = await waitForMail(riderEmail, "Your trip was accepted", tripDate);
     expect(accepted.html).toContain("held from your wallet");
     expect(accepted.html).toMatch(/GHS \d+\.\d{2}/);
@@ -536,7 +536,7 @@ describe("trip mails", () => {
     const id = await bookTrip(tripDate);
 
     const res = await api
-      .patch(`/trips/${id}/decline`)
+      .post(`/trips/${id}/decline`)
       .set(asDriver())
       .send({ reason: "Car <trouble>" });
 
@@ -550,8 +550,8 @@ describe("trip mails", () => {
     const byDriver = nextDate();
     const first = await bookTrip(byRider);
     const second = await bookTrip(byDriver);
-    await api.patch(`/trips/${first}/accept`).set(asDriver()).expect(200);
-    await api.patch(`/trips/${second}/accept`).set(asDriver()).expect(200);
+    await api.post(`/trips/${first}/accept`).set(asDriver()).expect(200);
+    await api.post(`/trips/${second}/accept`).set(asDriver()).expect(200);
 
     await api.post(`/trips/${first}/cancel`).set(asRider()).send({ reason: "Plans changed" }).expect(200);
     await api.post(`/trips/${second}/cancel`).set(asDriver()).send({ reason: "Flat tyre" }).expect(200);

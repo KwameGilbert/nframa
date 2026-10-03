@@ -35,7 +35,7 @@ GET {{baseUrl}}/safety/sos/active
 Authorization: Bearer {{userToken}}
 
 ### Cancel Active SOS Alert (User false alarm)
-PATCH {{baseUrl}}/safety/sos/{{incidentId}}/cancel
+POST {{baseUrl}}/safety/sos/{{incidentId}}/cancel
 Authorization: Bearer {{userToken}}
 Content-Type: application/json
 

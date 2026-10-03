@@ -24,11 +24,11 @@ import {
 type Viewer = { token: string };
 
 function accept(viewer: Viewer, id: string) {
-  return api.patch(`/trips/${id}/accept`).set(auth(viewer.token));
+  return api.post(`/trips/${id}/accept`).set(auth(viewer.token));
 }
 
 function decline(viewer: Viewer, id: string, body?: object) {
-  const req = api.patch(`/trips/${id}/decline`).set(auth(viewer.token));
+  const req = api.post(`/trips/${id}/decline`).set(auth(viewer.token));
   return body ? req.send(body) : req;
 }
 
@@ -53,7 +53,7 @@ async function requested(rider: Viewer, commute: TestCommute, body = {}) {
 
 const statusOf = async (id: string) => (await tripModel.findById(id))?.status;
 
-describe("PATCH /trips/:id/accept", () => {
+describe("POST /trips/:id/accept", () => {
   it("gives the rider the seat and holds the total, and tells the rider", async () => {
     const { driver, commute } = await bookableCommute();
     const rider = await bookingRider(200);
@@ -241,7 +241,7 @@ describe("PATCH /trips/:id/accept", () => {
   });
 });
 
-describe("PATCH /trips/:id/decline", () => {
+describe("POST /trips/:id/decline", () => {
   it("declines a pending request without moving money, and only a pending one", async () => {
     const { driver, commute } = await bookableCommute();
     const rider = await bookingRider(200);
@@ -521,11 +521,11 @@ describe("activity log and docs", () => {
     const example = (method: string, path: string, status: number) =>
       res.body.paths[path]?.[method]?.responses[status]?.content["application/json"].example?.error;
 
-    expect(example("patch", "/trips/{id}/accept", 403)).toBe(
+    expect(example("post", "/trips/{id}/accept", 403)).toBe(
       "Only the trip's driver can accept it",
     );
-    expect(example("patch", "/trips/{id}/accept", 429)).toBe("Too many requests, try again later");
-    expect(example("patch", "/trips/{id}/decline", 409)).toBe(
+    expect(example("post", "/trips/{id}/accept", 429)).toBe("Too many requests, try again later");
+    expect(example("post", "/trips/{id}/decline", 409)).toBe(
       "Can't decline a trip that is accepted",
     );
     expect(example("get", "/commutes/{id}/trips", 429)).toBe("Too many requests, try again later");
