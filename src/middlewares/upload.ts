@@ -138,3 +138,49 @@ export function uploadSingleFile(fieldName: string) {
     });
   };
 }
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB each
+const IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+// Up to maxCount images in one multipart request, under the same field name (a report's evidence). Images only,
+// unlike uploadSingleFile. A JSON request passes straight through with no files: express.json() caps bodies at
+// 100kb, far too small for photos, so images only travel as multipart. Files land in req.files.
+export function uploadImages(fieldName: string, maxCount: number) {
+  const images = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_IMAGE_BYTES, files: maxCount },
+    fileFilter: (_req, file, cb) => {
+      if (!IMAGE_MIME_TYPES.includes(file.mimetype)) {
+        cb(AppError.badRequest(`Unsupported file type: ${file.mimetype}. Allowed: JPEG, PNG, WEBP`));
+        return;
+      }
+      cb(null, true);
+    },
+  }).array(fieldName, maxCount);
+
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.is("multipart/form-data")) {
+      next();
+      return;
+    }
+
+    images(req, res, (err: unknown) => {
+      if (!err) {
+        next();
+        return;
+      }
+      if (err instanceof MulterError) {
+        const tooMany = err.code === "LIMIT_FILE_COUNT" || err.code === "LIMIT_UNEXPECTED_FILE";
+        const message =
+          err.code === "LIMIT_FILE_SIZE"
+            ? `Image too large. Maximum size is ${MAX_IMAGE_BYTES / (1024 * 1024)}MB each`
+            : tooMany
+              ? `You can attach up to ${maxCount} images, under the '${fieldName}' field`
+              : err.message;
+        next(AppError.badRequest(message));
+        return;
+      }
+      next(err);
+    });
+  };
+}

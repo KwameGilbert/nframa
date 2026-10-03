@@ -1,0 +1,73 @@
+@baseUrl = http://localhost:3000
+
+# Rider or Driver Access Token (the person filing the report)
+@userToken = PASTE_USER_TOKEN_HERE
+
+# Admin Access Token (reports: read for the queue, reports: update to act on reports)
+@adminToken = PASTE_ADMIN_TOKEN_HERE
+
+@tripId = PASTE_TRIP_ID_HERE
+
+### Report the other person on a trip: JSON, no images (from "accepted" until 72h after the trip ends)
+# @name fileReport
+POST {{baseUrl}}/trips/{{tripId}}/reports
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "category": "harassment",
+  "description": "The driver kept asking for my number after I said no, and would not stop."
+}
+
+@reportId = {{fileReport.response.body.data.id}}
+
+### Same, with up to 5 evidence images (multipart: repeat the evidence field once per file)
+POST {{baseUrl}}/trips/{{tripId}}/reports
+Authorization: Bearer {{userToken}}
+Content-Type: multipart/form-data; boundary=nframa
+
+--nframa
+Content-Disposition: form-data; name="category"
+
+unsafeDriving
+--nframa
+Content-Disposition: form-data; name="description"
+
+The driver ran two red lights and was on his phone while driving.
+--nframa
+Content-Disposition: form-data; name="evidence"; filename="dashcam.png"
+Content-Type: image/png
+
+< ./dashcam.png
+--nframa--
+
+### List the reports I filed (filters: status, tripId; page, limit)
+GET {{baseUrl}}/reports?status=open
+Authorization: Bearer {{userToken}}
+
+### Get one of my reports
+GET {{baseUrl}}/reports/{{reportId}}
+Authorization: Bearer {{userToken}}
+
+### Withdraw my report (while open or under review)
+PATCH {{baseUrl}}/reports/{{reportId}}/withdraw
+Authorization: Bearer {{userToken}}
+
+### Staff: the queue (unresolved first, urgent first). Filters: status, severity, category, reporterUserId, reportedUserId, tripId, from, to
+GET {{baseUrl}}/admin/reports?severity=urgent&status=open
+Authorization: Bearer {{adminToken}}
+
+### Staff: one report with both people, the trip and their history
+GET {{baseUrl}}/admin/reports/{{reportId}}
+Authorization: Bearer {{adminToken}}
+
+### Staff: pick it up (underReview), then close it (resolved or dismissed)
+PATCH {{baseUrl}}/admin/reports/{{reportId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "status": "resolved",
+  "internalNotes": "Called the driver; second report against him this month.",
+  "outcomeMessage": "Thank you for reporting this. We have spoken to the driver and taken action on his account."
+}

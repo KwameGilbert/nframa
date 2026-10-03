@@ -30,6 +30,7 @@ vi.mock("../src/services/socket.service.js", () => ({
   initSocketService: vi.fn(),
   emitToUser: vi.fn(),
   emitToSafetyDesk: vi.fn(),
+  emitToReportsDesk: vi.fn(),
   joinSocketRooms: vi.fn(),
 }));
 

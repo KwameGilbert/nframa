@@ -13,8 +13,8 @@ export function captureResponseBody(_req: Request, res: Response, next: NextFunc
 }
 
 // Payment webhooks carry the payer's email, phone and card details: log only which event it was. A boarding
-// scan carries the rider's boarding code, which is theirs alone. A saved payment method carries a full phone or
-// account number.
+// scan carries the rider's boarding code, which is theirs alone. A trip report carries one person's account of
+// another. A saved payment method carries a full phone or account number.
 function loggableBody(req: Request) {
   if (req.originalUrl.startsWith("/webhooks/")) {
     const event = (req.body as { event?: unknown } | undefined)?.event;
@@ -23,6 +23,9 @@ function loggableBody(req: Request) {
   if (req.originalUrl.startsWith("/payment-methods") && req.method === "POST") {
     const { phoneNumber, accountNumber, ...rest } = (req.body ?? {}) as Record<string, unknown>;
     return { ...rest, ...(phoneNumber ? { phoneNumber: "[REDACTED]" } : {}), ...(accountNumber ? { accountNumber: "[REDACTED]" } : {}) };
+  }
+  if (req.method === "POST" && /^\/trips\/[^/]+\/reports/.test(req.originalUrl)) {
+    return { ...(req.body as object), description: "[REDACTED]" };
   }
   if (req.originalUrl.startsWith("/trips/board")) {
     return { ...(req.body as object), code: "[REDACTED]" };

@@ -71,3 +71,5 @@ export const tripLocationLimit = limitBy(byUser, 300);
 export const sosLimit = limitBy(byUser, 60);
 // Every scan counts, so a driver can't guess boarding codes.
 export const tripBoardLimit = limitBy(byUser, 60);
+// Per account. Filing a report uploads images, so this keeps one account from filling the storage.
+export const reportLimit = limitBy(byUser, 20);

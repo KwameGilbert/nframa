@@ -34,19 +34,31 @@ export function emitToUser(userId: string, event: string, payload?: unknown): vo
 // the next time the admin connects (access tokens last 15 minutes, so apps reconnect often).
 export const SAFETY_DESK_ROOM = "admin:safety";
 
-export function emitToSafetyDesk(event: string, payload?: unknown): void {
+function emitToRoom(room: string, event: string, payload?: unknown): void {
   if (!io) {
     socketLogger.debug({ event }, "Socket.IO not initialized — skipping emit");
     return;
   }
   try {
-    io.to(SAFETY_DESK_ROOM).emit(event, payload);
+    io.to(room).emit(event, payload);
   } catch (err) {
     socketLogger.error({ err, event }, "Failed to emit socket event");
   }
 }
 
-// Every account joins its own room; an active admin with sos: read also joins the safety desk.
+export function emitToSafetyDesk(event: string, payload?: unknown): void {
+  emitToRoom(SAFETY_DESK_ROOM, event, payload);
+}
+
+// Admins who can read the reports module join this room to see trip reports arrive and move, the same way as
+// the safety desk above.
+export const REPORTS_DESK_ROOM = "admin:reports";
+
+export function emitToReportsDesk(event: string, payload?: unknown): void {
+  emitToRoom(REPORTS_DESK_ROOM, event, payload);
+}
+
+// Every account joins its own room; an active admin with sos: read also joins the safety desk, and one with reports: read the reports desk.
 export async function joinSocketRooms(socket: {
   data: SocketData;
   join: (room: string) => unknown;
@@ -58,6 +70,9 @@ export async function joinSocketRooms(socket: {
     const permissions = await rolePermissionModel.findForActiveAdmin(userId);
     if (permissions.sos?.read) {
       socket.join(SAFETY_DESK_ROOM);
+    }
+    if (permissions.reports?.read) {
+      socket.join(REPORTS_DESK_ROOM);
     }
   }
 }

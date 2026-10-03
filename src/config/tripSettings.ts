@@ -134,6 +134,14 @@ export const TRIP_SETTINGS = {
     description:
       "Average speed, in km/h, used to estimate travel time when Google routing is unavailable",
   },
+  "reports.filingWindowHours": {
+    type: "number",
+    min: 1,
+    max: 720,
+    default: 72,
+    description:
+      "Hours after a trip ends during which its rider or driver can still report the other person (a report can always be filed while the trip is accepted or under way)",
+  },
   "wallet.minTopUp": {
     type: "number",
     min: 0,

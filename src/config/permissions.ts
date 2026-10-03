@@ -5,6 +5,7 @@ export const MODULES = [
   "admin",
   "commutes",
   "payouts",
+  "reports",
   "roles",
   "settings",
   "sos",

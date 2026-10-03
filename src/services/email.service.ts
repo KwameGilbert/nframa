@@ -389,3 +389,50 @@ export function sendSosEmail(userId: string, status: string) {
 
   return notifyUser(userId, (name) => ({ ...message, body: `<p>Hi ${name}, ${message.body}</p>` }));
 }
+
+// --- Reports
+
+export type ReportEmailEvent = "received" | "underReview" | "resolved" | "dismissed";
+
+// Only the person who filed the report is ever mailed, and never staff's internal notes: outcomeMessage is the part
+// staff wrote for the reporter.
+export function sendReportEmail(
+  userId: string,
+  event: ReportEmailEvent,
+  options: { urgent?: boolean; outcomeMessage?: string | null } = {},
+) {
+  const outcome = options.outcomeMessage ? `<p>${escapeHtml(options.outcomeMessage)}</p>` : "";
+
+  return notifyUser(userId, (name): Mail => {
+    switch (event) {
+      case "received":
+        return {
+          subject: "We received your report",
+          heading: "Report received",
+          body:
+            `<p>Hi ${name}, we received your report and our team will look into it. We'll email you as it moves forward.</p>` +
+            (options.urgent
+              ? "<p>If you are in danger right now, call 112 or use the SOS button in the app.</p>"
+              : ""),
+        };
+      case "underReview":
+        return {
+          subject: "Your report is being reviewed",
+          heading: "Report under review",
+          body: `<p>Hi ${name}, our team has started reviewing your report.</p>`,
+        };
+      case "resolved":
+        return {
+          subject: "Your report was resolved",
+          heading: "Report resolved",
+          body: `<p>Hi ${name}, our team has finished reviewing your report. Thank you for telling us.</p>${outcome}`,
+        };
+      case "dismissed":
+        return {
+          subject: "Your report was closed",
+          heading: "Report closed",
+          body: `<p>Hi ${name}, our team reviewed your report and closed it without further action.</p>${outcome}`,
+        };
+    }
+  });
+}
