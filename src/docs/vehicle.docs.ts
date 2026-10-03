@@ -12,7 +12,7 @@ registry.registerPath({
   tags: ["Vehicles"],
   summary: "Create a vehicle (for yourself, or anyone with users: create)",
   description:
-    "carOwnerUserId must be the caller's own id unless the caller has users: create. New vehicles start with status active and isVerified false.",
+    "Registers a car for a driver. carOwnerUserId must be the caller's own id, otherwise the caller needs users: create (403), and it must be an existing user (400). make, model, color and plate are required non-empty text, seats a whole number of at least 1, and year is optional. plate is unique across all vehicles and compared exactly as written, so case and spaces matter and a clash answers 409. A driver can register several vehicles, and a driver profile isn't needed first. New vehicles start with status active, isVerified false and verificationDate null; none of these can be set through this API, and there is no list, delete or retire route. A driver's vehicles come back inside GET /driver/{userId} (newest first), and riders see the driver's newest active vehicle (verified ones first) on a trip. A commute doesn't name a vehicle and sets its own capacity, which isn't checked against seats. Returns the new vehicle and is recorded in the audit trail.",
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -33,6 +33,8 @@ registry.registerPath({
   path: "/vehicles/{id}",
   tags: ["Vehicles"],
   summary: "Get a vehicle by id (its owner, or an admin with users: read)",
+  description:
+    "Returns one vehicle. The owner can read it; anyone else needs users: read. An id that doesn't exist answers 404 to every caller, while a vehicle that exists but belongs to someone else answers 403. There is no endpoint that lists vehicles: take the ids from the vehicles array of GET /driver/{userId}, or from the response to POST /vehicles. Reading isn't recorded in the audit trail.",
   security: [{ bearerAuth: [] }],
   request: {
     params: idParamsSchema,
@@ -54,7 +56,8 @@ registry.registerPath({
   path: "/vehicles/{id}",
   tags: ["Vehicles"],
   summary: "Update a vehicle (its owner, or an admin with users: update)",
-  description: "Send only the fields to change (at least one).",
+  description:
+    "Send only the fields to change, at least one of make, model, year, color, plate and seats, under the same rules as when creating (a body with none of these is a 400). The owner, status, isVerified and verificationDate can't be changed here, and sending them is ignored rather than rejected, so a vehicle can't be moved to another driver. Changing plate to one that another vehicle already has answers 409. The owner or an admin with users: update can edit; an id that doesn't exist answers 404 to every caller, while someone else's vehicle answers 403. Returns the updated vehicle and is recorded in the audit trail with the before and after.",
   security: [{ bearerAuth: [] }],
   request: {
     params: idParamsSchema,

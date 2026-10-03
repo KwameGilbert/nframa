@@ -1,14 +1,31 @@
 import { z } from "zod";
 
-const makeSchema = z.string().min(1).meta({ example: "Toyota" });
-const modelSchema = z.string().min(1).meta({ example: "Corolla" });
-const yearSchema = z.number().int().meta({ example: 2018 });
-const colorSchema = z.string().min(1).meta({ example: "Silver" });
-const plateSchema = z.string().min(1).meta({ description: "Unique", example: "GR 1234-21" });
-const seatsSchema = z.number().int().positive().meta({ example: 4 });
+const makeSchema = z.string().min(1).meta({ description: "The manufacturer", example: "Toyota" });
+const modelSchema = z.string().min(1).meta({ description: "The model name", example: "Corolla" });
+const yearSchema = z
+  .number()
+  .int()
+  .meta({ description: "Year of manufacture, a whole number", example: 2018 });
+const colorSchema = z.string().min(1).meta({ description: "The body colour", example: "Silver" });
+const plateSchema = z.string().min(1).meta({
+  description:
+    "Registration plate. Unique across all vehicles and compared exactly as written, so case and spaces matter; a clash answers 409",
+  example: "GR 1234-21",
+});
+const seatsSchema = z
+  .number()
+  .int()
+  .positive()
+  .meta({
+    description: "Number of seats in the vehicle, a whole number of at least 1",
+    example: 4,
+  });
 
 export const createVehicleSchema = z.object({
-  carOwnerUserId: z.uuid().meta({ description: "The user who owns the vehicle" }),
+  carOwnerUserId: z.uuid().meta({
+    description:
+      "The user who owns the vehicle. Must be the caller's own id unless the caller has users: create",
+  }),
   make: makeSchema,
   model: modelSchema,
   year: yearSchema.optional(),
