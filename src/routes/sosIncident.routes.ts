@@ -4,6 +4,7 @@ import { sosLimit } from "../middlewares/rateLimit.js";
 import { requirePermission } from "../middlewares/authorize.js";
 import { validate } from "../middlewares/validate.js";
 import {
+  adminCancelIncident,
   adminGetIncident,
   adminListIncidents,
   adminUpdateIncidentStatus,
@@ -12,6 +13,7 @@ import {
   triggerSos,
 } from "../controllers/sosIncident.controller.js";
 import {
+  adminCancelSosSchema,
   cancelSosSchema,
   listSosIncidentsQuerySchema,
   sosIncidentParamsSchema,
@@ -44,7 +46,7 @@ sosIncidentRouter.patch(
 sosIncidentRouter.get(
   "/admin/safety/incidents",
   authenticate,
-  requirePermission("users", "read"),
+  requirePermission("sos", "read"),
   validate({ query: listSosIncidentsQuerySchema }),
   adminListIncidents,
 );
@@ -52,15 +54,23 @@ sosIncidentRouter.get(
 sosIncidentRouter.get(
   "/admin/safety/incidents/:id",
   authenticate,
-  requirePermission("users", "read"),
+  requirePermission("sos", "read"),
   validate({ params: sosIncidentParamsSchema }),
   adminGetIncident,
 );
 
 sosIncidentRouter.patch(
+  "/admin/safety/incidents/:id/cancel",
+  authenticate,
+  requirePermission("sos", "update"),
+  validate({ params: sosIncidentParamsSchema, body: adminCancelSosSchema }),
+  adminCancelIncident,
+);
+
+sosIncidentRouter.patch(
   "/admin/safety/incidents/:id",
   authenticate,
-  requirePermission("users", "update"),
+  requirePermission("sos", "update"),
   validate({ params: sosIncidentParamsSchema, body: updateSosStatusSchema }),
   adminUpdateIncidentStatus,
 );

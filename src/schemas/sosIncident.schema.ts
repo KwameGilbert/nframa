@@ -6,6 +6,7 @@ export const SOS_INCIDENT_STATUSES = [
   "servicesContacted",
   "resolved",
   "cancelledByUser",
+  "cancelledByAdmin",
 ] as const;
 
 export type SosIncidentStatus = (typeof SOS_INCIDENT_STATUSES)[number];
@@ -64,6 +65,25 @@ export const updateSosStatusSchema = z.object({
 
 export type UpdateSosStatusInput = z.infer<typeof updateSosStatusSchema>;
 
+// Staff calling an alert off (a false alarm, a duplicate, a test) is its own action rather than a status the
+// status route accepts: it can start from any status that is still in play, which "resolved" can't claim to be.
+export const adminCancelSosSchema = z
+  .object({
+    resolutionNotes: z
+      .string()
+      .trim()
+      .max(2000)
+      .optional()
+      .meta({
+        description:
+          "Why the alert is being cancelled. Staff only: the person who raised it never sees it",
+        example: "Duplicate of the alert raised from the rider's other phone.",
+      }),
+  })
+  .default({});
+
+export type AdminCancelSosInput = z.infer<typeof adminCancelSosSchema>;
+
 export const listSosIncidentsQuerySchema = z.object({
   status: z.enum(SOS_INCIDENT_STATUSES).optional(),
   userId: z.uuid().optional(),
@@ -86,7 +106,7 @@ const incidentFields = z.object({
   role: z.enum(["rider", "driver"]),
   status: z.enum(SOS_INCIDENT_STATUSES).meta({
     description:
-      "triggered: raised, nobody has looked yet; underReview: operations is on it; servicesContacted: police/ambulance (112) have been called; resolved: closed by operations; cancelledByUser: the person cancelled before services were contacted",
+      "triggered: raised, nobody has looked yet; underReview: operations is on it; servicesContacted: police/ambulance (112) have been called; resolved: closed by operations; cancelledByUser: the person cancelled before services were contacted; cancelledByAdmin: operations called the alert off (a false alarm or duplicate). The last three, with resolved, are final",
   }),
   latitude: z.number().meta({ example: 5.60372 }),
   longitude: z.number().meta({ example: -0.17837 }),
@@ -101,7 +121,10 @@ const incidentFields = z.object({
   resolvedAt: z.iso
     .datetime()
     .nullable()
-    .meta({ description: "When operations resolved it, or the person cancelled it" }),
+    .meta({
+      description:
+        "When the alert stopped being in play: operations resolved it, or it was cancelled by the person or by operations. Null while it is still open",
+    }),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -112,10 +135,12 @@ export const sosIncidentResponseSchema = incidentFields;
 // What dispatchers see.
 export const sosIncidentAdminResponseSchema = incidentFields.extend({
   resolvedByAdminId: z.uuid().nullable().meta({
-    description: "The admin who resolved it; null until then, and when the person cancelled",
+    description:
+      "The admin who resolved or cancelled it; null until then, and when the person cancelled it themselves",
   }),
   resolutionNotes: z.string().nullable().meta({
-    description: "Operations' latest notes, or the person's reason for cancelling. Staff only",
+    description:
+      "Operations' latest notes (or why they cancelled it), or the person's own reason for cancelling. Staff only",
   }),
   userFullName: z.string().nullable(),
   userPhone: z.string().nullable().meta({ example: "+233541436414" }),

@@ -15,8 +15,9 @@ registry.registerPath({
   method: "get",
   path: "/admin",
   tags: ["Admin Users"],
-  summary: "List every admin, each with their user and role (with its permissions)",
-  description: "Needs admin: read.",
+  summary: "List admin users (needs admin: read)",
+  description:
+    "Every admin whose account has not been deleted, each as { adminUser } with the admin record (roleId, department, status), the user account and the role including its permissions. Admins whose account was deleted are left out of the list; look one up by id with GET /admin/{userId} to see it. Not paginated and not in any meaningful order, so sort and filter on the client. Needs admin: read; an admin with only users: read gets 403.",
   security: [{ bearerAuth: [] }],
   responses: {
     200: successResponse(
@@ -32,9 +33,9 @@ registry.registerPath({
   method: "post",
   path: "/admin",
   tags: ["Admin Users"],
-  summary: "Create an admin user",
+  summary: "Create an admin user (needs admin: create)",
   description:
-    "Creates the admin record for an existing admin-role user (POST /users first). The admin starts as invited and can't log in until PATCHed to active. Pass password to set their initial password; otherwise they set one via /auth/password/forgot. Needs admin: create.",
+    "Second step of adding an admin: first create the account with POST /users and role admin, then call this with that userId to give it a role. userId must be an existing, non-deleted user whose role is admin and who has no admin record yet; a rider or driver is refused with 400 so nobody gets admin rights through their phone login, and a second record for the same user is a 409. roleId must be an existing role (see GET /roles), otherwise 400. The admin starts as invited and can't sign in until PATCH /admin/{userId} sets status to active; the role's permissions only count while the status is active. Pass password (8+ characters, max 72 bytes) to set their initial password; otherwise they set one via /auth/password/forgot. If the account has an email address they are sent an admin-access-granted email naming the role, and the creation is recorded in the audit trail (admin.create). Needs admin: create.",
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -56,8 +57,9 @@ registry.registerPath({
   method: "get",
   path: "/admin/{userId}",
   tags: ["Admin Users"],
-  summary: "Get an admin user by user id",
-  description: "Needs admin: read.",
+  summary: "Get an admin user by user id (needs admin: read)",
+  description:
+    "userId is the id of the admin's user account; there is no separate admin id. Returns the admin record with the user account and the role including its permissions. Unlike the list, this also returns an admin whose account was deleted (user.deletedAt is then set). A user without an admin record, such as a rider or driver, gets 404. Viewing someone else's record is written to the audit trail (admin.view); viewing your own is not. Needs admin: read even for your own record; an admin without it can still see their own role and permissions through GET /auth/me.",
   security: [{ bearerAuth: [] }],
   request: {
     params: adminUserParamsSchema,
@@ -78,9 +80,9 @@ registry.registerPath({
   method: "patch",
   path: "/admin/{userId}",
   tags: ["Admin Users"],
-  summary: "Update an admin user, including moving them to another role",
+  summary: "Update an admin user, including moving them to another role (needs admin: update)",
   description:
-    "Send only the fields to change (at least one). Setting status to suspended blocks new logins and refreshes; their admin permissions stop on their very next request. Admins can't change their own roleId or status (prevents locking yourself out). Needs admin: update.",
+    "Send only the fields to change; at least one of department, status (active, suspended or invited) and roleId is required. roleId must be an existing role (400 otherwise). Permissions are read from the database on every request, so a new role or a suspension applies to the admin's very next request without them signing in again; setting status to suspended also blocks new logins and token refreshes. Admins can't change their own roleId or status (403, to prevent locking yourself out), though they can change their own department. When the role or status really changes, the admin is sent an admin-access-changed email if they have an address; sending the value they already have changes nothing and sends no email. The before and after are recorded in the audit trail (admin.update). Needs admin: update.",
   security: [{ bearerAuth: [] }],
   request: {
     params: adminUserParamsSchema,
@@ -107,9 +109,9 @@ registry.registerPath({
   method: "delete",
   path: "/admin/{userId}",
   tags: ["Admin Users"],
-  summary: "Delete an admin user (soft delete)",
+  summary: "Delete an admin user, soft delete (needs admin: delete)",
   description:
-    "Soft-deletes the admin's user account (deletedAt is set) and signs it out of every session; their admin permissions stop on their next request. The admin record is kept for history, and their email stays reserved. Their role no longer counts them in assignedAdminsCount, but the role still can't be deleted until they're moved off it.\n\nNeeds admin: delete. You can't delete your own admin account, and only an admin with a system role (superadmin) can delete another system-role admin.",
+    "Soft-deletes the admin's user account (deletedAt is set) and revokes all of their refresh sessions; their admin permissions stop on their next request. The admin record is kept for history, and their email stays reserved. They are sent an account-deleted email if they have an address, and the deletion is recorded in the audit trail (admin.delete). The response is the admin as it is after the deletion, with user.deletedAt set. Their role no longer counts them in assignedAdminsCount, but the role still can't be deleted until they're moved off it.\n\nNeeds admin: delete. You can't delete your own admin account, and only an admin with a system role (superadmin) can delete another system-role admin. Deleting an account that is already deleted is a 409.",
   security: [{ bearerAuth: [] }],
   request: {
     params: adminUserParamsSchema,

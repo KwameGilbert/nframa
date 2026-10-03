@@ -3,16 +3,19 @@ import { MODULES } from "../config/permissions.js";
 
 export const moduleSchema = z.enum(MODULES).meta({
   description:
-    "A feature area that can have permissions: settings (global platform settings), roles (role/permission definitions), users (riders, drivers, and their vehicles), verification (driver verification documents), admin (admin user accounts — creating, viewing, updating, and deleting them, distinct from roles which only covers role definitions)",
+    "A feature area that can have permissions: activityLogs (the audit trail), admin (admin accounts — creating, viewing, updating and deleting them, distinct from roles which only covers role definitions), commutes (every driver's commutes, not just your own), payouts (drivers' payout methods), roles (role and permission definitions), settings (platform settings), trips (admin view of all trips; delete also lets staff cancel one), users (riders, drivers and their profiles, vehicles, emergency contacts, reviews, SOS incidents and payment methods), verification (driver documents and verification status)",
   example: "users",
 });
 
 // Actions left out default to false, so { "read": true } means read-only.
 export const moduleActionsInputSchema = z.object({
-  create: z.boolean().default(false),
-  read: z.boolean().default(false),
-  update: z.boolean().default(false),
-  delete: z.boolean().default(false),
+  create: z.boolean().default(false).meta({ description: "May create records in the module" }),
+  read: z.boolean().default(false).meta({ description: "May view and list records in the module" }),
+  update: z
+    .boolean()
+    .default(false)
+    .meta({ description: "May change records in the module, including review and status actions" }),
+  delete: z.boolean().default(false).meta({ description: "May delete records in the module" }),
 });
 
 const moduleActionsSchema = z.object({

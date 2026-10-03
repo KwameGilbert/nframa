@@ -3,7 +3,7 @@
 # Rider or Driver Access Token (from /auth/login or /auth/login/verify)
 @userToken = PASTE_USER_TOKEN_HERE
 
-# Admin Access Token (with users permissions)
+# Admin Access Token (with sos permissions: read for the queue, update to act on alerts)
 @adminToken = PASTE_ADMIN_TOKEN_HERE
 
 ### Trigger SOS Emergency Alert (Rider or Driver)
@@ -20,6 +20,15 @@ Content-Type: application/json
 }
 
 @incidentId = {{triggerSos.response.body.data.id}}
+
+### Cancel an incident as staff (needs sos: update; works from any status still in play)
+PATCH {{baseUrl}}/admin/safety/incidents/{{incidentId}}/cancel
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "resolutionNotes": "Duplicate of the alert raised from the rider's other phone."
+}
 
 ### Get Active SOS Alert for Current User
 GET {{baseUrl}}/safety/sos/active

@@ -8,13 +8,14 @@ import { emitToSafetyDesk, emitToUser } from "../services/socket.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 import type {
+  AdminCancelSosInput,
   CancelSosInput,
   ListSosIncidentsQuery,
   TriggerSosInput,
   UpdateSosStatusInput,
 } from "../schemas/sosIncident.schema.js";
 
-const SOS_ACTIVITY = { module: "users", targetType: "sosIncident" } as const;
+const SOS_ACTIVITY = { module: "sos", targetType: "sosIncident" } as const;
 
 function callerId(req: Request) {
   if (!req.auth) {
@@ -146,6 +147,39 @@ export async function cancelSos(req: Request, res: Response) {
     ...SOS_ACTIVITY,
     action: "sos.cancel",
     description: "Cancelled emergency SOS alert",
+    targetId: id,
+    before: existing,
+    after: incident,
+  });
+}
+
+// Staff calling an alert off from any status that is still in play, e.g. a false alarm or a duplicate.
+export async function adminCancelIncident(req: Request, res: Response) {
+  const adminId = callerId(req);
+  const { id } = req.validated.params as { id: string };
+  const { resolutionNotes } = req.validated.body as AdminCancelSosInput;
+
+  const existing = await sosIncidentModel.findById(id);
+  if (!existing) {
+    throw AppError.notFound(`SOS incident not found: ${id}`);
+  }
+
+  const incident = await sosIncidentModel.cancelByAdmin(id, adminId, resolutionNotes);
+  if (!incident) {
+    throw await refusal(id, (current) => `Can't cancel an SOS alert that is ${current.status}`);
+  }
+
+  sendSuccess(res, "SOS incident cancelled successfully", incident);
+
+  // The person's status screen follows along live; the rest of the desk drops it from the queue.
+  emitToUser(incident.userId, "sos:statusChanged", statusChangeOf(incident));
+  emitToSafetyDesk("sos:cancelled", statusChangeOf(incident));
+  void sendSosEmail(incident.userId, incident.status);
+
+  logActivity(req, {
+    ...SOS_ACTIVITY,
+    action: "sos.adminCancel",
+    description: "Cancelled an SOS incident as an admin",
     targetId: id,
     before: existing,
     after: incident,

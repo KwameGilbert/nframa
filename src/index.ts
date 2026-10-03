@@ -36,7 +36,7 @@ io.use(socketAuthenticate);
 
 // Handle Socket.IO connections — every socket that reaches here has already been authenticated by
 // socketAuthenticate above, so socket.data is populated. Each account gets one room (see socket.service.ts's
-// emitToUser), and admins who can read users also join the safety desk, joined here rather than in the middleware
+// emitToUser), and admins who can read sos also join the safety desk, joined here rather than in the middleware
 // so auth and room-membership stay separate concerns.
 io.on("connection", async (socket) => {
   const { userId, userType, role } = socket.data;

@@ -172,6 +172,31 @@ class SosIncidentModel extends BaseModel<SosIncident> {
     return row && this.sanitize(row);
   }
 
+  // Staff calling an alert off, from any status that is still in play (unlike the person, who loses the right once
+  // services are contacted). The status check is part of the UPDATE like the other transitions, so it can't overwrite
+  // a person cancelling or a dispatcher resolving at the same moment. Undefined when it was no longer in play.
+  async cancelByAdmin(
+    id: string,
+    adminId: string,
+    resolutionNotes?: string,
+  ): Promise<SosIncident | undefined> {
+    const now = new Date();
+    const [row] = await this.table
+      .where({ id })
+      .whereIn("status", ACTIVE_STATUSES)
+      .update({
+        status: "cancelledByAdmin",
+        // Keep what operations already wrote unless they gave a reason now.
+        resolutionNotes: db.raw(`coalesce(?::text, "resolutionNotes")`, [resolutionNotes ?? null]),
+        resolvedByAdminId: adminId,
+        resolvedAt: now,
+        updatedAt: now,
+      })
+      .returning("*");
+
+    return row && this.sanitize(row);
+  }
+
   async findIncidentWithUser(id: string): Promise<SosIncidentWithUser | undefined> {
     const row: JoinedRow | undefined = await this.table
       .leftJoin("users", "sosIncidents.userId", "users.id")

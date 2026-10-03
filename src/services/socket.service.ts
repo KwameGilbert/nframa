@@ -29,7 +29,7 @@ export function emitToUser(userId: string, event: string, payload?: unknown): vo
   }
 }
 
-// Admins who can read users (the permission behind the SOS dispatch queue) join this room to be alerted the moment
+// Admins who can read the sos module (the permission behind the SOS dispatch queue) join this room to be alerted the moment
 // an emergency is raised, cancelled or moved on. Rooms are only joined at connect time, so a role change applies
 // the next time the admin connects (access tokens last 15 minutes, so apps reconnect often).
 export const SAFETY_DESK_ROOM = "admin:safety";
@@ -46,7 +46,7 @@ export function emitToSafetyDesk(event: string, payload?: unknown): void {
   }
 }
 
-// Every account joins its own room; an active admin with users: read also joins the safety desk.
+// Every account joins its own room; an active admin with sos: read also joins the safety desk.
 export async function joinSocketRooms(socket: {
   data: SocketData;
   join: (room: string) => unknown;
@@ -56,7 +56,7 @@ export async function joinSocketRooms(socket: {
 
   if (userType === "admin") {
     const permissions = await rolePermissionModel.findForActiveAdmin(userId);
-    if (permissions.users?.read) {
+    if (permissions.sos?.read) {
       socket.join(SAFETY_DESK_ROOM);
     }
   }

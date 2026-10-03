@@ -13,9 +13,9 @@ registry.registerPath({
   method: "get",
   path: "/roles",
   tags: ["Roles"],
-  summary: "List roles with their permissions",
+  summary: "List roles with their permissions (needs roles: read)",
   description:
-    "Every role, its per-module permissions, and how many admins are assigned to it. Needs roles: read.",
+    "Every role, ordered by name, each with its per-module permissions and assignedAdminsCount (the admins on the role, not counting deleted accounts). Not paginated. A role's permissions only list modules where at least one action is granted, in the same shape GET /auth/me gives an admin. Needs roles: read.",
   security: [{ bearerAuth: [] }],
   responses: {
     200: successResponse("Roles retrieved successfully", roleResponseSchema.array()),
@@ -28,9 +28,9 @@ registry.registerPath({
   method: "post",
   path: "/roles",
   tags: ["Roles"],
-  summary: "Create a role with its permissions",
+  summary: "Create a role with its permissions (needs roles: create)",
   description:
-    "Creates the role and its permissions together. Omit permissions to create a role with no access yet. Needs roles: create.",
+    "Creates the role and its permissions together in one transaction, so a failure leaves neither behind. slug (a machine identifier such as support-admin) and name (the display name) must each be unique across roles, otherwise 409. permissions maps a module to { create, read, update, delete }: actions left out count as false, and modules left out or with every action false get no access. Omit permissions to create a role with no access yet and fill it in later with PATCH /roles/{id} or PUT /roles/{id}/permissions/{module}. An unknown module name is a 400. Roles created through the API are never system roles. The creation is recorded in the audit trail (role.create). Needs roles: create.",
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -50,8 +50,9 @@ registry.registerPath({
   method: "get",
   path: "/roles/{id}",
   tags: ["Roles"],
-  summary: "Get a role with its permissions",
-  description: "Needs roles: read.",
+  summary: "Get a role with its permissions (needs roles: read)",
+  description:
+    "One role in the same shape as a list item: its details, per-module permissions and assignedAdminsCount (deleted admin accounts are not counted). Needs roles: read.",
   security: [{ bearerAuth: [] }],
   request: {
     params: idParamsSchema,
@@ -69,9 +70,9 @@ registry.registerPath({
   method: "patch",
   path: "/roles/{id}",
   tags: ["Roles"],
-  summary: "Update a role and/or its permissions",
+  summary: "Update a role and/or its permissions (needs roles: update)",
   description:
-    "Send only the fields to change (at least one). permissions, if sent, replaces the role's whole permission set — to change one module, use PUT /roles/{id}/permissions/{module}. System roles can't be edited. Needs roles: update. Changes apply to assigned admins on their next request.",
+    "Send only the fields to change; at least one of slug, name, description and permissions is required. permissions, if sent, replaces the role's whole permission set, so modules left out lose their access; to change one module, use PUT /roles/{id}/permissions/{module}. Details and permissions are saved together. slug and name must stay unique across roles (409). System roles such as superadmin can't be edited (403), so nobody can strip the last full-access role. Changes apply to the role's admins on their next request, without them signing in again. The before and after are recorded in the audit trail (role.update). Needs roles: update.",
   security: [{ bearerAuth: [] }],
   request: {
     params: idParamsSchema,
@@ -93,9 +94,9 @@ registry.registerPath({
   method: "delete",
   path: "/roles/{id}",
   tags: ["Roles"],
-  summary: "Delete a role",
+  summary: "Delete a role (needs roles: delete)",
   description:
-    "Only roles with no admins assigned can be deleted — move them to another role first (PATCH /admin/{userId} with roleId). System roles can't be deleted. Needs roles: delete.",
+    "Only a role with no admin accounts on it can be deleted: move them to another role first (PATCH /admin/{userId} with roleId). Deleted admin accounts still count here because their admin records keep pointing at the role, so the 409 can appear even when assignedAdminsCount is 0. System roles can't be deleted (403). The role's permissions are removed with it, and the deletion is recorded in the audit trail (role.delete). Needs roles: delete.",
   security: [{ bearerAuth: [] }],
   request: {
     params: idParamsSchema,

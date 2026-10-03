@@ -4,7 +4,12 @@ import db from "../src/database/knex.js";
 import { flushActivityLogs } from "../src/services/activityLog.service.js";
 import { emitToSafetyDesk, emitToUser } from "../src/services/socket.service.js";
 import { api, auth, expectStatus } from "./helpers/api.js";
-import { createSignedInAdmin, loginAsSuperAdmin, signUpByPhone } from "./helpers/actors.js";
+import {
+  createPhoneAccount,
+  createSignedInAdmin,
+  loginAsSuperAdmin,
+  signUpByPhone,
+} from "./helpers/actors.js";
 import * as data from "./helpers/data.js";
 import { trackForCleanup } from "./helpers/cleanup.js";
 import { bookableCommute, bookingRider, insertTrip } from "./helpers/trips.js";
@@ -12,9 +17,10 @@ import { bookableCommute, bookingRider, insertTrip } from "./helpers/trips.js";
 type Person = { userId: string; token: string };
 
 let superAdmin: Awaited<ReturnType<typeof loginAsSuperAdmin>>;
-let dispatcher: Awaited<ReturnType<typeof createSignedInAdmin>>; // users: read, update
-let reader: Awaited<ReturnType<typeof createSignedInAdmin>>; // users: read only
-let outsiderAdmin: Awaited<ReturnType<typeof createSignedInAdmin>>; // no users access
+let dispatcher: Awaited<ReturnType<typeof createSignedInAdmin>>; // sos: read, update
+let reader: Awaited<ReturnType<typeof createSignedInAdmin>>; // sos: read only
+let outsiderAdmin: Awaited<ReturnType<typeof createSignedInAdmin>>; // no sos access
+let usersAdmin: Awaited<ReturnType<typeof createSignedInAdmin>>; // full users access, but no sos access
 let trip: Awaited<ReturnType<typeof insertTrip>>;
 let tripRider: Person;
 let tripDriver: Person;
@@ -75,14 +81,17 @@ beforeAll(async () => {
   superAdmin = await loginAsSuperAdmin();
   const [admins, shared, riderOnTrip] = await Promise.all([
     Promise.all([
-      createSignedInAdmin(superAdmin.token, { users: { read: true, update: true } }),
-      createSignedInAdmin(superAdmin.token, { users: { read: true } }),
+      createSignedInAdmin(superAdmin.token, { sos: { read: true, update: true } }),
+      createSignedInAdmin(superAdmin.token, { sos: { read: true } }),
       createSignedInAdmin(superAdmin.token, { commutes: { read: true } }),
+      createSignedInAdmin(superAdmin.token, {
+        users: { create: true, read: true, update: true, delete: true },
+      }),
     ]),
     bookableCommute(),
     bookingRider(0),
   ]);
-  [dispatcher, reader, outsiderAdmin] = admins;
+  [dispatcher, reader, outsiderAdmin, usersAdmin] = admins;
   tripDriver = shared.driver;
   tripRider = riderOnTrip;
   trip = await insertTrip(shared.commute, riderOnTrip.userId, { status: "accepted" });
@@ -428,13 +437,15 @@ describe("GET /admin/safety/incidents", () => {
     expectStatus(res, 400);
   });
 
-  it("is closed to riders and to admins without users: read", async () => {
+  it("is closed to riders and to admins without sos: read, even with full users access", async () => {
     const rider = await newRider();
 
     expectStatus(await api.get("/admin/safety/incidents").set(auth(rider.token)), 403);
-    const refused = await api.get("/admin/safety/incidents").set(auth(outsiderAdmin.token));
-    expectStatus(refused, 403);
-    expect(refused.body.error).toBe("Missing permission: read on users");
+    for (const admin of [outsiderAdmin, usersAdmin]) {
+      const refused = await api.get("/admin/safety/incidents").set(auth(admin.token));
+      expectStatus(refused, 403);
+      expect(refused.body.error).toBe("Missing permission: read on sos");
+    }
   });
 });
 
@@ -564,11 +575,11 @@ describe("PATCH /admin/safety/incidents/:id", () => {
     });
   });
 
-  it("needs users: update", async () => {
+  it("needs sos: update", async () => {
     const rider = await newRider();
     const incident = await raise(rider);
 
-    for (const admin of [reader, outsiderAdmin]) {
+    for (const admin of [reader, outsiderAdmin, usersAdmin]) {
       const res = await move(admin, incident.id, { status: "resolved" });
       expectStatus(res, 403);
     }
@@ -580,6 +591,7 @@ describe("PATCH /admin/safety/incidents/:id", () => {
     ["the old snake_case spelling", { status: "under_review" }],
     ["triggered, which is only where an alert starts", { status: "triggered" }],
     ["cancelledByUser, which only the person can set", { status: "cancelledByUser" }],
+    ["cancelledByAdmin, which has its own cancel route", { status: "cancelledByAdmin" }],
     ["no status", {}],
   ])("rejects %s", async (_name, body) => {
     const rider = await newRider();
@@ -598,6 +610,196 @@ describe("PATCH /admin/safety/incidents/:id", () => {
   });
 });
 
+// Staff act on alerts without the person being signed in, so most of these tests use an account an admin created
+// and an alert written straight in: sign-ups are rate limited per test file.
+async function seedIncident(status = "triggered") {
+  const person = await createPhoneAccount(superAdmin.token, "rider");
+  const [row] = await db("sosIncidents")
+    .insert({ userId: person.id, role: "rider", status, latitude: 5.60372, longitude: -0.17837 })
+    .returning("id");
+  trackForCleanup("sosIncidents", { id: row.id });
+  return { id: row.id as string, userId: person.id };
+}
+
+function adminCancel(admin: { token: string }, id: string, body?: object) {
+  const req = api.patch(`/admin/safety/incidents/${id}/cancel`).set(auth(admin.token));
+  return body ? req.send(body) : req;
+}
+
+describe("PATCH /admin/safety/incidents/:id/cancel", () => {
+  it("lets staff call an alert off, recording who and why, and tells the person and the desk", async () => {
+    const incident = await seedIncident();
+
+    const res = await adminCancel(dispatcher, incident.id, {
+      resolutionNotes: "Test alert from the QA phone",
+    });
+
+    expectStatus(res, 200);
+    expect(res.body.message).toBe("SOS incident cancelled successfully");
+    expect(res.body.data).toMatchObject({
+      id: incident.id,
+      status: "cancelledByAdmin",
+      resolvedByAdminId: dispatcher.userId,
+      resolutionNotes: "Test alert from the QA phone",
+    });
+    expect(res.body.data.resolvedAt).not.toBeNull();
+    expect(userEvents(incident.userId, "sos:statusChanged", incident.id)).toMatchObject([
+      [incident.userId, "sos:statusChanged", { incidentId: incident.id, status: "cancelledByAdmin" }],
+    ]);
+    expect(deskEvents("sos:cancelled", incident.id)).toHaveLength(1);
+    expect((await adminView(incident.id)).body.data.status).toBe("cancelledByAdmin");
+  });
+
+  it("is no longer in play for the person, who can raise a new alert", async () => {
+    const rider = await newRider();
+    const incident = await raise(rider);
+    expectStatus(await adminCancel(dispatcher, incident.id), 200);
+
+    const active = await api.get("/safety/sos/active").set(auth(rider.token));
+    const again = await sos(rider);
+
+    expect(active.body.data).toBeNull();
+    expectStatus(again, 201);
+    trackForCleanup("sosIncidents", { id: again.body.data.id });
+    expect(again.body.data.id).not.toBe(incident.id);
+  });
+
+  it.each(["triggered", "underReview", "servicesContacted"])(
+    "works from %s, including after emergency services were contacted, when the person no longer can",
+    async (from) => {
+      const incident = await seedIncident();
+      if (from !== "triggered") expectStatus(await move(dispatcher, incident.id, { status: from }), 200);
+
+      const res = await adminCancel(dispatcher, incident.id);
+
+      expectStatus(res, 200);
+      expect(res.body.data.status).toBe("cancelledByAdmin");
+    },
+  );
+
+  it("keeps the notes operations already wrote unless a reason is given now", async () => {
+    const [kept, replaced] = await Promise.all([seedIncident(), seedIncident()]);
+    await move(dispatcher, kept.id, { status: "underReview", resolutionNotes: "Calling the driver" });
+    await move(dispatcher, replaced.id, { status: "underReview", resolutionNotes: "Calling the driver" });
+
+    expectStatus(await adminCancel(dispatcher, kept.id), 200);
+    expectStatus(await adminCancel(dispatcher, replaced.id, { resolutionNotes: "Driver confirmed a false alarm" }), 200);
+
+    expect((await adminView(kept.id)).body.data.resolutionNotes).toBe("Calling the driver");
+    expect((await adminView(replaced.id)).body.data.resolutionNotes).toBe("Driver confirmed a false alarm");
+  });
+
+  it("is refused for an alert that is already over, saying what it is", async () => {
+    const [resolved, byUser, byAdmin] = await Promise.all([
+      seedIncident("resolved"),
+      seedIncident("cancelledByUser"),
+      seedIncident(),
+    ]);
+    expectStatus(await adminCancel(dispatcher, byAdmin.id), 200);
+
+    for (const [incident, status] of [
+      [resolved, "resolved"],
+      [byUser, "cancelledByUser"],
+      [byAdmin, "cancelledByAdmin"],
+    ] as const) {
+      const res = await adminCancel(dispatcher, incident.id);
+
+      expectStatus(res, 409);
+      expect(res.body.error).toBe(`Can't cancel an SOS alert that is ${status}`);
+    }
+  });
+
+  it("leaves a cancelled alert alone: the status route can't move it", async () => {
+    const incident = await seedIncident();
+    expectStatus(await adminCancel(dispatcher, incident.id), 200);
+
+    const res = await move(dispatcher, incident.id, { status: "resolved" });
+
+    expectStatus(res, 409);
+    expect(res.body.error).toBe("Can't move an SOS alert from cancelledByAdmin to resolved");
+  });
+
+  it("lets exactly one win when staff cancel and the person cancels together", async () => {
+    const rider = await newRider();
+    const incident = await raise(rider);
+
+    const [byAdmin, byUser] = await Promise.all([
+      adminCancel(dispatcher, incident.id),
+      cancel(rider, incident.id),
+    ]);
+
+    expect([byAdmin.status, byUser.status].sort()).toEqual([200, 409]);
+    const final = (await adminView(incident.id)).body.data.status;
+    expect(final).toBe(byAdmin.status === 200 ? "cancelledByAdmin" : "cancelledByUser");
+  });
+
+  it("lets exactly one win when staff cancel and another dispatcher resolves together", async () => {
+    const incident = await seedIncident();
+
+    const [cancelled, resolved] = await Promise.all([
+      adminCancel(dispatcher, incident.id),
+      move(dispatcher, incident.id, { status: "resolved" }),
+    ]);
+
+    expect([cancelled.status, resolved.status].sort()).toEqual([200, 409]);
+    const final = (await adminView(incident.id)).body.data.status;
+    expect(final).toBe(cancelled.status === 200 ? "cancelledByAdmin" : "resolved");
+  });
+
+  it("shows up in the list when filtering by its status", async () => {
+    const incident = await seedIncident();
+    expectStatus(await adminCancel(dispatcher, incident.id), 200);
+
+    const res = await api
+      .get(`/admin/safety/incidents?status=cancelledByAdmin&userId=${incident.userId}`)
+      .set(auth(dispatcher.token));
+
+    expectStatus(res, 200);
+    expect(res.body.data.items.map((item: { id: string }) => item.id)).toEqual([incident.id]);
+  });
+
+  it("is recorded in the audit trail with the status it changed from and to", async () => {
+    const incident = await seedIncident();
+    await adminCancel(dispatcher, incident.id, { resolutionNotes: "Duplicate" });
+
+    await flushActivityLogs();
+    const [entry] = await db("activityLogs").where({
+      action: "sos.adminCancel",
+      targetId: incident.id,
+    });
+
+    expect(entry).toMatchObject({ module: "sos", actorId: dispatcher.userId });
+    expect(entry.before.status).toBe("triggered");
+    expect(entry.after.status).toBe("cancelledByAdmin");
+    expect(entry.changedFields).toEqual(expect.arrayContaining(["status", "resolvedByAdminId"]));
+  });
+
+  it("needs sos: update, and is not for riders", async () => {
+    const [incident, rider] = [await seedIncident(), await newRider()];
+
+    for (const caller of [reader, outsiderAdmin, usersAdmin, rider]) {
+      expectStatus(await adminCancel(caller, incident.id), 403);
+    }
+    const anonymous = await api.patch(`/admin/safety/incidents/${incident.id}/cancel`);
+    expectStatus(anonymous, 401);
+    expect((await adminView(incident.id)).body.data.status).toBe("triggered");
+  });
+
+  it("404s for an unknown alert, and 400s for a bad id or notes that are too long", async () => {
+    const id = randomUUID();
+    const incident = await seedIncident();
+
+    const missing = await adminCancel(dispatcher, id);
+    const badId = await adminCancel(dispatcher, "not-a-uuid");
+    const tooLong = await adminCancel(dispatcher, incident.id, { resolutionNotes: "x".repeat(2001) });
+
+    expectStatus(missing, 404);
+    expect(missing.body.error).toBe(`SOS incident not found: ${id}`);
+    expectStatus(badId, 400);
+    expectStatus(tooLong, 400);
+  });
+});
+
 describe("the safety desk room", () => {
   const joined = async (userId: string, userType: "user" | "admin") => {
     const actual = await vi.importActual<typeof import("../src/services/socket.service.js")>(
@@ -611,12 +813,13 @@ describe("the safety desk room", () => {
     return rooms;
   };
 
-  it("admits admins who can read users, and only them", async () => {
+  it("admits admins who can read sos, and only them", async () => {
     const rider = await newRider();
 
     expect(await joined(reader.userId, "admin")).toEqual([`user:${reader.userId}`, "admin:safety"]);
     expect(await joined(dispatcher.userId, "admin")).toContain("admin:safety");
     expect(await joined(outsiderAdmin.userId, "admin")).toEqual([`user:${outsiderAdmin.userId}`]);
+    expect(await joined(usersAdmin.userId, "admin")).toEqual([`user:${usersAdmin.userId}`]);
     expect(await joined(rider.userId, "user")).toEqual([`user:${rider.userId}`]);
   });
 });

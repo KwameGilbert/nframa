@@ -7,6 +7,7 @@ export const MODULES = [
   "payouts",
   "roles",
   "settings",
+  "sos",
   "trips",
   "users",
   "verification",

@@ -693,3 +693,26 @@ describe("safety mails", () => {
     }
   });
 });
+
+describe("safety mails when staff cancel", () => {
+  it("tells the person their alert was cancelled, and that they can raise a new one", async () => {
+    const person = await signUpByPhone("rider");
+    const email = await giveEmail(person.userId);
+    trackForCleanup("sosIncidents", { userId: person.userId });
+    const triggered = await api
+      .post("/safety/sos")
+      .set(auth(person.token))
+      .send({ latitude: 5.60372, longitude: -0.17837 });
+    expectStatus(triggered, 201);
+
+    const res = await api
+      .patch(`/admin/safety/incidents/${triggered.body.data.id}/cancel`)
+      .set(auth(superAdmin.token))
+      .send({ resolutionNotes: "Duplicate" });
+
+    expectStatus(res, 200);
+    const mail = await waitForMail(email, "Your SOS alert was cancelled");
+    expect(mail.html).toContain("raise a new alert or call 112");
+    expect(mail.html).not.toContain("Duplicate");
+  });
+});

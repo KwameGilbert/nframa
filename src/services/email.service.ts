@@ -371,6 +371,11 @@ const SOS_MESSAGES: Record<string, Mail> = {
     heading: "Emergency services contacted",
     body: "our safety team has contacted emergency services about your SOS alert.",
   },
+  cancelledByAdmin: {
+    subject: "Your SOS alert was cancelled",
+    heading: "SOS alert cancelled",
+    body: "our safety team has cancelled your SOS alert. If you still need help, raise a new alert or call 112.",
+  },
   resolved: {
     subject: "Your SOS alert was closed",
     heading: "SOS alert resolved",
