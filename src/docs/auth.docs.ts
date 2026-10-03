@@ -48,7 +48,7 @@ registry.registerPath({
   path: "/auth/login/otp",
   tags: ["Auth"],
   summary: "Send a login OTP code (step 1 of OTP login)",
-  description: `For phone identifiers, if no account exists yet, role is required and this becomes a signup attempt (the account is created on successful verify). ${reRegistration} Email identifiers are login-only — admin accounts are provisioned via POST /admin, never self-signed-up. The code expires after 5 minutes. Rate limited to 5 codes per phone/email per 15 minutes.`,
+  description: `For phone identifiers, if no account exists yet, role is required and this becomes a signup attempt (the account is created on successful verify). ${reRegistration} Email identifiers are login-only — admin accounts are provisioned via POST /admin, never self-signed-up. The code expires after 5 minutes. A code requested with a phone number is texted, and also emailed to the account's email address if it has one (the same code, so either copy works; an account with no email, a deleted account signing up again and a brand-new number get the text only). The request fails only if no copy could be delivered. Rate limited to 5 codes per phone/email per 15 minutes.`,
   request: {
     body: {
       content: {

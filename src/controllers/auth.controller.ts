@@ -15,6 +15,7 @@ import { generateRefreshToken, hashRefreshToken } from "../utils/refreshToken.js
 import { signAccessToken } from "../utils/jwt.js";
 import { AppError } from "../utils/AppError.js";
 import { sendSuccess } from "../utils/response.js";
+import { createLogger } from "../config/logger.js";
 import { logActivity, type Activity } from "../services/activityLog.service.js";
 import type {
   LoginInput,
@@ -26,7 +27,8 @@ import type {
   ChangePasswordInput,
 } from "../schemas/auth.schema.js";
 
-const REFRESH_TOKEN_EXPIRES_IN_DAYS = Number(process.env.REFRESH_TOKEN_EXPIRES_IN_DAYS ?? 30);
+const logger = createLogger("app");
+const REFRESH_TOKEN_EXPIRES_IN_DAYS =Number(process.env.REFRESH_TOKEN_EXPIRES_IN_DAYS ?? 30);
 const PASSWORD_RESET_PURPOSE = "passwordReset";
 
 type Identifier =
@@ -120,11 +122,15 @@ async function resolveOtpTarget(input: Identifier) {
   return { user, identifier, channel, role: input.role, isNewUser: true };
 }
 
+// `alsoEmail`: an SMS code is mailed too, to the address on the account. The code is the same one (it is stored
+// against the phone), so either copy signs in. Delivery only fails when every copy failed — a dead SMS
+// provider shouldn't lock out someone whose email works, nor the other way round.
 async function sendOtp(
   identifier: string,
   channel: "sms" | "email",
   purpose: string,
   label: string,
+  alsoEmail?: string | null,
 ) {
   const code = generateOtpCode();
 
@@ -137,11 +143,21 @@ async function sendOtp(
   });
 
   const message = `Your Nframa ${label} is ${code}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`;
+  const deliveries =
+    channel === "sms"
+      ? [
+          sendSms(identifier, message),
+          ...(alsoEmail ? [sendOtpEmail(alsoEmail, label, code, OTP_EXPIRY_MINUTES)] : []),
+        ]
+      : [sendOtpEmail(identifier, label, code, OTP_EXPIRY_MINUTES)];
 
-  if (channel === "sms") {
-    await sendSms(identifier, message);
-  } else {
-    await sendOtpEmail(identifier, label, code, OTP_EXPIRY_MINUTES);
+  const results = await Promise.allSettled(deliveries);
+  const failed = results.filter((result) => result.status === "rejected");
+  if (failed.length === results.length) {
+    throw failed[0].reason;
+  }
+  for (const { reason } of failed) {
+    logger.warn({ err: reason, channel }, "One copy of a verification code couldn't be delivered");
   }
 
   return code;
@@ -303,7 +319,15 @@ export async function requestLoginOtp(req: Request, res: Response) {
   const input = req.validated.body as RequestOtpInput;
   const { user, identifier, channel, role } = await resolveOtpTarget(input);
 
-  const code = await sendOtp(identifier, channel, toPurpose(role), "verification code");
+  // Every sign-in code also goes to the account's email. Not to a deleted account's: a phone number that's
+  // signing up again may belong to someone new, and the old row's email isn't theirs.
+  const code = await sendOtp(
+    identifier,
+    channel,
+    toPurpose(role),
+    "verification code",
+    user && !user.deletedAt ? user.email : null,
+  );
 
   const isDev = process.env.NODE_ENV === "development";
   sendSuccess(res, "Verification code sent", isDev ? { code } : null);

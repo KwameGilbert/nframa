@@ -2,12 +2,14 @@ import { randomInt, randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { sendOtpEmail } from "../src/services/email.service.js";
 import { sendViaResend } from "../src/services/resend.service.js";
+import { sendSms } from "../src/services/sms.service.js";
 import { addDays, today } from "../src/utils/tripTime.js";
 import { api, auth, expectStatus } from "./helpers/api.js";
 import {
   createAdminAccount,
   createRole,
   createSignedInAdmin,
+  fullPhone,
   loginAsSuperAdmin,
   signUpByPhone,
   signUpDriverWithProfile,
@@ -72,9 +74,14 @@ function setStatus(userId: string, body: { status: string; reason?: string }) {
   return api.patch(`/users/${userId}/status`).set(auth(superAdmin.token)).send(body);
 }
 
+const failingPhones = new Set<string>();
+
 beforeAll(async () => {
   vi.mocked(sendViaResend).mockImplementation(async ({ to }) => {
     if (failingRecipients.has(to)) throw new Error("Resend is unavailable");
+  });
+  vi.mocked(sendSms).mockImplementation(async (to) => {
+    if (failingPhones.has(to)) throw new Error("The SMS provider is unavailable");
   });
   superAdmin = await loginAsSuperAdmin();
   [rider, driver, tripSetup, tripRider] = await Promise.all([
@@ -109,6 +116,85 @@ describe("sendOtpEmail", () => {
     await expect(sendOtpEmail(to, "verification code", "123456", 10)).rejects.toThrow(
       "Resend is unavailable",
     );
+  });
+});
+
+describe("sign-in codes", () => {
+  type Phone = { phoneCountryCode: string; phoneNumber: string };
+  const phoneOf = ({ phoneCountryCode, phoneNumber }: Phone) => ({ phoneCountryCode, phoneNumber });
+  const requestCode = (body: object) => api.post("/auth/login/otp").send(body);
+
+  async function accountWithEmail() {
+    const person = await signUpByPhone("rider");
+    return { person, phone: phoneOf(person), email: await giveEmail(person.userId) };
+  }
+
+  it("mails the code that is texted, and either copy signs in", async () => {
+    const { phone, email } = await accountWithEmail();
+    let smsCode = "";
+
+    const emailCode = await captureCode(email, async () => {
+      smsCode = await captureCode(fullPhone(phone), () => requestCode(phone).expect(200));
+    });
+
+    expect(emailCode).toBe(smsCode);
+    const signedIn = await api.post("/auth/login/verify").send({ ...phone, code: emailCode });
+    expectStatus(signedIn, 200);
+  });
+
+  it("sends an email sign-in code once, not twice", async () => {
+    const admin = await createSignedInAdmin(superAdmin.token, {});
+
+    const code = await captureCode(admin.email, () =>
+      requestCode({ email: admin.email }).expect(200),
+    );
+    await settle();
+
+    const codeMails = sentTo(admin.email).filter((m) => m.subject === "Your Nframa verification code");
+    expect(codeMails).toHaveLength(1);
+    expect(codeMails[0].html).toContain(code);
+  });
+
+  it("still delivers by SMS when the email copy can't be sent", async () => {
+    const { phone, email } = await accountWithEmail();
+    failingRecipients.add(email);
+
+    const code = await captureCode(fullPhone(phone), () => requestCode(phone).expect(200));
+
+    expect(code).toMatch(/^\d{6}$/);
+    expectStatus(await api.post("/auth/login/verify").send({ ...phone, code }), 200);
+  });
+
+  it("still delivers by email when the SMS can't be sent", async () => {
+    const { phone, email } = await accountWithEmail();
+    failingPhones.add(fullPhone(phone));
+
+    const code = await captureCode(email, () => requestCode(phone).expect(200));
+
+    expectStatus(await api.post("/auth/login/verify").send({ ...phone, code }), 200);
+  });
+
+  it("fails only when no copy could be delivered", async () => {
+    const { phone, email } = await accountWithEmail();
+    failingRecipients.add(email);
+    failingPhones.add(fullPhone(phone));
+
+    const res = await requestCode(phone);
+
+    expectStatus(res, 500);
+  });
+
+  it("doesn't mail a deleted account when its number signs up again", async () => {
+    const { person, phone, email } = await accountWithEmail();
+    await api.delete(`/users/${person.userId}`).set(auth(superAdmin.token)).expect(200);
+
+    const code = await captureCode(fullPhone(phone), () =>
+      requestCode({ ...phone, role: "rider" }).expect(200),
+    );
+    await settle();
+
+    expect(code).toMatch(/^\d{6}$/);
+    expect(sentTo(email).some((m) => /\b\d{6}\b/.test(m.html))).toBe(false);
   });
 });
 

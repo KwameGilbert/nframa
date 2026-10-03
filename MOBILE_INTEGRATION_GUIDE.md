@@ -152,6 +152,8 @@ Content-Type: application/json
 
 **`role` is required only when this phone number has no account yet, or its rider/driver account was deleted** (i.e. this will be a signup). Omit it for an existing account — it's ignored if present.
 
+**Where the code arrives:** by SMS, and also by email if the account has an email address — the same code, so tell the user to check both. A brand-new number has no email yet, so it gets the SMS only.
+
 **Response (200):**
 
 ```json
