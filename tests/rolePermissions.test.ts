@@ -101,7 +101,7 @@ describe("PUT /roles/:id/permissions/:module", () => {
     const role = await createRole(superAdmin.token);
 
     const res = await api
-      .put(`/roles/${role.id}/permissions/payouts`)
+      .put(`/roles/${role.id}/permissions/invoices`)
       .set(auth(superAdmin.token))
       .send({ read: true });
 

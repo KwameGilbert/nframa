@@ -1,144 +1,135 @@
-import { registry, successResponse, errorResponse } from "./registry.js";
+import { registry, errorResponse, successResponse } from "./registry.js";
 import {
-  createPaymentMethodSchema,
-  updatePaymentMethodSchema,
-  verifyPaymentMethodSchema,
-  paymentMethodResponseSchema,
-  paymentMethodListResponseSchema,
+  adminListPaymentMethodsQuerySchema,
   adminUpdatePaymentMethodSchema,
+  createPaymentMethodSchema,
+  listPaymentMethodsQuerySchema,
+  paymentMethodListResponseSchema,
+  paymentMethodPageResponseSchema,
+  paymentMethodParamsSchema,
+  paymentMethodResponseSchema,
+  updatePaymentMethodSchema,
 } from "../schemas/paymentMethod.schema.js";
-import { z } from "zod";
 
-registry.register("PaymentMethod", paymentMethodResponseSchema);
-registry.register("PaymentMethodList", paymentMethodListResponseSchema);
+const TAG = "Payment methods";
+const NOT_FOUND = errorResponse(
+  "No such payment method of yours",
+  "Payment method not found: 5f0c9c1e-8d3a-4b7e-9a52-6a1f0f3b2c11",
+);
 
 registry.registerPath({
   method: "post",
   path: "/payment-methods",
-  description: "Add a new payment method (card, mobile money, or bank account) for topups or payouts",
+  tags: [TAG],
+  summary: "Save a payment method",
+  description:
+    "Riders and drivers save a card, a mobile money number or a bank account. Cards are only described (brand, last four digits, expiry) — never send a full card number or CVV, they're refused. It starts as `pending`; staff verify it for now, and the payment provider will once charging is integrated. Full numbers are stored but never returned: responses show them masked to the last four digits. Details can't be edited — remove it and save a new one, which has to be verified again. Saving the same one twice answers `409`.",
   request: { body: { content: { "application/json": { schema: createPaymentMethodSchema } } } },
   responses: {
-    201: successResponse("Payment method added successfully", paymentMethodResponseSchema),
-    400: errorResponse("Invalid payment details or provider error"),
-    409: errorResponse("Payment method already exists"),
+    201: successResponse("Payment method saved successfully", paymentMethodResponseSchema),
+    400: errorResponse("Invalid details, or an extra field such as a card number"),
+    403: errorResponse("Admins can't save payment methods", "Only riders and drivers can save payment methods"),
+    409: errorResponse("Already saved", "You have already saved this payment method"),
   },
-  tags: ["payment-methods"],
-  security: [{ bearer: [] }],
 });
 
 registry.registerPath({
   method: "get",
   path: "/payment-methods",
-  description: "List user's payment methods with optional filtering by verification status",
-  request: {
-    query: z.object({
-      verified: z.coerce.boolean().optional(),
-      active: z.coerce.boolean().optional(),
-    }),
-  },
+  tags: [TAG],
+  summary: "List my payment methods",
+  description: "Your own, primary first, then newest.",
+  request: { query: listPaymentMethodsQuerySchema },
   responses: {
     200: successResponse("Payment methods retrieved successfully", paymentMethodListResponseSchema),
-    401: errorResponse("Unauthorized"),
   },
-  tags: ["payment-methods"],
-  security: [{ bearer: [] }],
 });
 
 registry.registerPath({
   method: "get",
   path: "/payment-methods/{id}",
-  description: "Get details of a specific payment method including verification status",
-  request: { params: z.object({ id: z.string().uuid() }) },
+  tags: [TAG],
+  summary: "Get one of my payment methods",
+  request: { params: paymentMethodParamsSchema },
   responses: {
     200: successResponse("Payment method retrieved successfully", paymentMethodResponseSchema),
-    404: errorResponse("Payment method not found"),
-    403: errorResponse("Not your payment method"),
+    404: NOT_FOUND,
   },
-  tags: ["payment-methods"],
-  security: [{ bearer: [] }],
 });
 
 registry.registerPath({
   method: "patch",
   path: "/payment-methods/{id}",
-  description: "Update payment method name or set as primary",
+  tags: [TAG],
+  summary: "Rename a payment method or make it my primary one",
+  description:
+    "Only the label and the primary flag can change. Only a verified method can be primary, and there is one primary per person.",
   request: {
-    params: z.object({ id: z.string().uuid() }),
+    params: paymentMethodParamsSchema,
     body: { content: { "application/json": { schema: updatePaymentMethodSchema } } },
   },
   responses: {
     200: successResponse("Payment method updated successfully", paymentMethodResponseSchema),
-    404: errorResponse("Payment method not found"),
+    404: NOT_FOUND,
+    409: errorResponse(
+      "Not verified yet",
+      "Only a verified payment method can be your primary one",
+    ),
   },
-  tags: ["payment-methods"],
-  security: [{ bearer: [] }],
-});
-
-registry.registerPath({
-  method: "post",
-  path: "/payment-methods/{id}/verify",
-  description:
-    "Verify payment method with OTP or challenge token from payment provider (Hubtel/Paystack)",
-  request: {
-    params: z.object({ id: z.string().uuid() }),
-    body: { content: { "application/json": { schema: verifyPaymentMethodSchema } } },
-  },
-  responses: {
-    200: successResponse("Payment method verified successfully", paymentMethodResponseSchema),
-    400: errorResponse("Verification failed"),
-    404: errorResponse("Payment method not found"),
-  },
-  tags: ["payment-methods"],
-  security: [{ bearer: [] }],
 });
 
 registry.registerPath({
   method: "delete",
   path: "/payment-methods/{id}",
-  description: "Remove a payment method (soft delete — sets isActive to false)",
-  request: { params: z.object({ id: z.string().uuid() }) },
+  tags: [TAG],
+  summary: "Remove a payment method",
+  description:
+    "Soft delete: the record is kept for the audit trail. A payout method that uses it is removed too.",
+  request: { params: paymentMethodParamsSchema },
   responses: {
     200: successResponse("Payment method removed successfully"),
-    404: errorResponse("Payment method not found"),
+    404: NOT_FOUND,
   },
-  tags: ["payment-methods"],
-  security: [{ bearer: [] }],
 });
 
-// Admin endpoints
 registry.registerPath({
   method: "get",
-  path: "/payment-methods/admin/users",
-  description: "Admin: List all payment methods with optional filtering",
-  request: {
-    query: z.object({
-      userId: z.string().uuid().optional(),
-      verified: z.coerce.boolean().optional(),
-      page: z.coerce.number().int().min(1).default(1),
-      limit: z.coerce.number().int().min(1).max(100).default(20),
-    }),
-  },
+  path: "/admin/payment-methods",
+  tags: [TAG],
+  summary: "List everyone's payment methods",
+  description: "Needs users: read. Numbers are masked here too.",
+  request: { query: adminListPaymentMethodsQuerySchema },
   responses: {
-    200: successResponse("Payment methods retrieved successfully", paymentMethodListResponseSchema),
-    403: errorResponse("Missing permission: read on users"),
+    200: successResponse("Payment methods retrieved successfully", paymentMethodPageResponseSchema),
   },
-  tags: ["admin", "payment-methods"],
-  security: [{ bearer: [] }],
 });
 
 registry.registerPath({
   method: "patch",
-  path: "/payment-methods/admin/users/{userId}/{id}",
-  description: "Admin: Force update or verify a user's payment method",
+  path: "/admin/payment-methods/{id}",
+  tags: [TAG],
+  summary: "Verify, reject or reset a payment method",
+  description:
+    "Needs users: update. `verified` makes it the person's primary if they have none; anything else clears its primary flag.",
   request: {
-    params: z.object({ userId: z.string().uuid(), id: z.string().uuid() }),
+    params: paymentMethodParamsSchema,
     body: { content: { "application/json": { schema: adminUpdatePaymentMethodSchema } } },
   },
   responses: {
     200: successResponse("Payment method updated successfully", paymentMethodResponseSchema),
-    403: errorResponse("Missing permission: update on users"),
-    404: errorResponse("Payment method not found"),
+    404: NOT_FOUND,
   },
-  tags: ["admin", "payment-methods"],
-  security: [{ bearer: [] }],
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/admin/payment-methods/{id}",
+  tags: [TAG],
+  summary: "Remove anyone's payment method",
+  description: "Needs users: delete. Same soft delete as the owner's.",
+  request: { params: paymentMethodParamsSchema },
+  responses: {
+    200: successResponse("Payment method removed successfully"),
+    404: NOT_FOUND,
+  },
 });

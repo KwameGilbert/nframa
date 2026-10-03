@@ -111,7 +111,7 @@ describe("POST /roles", () => {
     const res = await api
       .post("/roles")
       .set(auth(superAdmin.token))
-      .send({ ...data.role(), permissions: { payouts: { read: true } } });
+      .send({ ...data.role(), permissions: { invoices: { read: true } } });
 
     expectStatus(res, 400);
   });

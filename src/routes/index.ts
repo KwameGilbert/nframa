@@ -19,8 +19,8 @@ import { walletRouter } from "./wallet.routes.js";
 import { tripRouter } from "./trip.routes.js";
 import { docsRouter } from "./docs.routes.js";
 import { activityLogRouter } from "./activityLog.routes.js";
-import paymentMethodRouter from "./paymentMethod.routes.js";
-import payoutRouter from "./payout.routes.js";
+import { paymentMethodRouter } from "./paymentMethod.routes.js";
+import { payoutRouter } from "./payout.routes.js";
 
 export const router = Router();
 
@@ -41,11 +41,12 @@ router.use(riderProfileRouter);
 router.use(vehicleRouter);
 router.use(roleRouter);
 router.use(rolePermissionRouter);
+// Before adminUserRouter: GET /admin/:userId would otherwise match "/admin/payment-methods" and "/admin/payout-methods".
+router.use(paymentMethodRouter);
+router.use(payoutRouter);
 router.use(adminUserRouter);
 router.use(settingRouter);
 router.use(fareRouter);
 router.use(walletRouter);
-router.use("/payment-methods", paymentMethodRouter);
-router.use("/payouts", payoutRouter);
 router.use(authRouter);
 router.use(docsRouter);

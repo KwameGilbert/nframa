@@ -1,221 +1,179 @@
 import { randomUUID } from "node:crypto";
 import db from "../database/knex.js";
+import { AppError } from "../utils/AppError.js";
 import { BaseModel } from "./BaseModel.js";
+import { payoutMethodModel } from "./payoutMethod.model.js";
+import type {
+  AdminListPaymentMethodsQuery,
+  PaymentMethodType,
+  VerificationStatus,
+} from "../schemas/paymentMethod.schema.js";
 
 export interface PaymentMethod {
   id: string;
   userId: string;
   userRole: "rider" | "driver";
-  type: "card" | "mobile_money" | "bank_account";
-  provider: "hubtel" | "paystack";
-  tokenizedReference: string;
+  type: PaymentMethodType;
   displayName: string;
+  // The full details as saved. Never returned as-is: the controller masks them.
+  metadata: Record<string, unknown>;
   isVerified: boolean;
-  verificationStatus: "pending" | "verified" | "failed";
-  verificationToken?: string;
-  verificationAttempts: number;
-  verificationFailedAt?: Date;
-  verificationCompletedAt?: Date;
+  verificationStatus: VerificationStatus;
+  verificationCompletedAt: Date | null;
   isActive: boolean;
   isPrimary: boolean;
-  metadata: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
 }
 
+interface NewPaymentMethod {
+  userId: string;
+  userRole: PaymentMethod["userRole"];
+  type: PaymentMethodType;
+  identifier: string;
+  displayName: string;
+  metadata: Record<string, unknown>;
+}
+
 class PaymentMethodModel extends BaseModel<PaymentMethod> {
   protected readonly tableName = "paymentMethods";
+  // The provider's token (attached when charging is integrated) and the duplicate-check key stay internal.
+  protected readonly excludedColumns = ["tokenizedReference", "identifier", "provider"];
 
-  async create(
-    userId: string,
-    userRole: "rider" | "driver",
-    type: PaymentMethod["type"],
-    provider: PaymentMethod["provider"],
-    tokenizedReference: string,
-    displayName: string,
-    metadata: Record<string, unknown>,
-  ): Promise<PaymentMethod> {
-    const [row] = await this.table
-      .insert({
-        id: randomUUID(),
-        userId,
-        userRole,
-        type,
-        provider,
-        tokenizedReference,
-        displayName,
-        metadata: JSON.stringify(metadata),
-        verificationStatus: "pending",
-        isVerified: false,
-        isActive: true,
-        isPrimary: false,
-        verificationAttempts: 0,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+  async createMethod(input: NewPaymentMethod): Promise<PaymentMethod> {
+    try {
+      const [row] = await this.table
+        .insert({ ...input, id: randomUUID(), metadata: JSON.stringify(input.metadata) })
+        .returning("*");
+      return this.sanitize(row);
+    } catch (err) {
+      if ((err as { code?: string }).code === "23505") {
+        throw AppError.conflict("You have already saved this payment method");
+      }
+      this.handleDbError(err);
+    }
+  }
+
+  async findOwned(id: string, userId: string): Promise<PaymentMethod | undefined> {
+    const row = await this.table.where({ id, userId, isActive: true }).first();
+    return row && this.sanitize(row);
+  }
+
+  async findActive(id: string): Promise<PaymentMethod | undefined> {
+    const row = await this.table.where({ id, isActive: true }).first();
+    return row && this.sanitize(row);
+  }
+
+  async listByUser(userId: string, verified?: boolean): Promise<PaymentMethod[]> {
+    const rows = await this.table
+      .where({ userId, isActive: true })
+      .modify((query) => {
+        if (verified !== undefined) query.where({ isVerified: verified });
       })
-      .returning("*");
-
-    return this.sanitizeRow(row);
+      .orderBy([
+        { column: "isPrimary", order: "desc" },
+        { column: "createdAt", order: "desc" },
+      ]);
+    return rows.map((row: PaymentMethod) => this.sanitize(row));
   }
 
-  async findActiveByUser(userId: string, verified?: boolean) {
-    let query = this.table.where({ userId, isActive: true });
-    if (verified !== undefined) {
-      query = query.where({ isVerified: verified });
-    }
-    return query.orderBy("isPrimary", "desc").orderBy("createdAt", "desc");
-  }
+  async adminList({ userId, userRole, verificationStatus, page, limit }: AdminListPaymentMethodsQuery) {
+    const matching = () =>
+      this.table.where({ isActive: true }).modify((query) => {
+        if (userId) query.where({ userId });
+        if (userRole) query.where({ userRole });
+        if (verificationStatus) query.where({ verificationStatus });
+      });
 
-  async listByUser(userId: string, verified?: boolean, limit = 100, offset = 0) {
-    let query = this.table.where({ userId, isActive: true });
-    if (verified !== undefined) {
-      query = query.where({ isVerified: verified });
-    }
-
-    const [items, countResult] = await Promise.all([
-      query
-        .clone()
-        .orderBy("isPrimary", "desc")
-        .orderBy("createdAt", "desc")
+    const [counted, rows] = await Promise.all([
+      matching().first(db.raw("count(*)::int as total")) as Promise<{ total: number }>,
+      matching()
+        .orderBy([
+          { column: "createdAt", order: "desc" },
+          { column: "id", order: "desc" },
+        ])
         .limit(limit)
-        .offset(offset),
-      query.clone().count("* as total").first() as Promise<{ total: number }>,
+        .offset((page - 1) * limit) as Promise<PaymentMethod[]>,
     ]);
 
-    return {
-      items: items.map((r) => this.sanitizeRow(r)),
-      total: countResult?.total || 0,
-    };
+    return { totalItems: counted.total, items: rows.map((row) => this.sanitize(row)) };
   }
 
-  async setAsPrimary(id: string, userId: string): Promise<PaymentMethod | undefined> {
-    await this.table.where({ userId, isPrimary: true }).update({ isPrimary: false });
-
-    const [row] = await this.table
-      .where({ id, userId })
-      .update({ isPrimary: true, updatedAt: new Date() })
-      .returning("*");
-
-    return row && this.sanitizeRow(row);
-  }
-
-  async requestVerification(id: string, verificationToken: string): Promise<PaymentMethod | undefined> {
+  async rename(id: string, displayName: string): Promise<PaymentMethod | undefined> {
     const [row] = await this.table
       .where({ id })
-      .update({
-        verificationToken,
-        verificationStatus: "pending",
-        verificationAttempts: this.table.raw("?? + 1", ["verificationAttempts"]),
-        updatedAt: new Date(),
-      })
+      .update({ displayName, updatedAt: new Date() })
       .returning("*");
-
-    return row && this.sanitizeRow(row);
+    return row && this.sanitize(row);
   }
 
-  async verify(id: string): Promise<PaymentMethod | undefined> {
-    const [row] = await this.table
-      .where({ id })
-      .update({
-        isVerified: true,
-        verificationStatus: "verified",
-        verificationCompletedAt: new Date(),
-        verificationToken: null,
-        updatedAt: new Date(),
-      })
-      .returning("*");
-
-    return row && this.sanitizeRow(row);
-  }
-
-  async markVerificationFailed(id: string): Promise<PaymentMethod | undefined> {
-    const [row] = await this.table
-      .where({ id })
-      .update({
-        verificationStatus: "failed",
-        verificationFailedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .returning("*");
-
-    return row && this.sanitizeRow(row);
-  }
-
-  async softDelete(id: string): Promise<PaymentMethod | undefined> {
-    const [row] = await this.table
-      .where({ id })
-      .update({ isActive: false, updatedAt: new Date() })
-      .returning("*");
-
-    return row && this.sanitizeRow(row);
-  }
-
-  async findByTokenReference(userId: string, tokenReference: string): Promise<PaymentMethod | undefined> {
-    const row = await this.table
-      .where({ userId, tokenizedReference: tokenReference })
-      .first();
-
-    return row && this.sanitizeRow(row);
-  }
-
-  // Admin methods
-  async adminListAll(filters?: {
-    userId?: string;
-    userRole?: "rider" | "driver";
-    isVerified?: boolean;
-    page?: number;
-    limit?: number;
-  }) {
-    let query = this.table.clone();
-
-    if (filters?.userId) {
-      query = query.where({ userId: filters.userId });
+  // One primary per person (the unique index decides if two requests race).
+  async setPrimary(id: string, userId: string): Promise<PaymentMethod | undefined> {
+    try {
+      return await db.transaction(async (trx) => {
+        await trx(this.tableName).where({ userId, isPrimary: true }).update({ isPrimary: false });
+        const [row] = await trx(this.tableName)
+          .where({ id, userId, isActive: true })
+          .update({ isPrimary: true, updatedAt: new Date() })
+          .returning("*");
+        return row && this.sanitize(row);
+      });
+    } catch (err) {
+      this.handleDbError(err);
     }
-    if (filters?.userRole) {
-      query = query.where({ userRole: filters.userRole });
-    }
-    if (filters?.isVerified !== undefined) {
-      query = query.where({ isVerified: filters.isVerified });
-    }
-
-    const limit = filters?.limit || 20;
-    const offset = ((filters?.page || 1) - 1) * limit;
-
-    const [items, countResult] = await Promise.all([
-      query
-        .clone()
-        .orderBy("createdAt", "desc")
-        .limit(limit)
-        .offset(offset),
-      query.clone().count("* as total").first() as Promise<{ total: number }>,
-    ]);
-
-    return {
-      items: items.map((r) => this.sanitizeRow(r)),
-      total: countResult?.total || 0,
-    };
   }
 
-  async adminUpdate(
-    id: string,
-    updates: Partial<PaymentMethod>,
-  ): Promise<PaymentMethod | undefined> {
-    const [row] = await this.table
-      .where({ id })
-      .update({
-        ...updates,
-        updatedAt: new Date(),
-      })
-      .returning("*");
+  // Only a verified method can be primary: losing verification drops it, and the first one to be verified
+  // becomes primary if the person has none.
+  async setVerification(id: string, status: VerificationStatus): Promise<PaymentMethod | undefined> {
+    try {
+      return await db.transaction(async (trx) => {
+        const verified = status === "verified";
+        const [row] = await trx(this.tableName)
+          .where({ id, isActive: true })
+          .update({
+            verificationStatus: status,
+            isVerified: verified,
+            verificationCompletedAt: verified ? new Date() : null,
+            ...(verified ? {} : { isPrimary: false }),
+            updatedAt: new Date(),
+          })
+          .returning("*");
+        if (!row) return undefined;
 
-    return row && this.sanitizeRow(row);
+        if (verified && !row.isPrimary) {
+          const hasPrimary = await trx(this.tableName)
+            .where({ userId: row.userId, isPrimary: true, isActive: true })
+            .first("id");
+          if (!hasPrimary) {
+            row.isPrimary = true;
+            await trx(this.tableName).where({ id }).update({ isPrimary: true });
+          }
+        }
+        return this.sanitize(row);
+      });
+    } catch (err) {
+      this.handleDbError(err);
+    }
   }
 
-  private sanitizeRow(row: PaymentMethod): PaymentMethod {
-    return {
-      ...row,
-      metadata: typeof row.metadata === "string" ? JSON.parse(row.metadata) : row.metadata,
-    };
+  // Soft delete: the row stays for the audit trail. A payout method built on it goes with it.
+  async deactivate(id: string): Promise<PaymentMethod | undefined> {
+    return db.transaction(async (trx) => {
+      const removed: { driverUserId: string }[] = await trx("payoutMethods")
+        .where({ paymentMethodId: id })
+        .del()
+        .returning("driverUserId");
+      const [row] = await trx(this.tableName)
+        .where({ id, isActive: true })
+        .update({ isActive: false, isPrimary: false, updatedAt: new Date() })
+        .returning("*");
+
+      for (const { driverUserId } of removed) {
+        await payoutMethodModel.ensurePrimary(trx, driverUserId);
+      }
+      return row && this.sanitize(row);
+    });
   }
 }
 

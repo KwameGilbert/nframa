@@ -1,104 +1,61 @@
 import { Router } from "express";
+import { validate } from "../middlewares/validate.js";
 import { authenticate } from "../middlewares/authenticate.js";
 import { requirePermission } from "../middlewares/authorize.js";
-import { validate } from "../middlewares/validate.js";
 import {
+  adminListPayoutMethodsQuerySchema,
+  createPayoutMethodSchema,
+  payoutMethodParamsSchema,
+  updatePayoutMethodSchema,
+} from "../schemas/payout.schema.js";
+import {
+  adminListPayoutMethods,
+  adminUpdatePayoutMethod,
   createPayoutMethod,
+  deletePayoutMethod,
   listPayoutMethods,
   updatePayoutMethod,
-  triggerManualPayout,
-  getPayoutHistory,
-  getPayoutStats,
-  adminListPayoutMethods,
-  adminListPayoutHistory,
-  adminTriggerPayout,
-  adminGetPayoutStats,
 } from "../controllers/payout.controller.js";
-import {
-  createPayoutMethodSchema,
-  updatePayoutMethodSchema,
-  payoutMethodParamsSchema,
-  payoutAdminDriverIdParamsSchema,
-  listPayoutHistoryQuerySchema,
-} from "../schemas/payout.schema.js";
 
-const router = Router();
+export const payoutRouter = Router();
 
-// Driver endpoints
-router.post(
-  "/methods",
+// A driver's own payout methods: the controller only ever looks at the caller's rows.
+payoutRouter.post(
+  "/payout-methods",
   authenticate,
   validate({ body: createPayoutMethodSchema }),
   createPayoutMethod,
 );
 
-router.get("/methods", authenticate, listPayoutMethods);
+payoutRouter.get("/payout-methods", authenticate, listPayoutMethods);
 
-router.patch(
-  "/methods/:id",
+payoutRouter.patch(
+  "/payout-methods/:id",
   authenticate,
   validate({ params: payoutMethodParamsSchema, body: updatePayoutMethodSchema }),
   updatePayoutMethod,
 );
 
-router.post(
-  "/methods/:id/trigger",
+payoutRouter.delete(
+  "/payout-methods/:id",
   authenticate,
   validate({ params: payoutMethodParamsSchema }),
-  triggerManualPayout,
+  deletePayoutMethod,
 );
 
-router.get(
-  "/history",
+// Staff.
+payoutRouter.get(
+  "/admin/payout-methods",
   authenticate,
-  validate({ query: listPayoutHistoryQuerySchema }),
-  getPayoutHistory,
-);
-
-router.get("/stats", authenticate, getPayoutStats);
-
-// Admin endpoints
-router.get(
-  "/admin/users/:driverId/methods",
-  authenticate,
-  requirePermission("users", "read"),
-  validate({ params: payoutAdminDriverIdParamsSchema }),
+  requirePermission("payouts", "read"),
+  validate({ query: adminListPayoutMethodsQuerySchema }),
   adminListPayoutMethods,
 );
 
-router.get(
-  "/admin/history",
-  authenticate,
-  requirePermission("payouts", "read"),
-  validate({ query: listPayoutHistoryQuerySchema }),
-  adminListPayoutHistory,
-);
-
-router.get(
-  "/admin/users/:driverId/history",
-  authenticate,
-  requirePermission("payouts", "read"),
-  validate({
-    params: payoutAdminDriverIdParamsSchema,
-    query: listPayoutHistoryQuerySchema,
-  }),
-  adminListPayoutHistory,
-);
-
-router.post(
-  "/admin/users/:driverId/trigger",
+payoutRouter.patch(
+  "/admin/payout-methods/:id",
   authenticate,
   requirePermission("payouts", "update"),
-  validate({ params: payoutAdminDriverIdParamsSchema }),
-  adminTriggerPayout,
+  validate({ params: payoutMethodParamsSchema, body: updatePayoutMethodSchema }),
+  adminUpdatePayoutMethod,
 );
-
-router.get(
-  "/admin/users/:driverId/stats",
-  authenticate,
-  requirePermission("payouts", "read"),
-  validate({ params: payoutAdminDriverIdParamsSchema }),
-  adminGetPayoutStats,
-);
-
-export default router;

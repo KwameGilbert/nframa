@@ -1,0 +1,135 @@
+@baseUrl = http://localhost:3000
+
+# Rider or Driver Access Token (from /auth/login or /auth/login/verify)
+@userToken = PASTE_USER_TOKEN_HERE
+
+# Driver Access Token
+@driverToken = PASTE_DRIVER_TOKEN_HERE
+
+# Admin Access Token (users permissions for payment methods, payouts permissions for payout methods)
+@adminToken = PASTE_ADMIN_TOKEN_HERE
+
+### Save a mobile money number (Rider or Driver)
+# @name saveMomo
+POST {{baseUrl}}/payment-methods
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "type": "mobile_money",
+  "network": "mtn",
+  "phoneNumber": "+233541234567"
+}
+
+@paymentMethodId = {{saveMomo.response.body.data.id}}
+
+### Save a bank account
+POST {{baseUrl}}/payment-methods
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "type": "bank_account",
+  "bankCode": "GCB",
+  "bankName": "GCB Bank",
+  "accountNumber": "1234567890123",
+  "accountName": "Kwame Mensah"
+}
+
+### Save a card (described only: never send the card number or CVV)
+POST {{baseUrl}}/payment-methods
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "type": "card",
+  "brand": "Visa",
+  "lastFourDigits": "4242",
+  "expiryMonth": 12,
+  "expiryYear": 2030
+}
+
+### List my payment methods (optionally ?verified=true)
+GET {{baseUrl}}/payment-methods
+Authorization: Bearer {{userToken}}
+
+### Get one
+GET {{baseUrl}}/payment-methods/{{paymentMethodId}}
+Authorization: Bearer {{userToken}}
+
+### Rename, or make it my primary (verified methods only)
+PATCH {{baseUrl}}/payment-methods/{{paymentMethodId}}
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "displayName": "My MoMo",
+  "isPrimary": true
+}
+
+### Remove
+DELETE {{baseUrl}}/payment-methods/{{paymentMethodId}}
+Authorization: Bearer {{userToken}}
+
+### Admin: list everyone's payment methods (users: read)
+GET {{baseUrl}}/admin/payment-methods?verificationStatus=pending&page=1&limit=20
+Authorization: Bearer {{adminToken}}
+
+### Admin: verify, reject or reset a payment method (users: update)
+PATCH {{baseUrl}}/admin/payment-methods/{{paymentMethodId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "verificationStatus": "verified"
+}
+
+### Admin: remove a payment method (users: delete)
+DELETE {{baseUrl}}/admin/payment-methods/{{paymentMethodId}}
+Authorization: Bearer {{adminToken}}
+
+### Driver: choose where earnings are paid (the payment method must be verified mobile money or bank)
+# @name addPayoutMethod
+POST {{baseUrl}}/payout-methods
+Authorization: Bearer {{driverToken}}
+Content-Type: application/json
+
+{
+  "paymentMethodId": "{{paymentMethodId}}",
+  "isAutomatic": true,
+  "minimumThreshold": 50,
+  "payoutFrequency": "weekly"
+}
+
+@payoutMethodId = {{addPayoutMethod.response.body.data.id}}
+
+### Driver: list my payout methods
+GET {{baseUrl}}/payout-methods
+Authorization: Bearer {{driverToken}}
+
+### Driver: change settings or make it primary
+PATCH {{baseUrl}}/payout-methods/{{payoutMethodId}}
+Authorization: Bearer {{driverToken}}
+Content-Type: application/json
+
+{
+  "isAutomatic": false,
+  "isPrimary": true
+}
+
+### Driver: remove a payout method
+DELETE {{baseUrl}}/payout-methods/{{payoutMethodId}}
+Authorization: Bearer {{driverToken}}
+
+### Admin: list drivers' payout methods (payouts: read)
+GET {{baseUrl}}/admin/payout-methods?isAutomatic=true
+Authorization: Bearer {{adminToken}}
+
+### Admin: change a driver's payout settings (payouts: update)
+PATCH {{baseUrl}}/admin/payout-methods/{{payoutMethodId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "minimumThreshold": 100
+}

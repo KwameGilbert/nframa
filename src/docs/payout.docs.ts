@@ -1,187 +1,111 @@
-import { registry, successResponse, errorResponse } from "./registry.js";
+import { registry, errorResponse, successResponse } from "./registry.js";
 import {
+  adminListPayoutMethodsQuerySchema,
   createPayoutMethodSchema,
-  updatePayoutMethodSchema,
+  payoutMethodListResponseSchema,
+  payoutMethodPageResponseSchema,
+  payoutMethodParamsSchema,
   payoutMethodResponseSchema,
-  payoutHistoryListResponseSchema,
-  payoutStatsResponseSchema,
+  updatePayoutMethodSchema,
 } from "../schemas/payout.schema.js";
-import { z } from "zod";
 
-registry.register("PayoutMethod", payoutMethodResponseSchema);
-registry.register("PayoutHistory", payoutHistoryListResponseSchema);
-registry.register("PayoutStats", payoutStatsResponseSchema);
+const TAG = "Payout methods";
+const NOT_FOUND = errorResponse(
+  "No such payout method",
+  "Payout method not found: 5f0c9c1e-8d3a-4b7e-9a52-6a1f0f3b2c11",
+);
 
 registry.registerPath({
   method: "post",
-  path: "/payouts/methods",
+  path: "/payout-methods",
+  tags: [TAG],
+  summary: "Choose where my earnings are paid",
   description:
-    "Driver: Add a verified payment method to receive automatic or manual payouts (Hubtel/Paystack)",
+    "Drivers only. Points at one of the driver's own verified mobile money or bank account payment methods, and says whether payouts are automatic (and from what balance, how often). Only the settings are stored for now — no money moves until payouts are integrated. The first one becomes the primary.",
   request: { body: { content: { "application/json": { schema: createPayoutMethodSchema } } } },
   responses: {
     201: successResponse("Payout method added successfully", payoutMethodResponseSchema),
-    400: errorResponse("Payment method not verified or not found"),
-    403: errorResponse("Only drivers can add payout methods"),
-    409: errorResponse("Payment method already linked"),
+    400: errorResponse("A card can't receive payouts", "Payouts go to a mobile money number or a bank account, not a card"),
+    403: errorResponse("Not a driver", "Only drivers can set up payouts"),
+    404: errorResponse(
+      "Not one of the driver's payment methods",
+      "Payment method not found: 5f0c9c1e-8d3a-4b7e-9a52-6a1f0f3b2c11",
+    ),
+    409: errorResponse("Not verified, or already a payout method", "Verify this payment method before using it for payouts"),
   },
-  tags: ["payouts"],
-  security: [{ bearer: [] }],
 });
 
 registry.registerPath({
   method: "get",
-  path: "/payouts/methods",
-  description: "Driver: List configured payout methods with auto-payout settings",
+  path: "/payout-methods",
+  tags: [TAG],
+  summary: "List my payout methods",
+  description: "Primary first, then newest.",
   responses: {
-    200: successResponse("Payout methods retrieved successfully", payoutMethodResponseSchema),
-    403: errorResponse("Only drivers can view payout methods"),
+    200: successResponse("Payout methods retrieved successfully", payoutMethodListResponseSchema),
   },
-  tags: ["payouts"],
-  security: [{ bearer: [] }],
 });
 
 registry.registerPath({
   method: "patch",
-  path: "/payouts/methods/{id}",
-  description: "Driver: Update payout method (set primary, enable/disable automatic, adjust threshold)",
+  path: "/payout-methods/{id}",
+  tags: [TAG],
+  summary: "Change my payout settings or primary method",
   request: {
-    params: z.object({ id: z.string().uuid() }),
+    params: payoutMethodParamsSchema,
     body: { content: { "application/json": { schema: updatePayoutMethodSchema } } },
   },
   responses: {
     200: successResponse("Payout method updated successfully", payoutMethodResponseSchema),
-    404: errorResponse("Payout method not found"),
+    404: NOT_FOUND,
+    409: errorResponse(
+      "Its payment method isn't verified",
+      "Only a verified payment method can be the primary payout method",
+    ),
   },
-  tags: ["payouts"],
-  security: [{ bearer: [] }],
 });
 
 registry.registerPath({
-  method: "post",
-  path: "/payouts/methods/{id}/trigger",
-  description:
-    "Driver: Manually trigger immediate payout to verified payment method using available wallet balance",
-  request: { params: z.object({ id: z.string().uuid() }) },
+  method: "delete",
+  path: "/payout-methods/{id}",
+  tags: [TAG],
+  summary: "Remove a payout method",
+  description: "The payment method itself stays. If it was the primary, the newest remaining one takes over.",
+  request: { params: payoutMethodParamsSchema },
   responses: {
-    200: successResponse("Payout initiated successfully", payoutMethodResponseSchema),
-    400: errorResponse("Insufficient balance or payment method not verified"),
-    404: errorResponse("Payout method not found"),
-    409: errorResponse("Transfer failed"),
+    200: successResponse("Payout method removed successfully"),
+    404: NOT_FOUND,
   },
-  tags: ["payouts"],
-  security: [{ bearer: [] }],
 });
 
 registry.registerPath({
   method: "get",
-  path: "/payouts/history",
-  description: "Driver: View payout history with optional status filter",
+  path: "/admin/payout-methods",
+  tags: [TAG],
+  summary: "List drivers' payout methods",
+  description: "Needs payouts: read.",
+  request: { query: adminListPayoutMethodsQuerySchema },
+  responses: {
+    200: successResponse("Payout methods retrieved successfully", payoutMethodPageResponseSchema),
+  },
+});
+
+registry.registerPath({
+  method: "patch",
+  path: "/admin/payout-methods/{id}",
+  tags: [TAG],
+  summary: "Change a driver's payout settings",
+  description: "Needs payouts: update.",
   request: {
-    query: z.object({
-      status: z.enum(["pending", "processing", "completed", "failed"]).optional(),
-      initiationType: z.enum(["manual", "automatic"]).optional(),
-      page: z.coerce.number().int().min(1).default(1),
-      limit: z.coerce.number().int().min(1).max(100).default(20),
-    }),
+    params: payoutMethodParamsSchema,
+    body: { content: { "application/json": { schema: updatePayoutMethodSchema } } },
   },
   responses: {
-    200: successResponse("Payout history retrieved successfully", payoutHistoryListResponseSchema),
+    200: successResponse("Payout method updated successfully", payoutMethodResponseSchema),
+    404: NOT_FOUND,
+    409: errorResponse(
+      "Its payment method isn't verified",
+      "Only a verified payment method can be the primary payout method",
+    ),
   },
-  tags: ["payouts"],
-  security: [{ bearer: [] }],
-});
-
-registry.registerPath({
-  method: "get",
-  path: "/payouts/stats",
-  description: "Driver: View payout statistics (total paid, pending, failed, last payout date)",
-  responses: {
-    200: successResponse("Payout statistics retrieved successfully", payoutStatsResponseSchema),
-  },
-  tags: ["payouts"],
-  security: [{ bearer: [] }],
-});
-
-// Admin endpoints
-registry.registerPath({
-  method: "get",
-  path: "/payouts/admin/users/{driverId}/methods",
-  description: "Admin: View driver's payout methods and settings",
-  request: { params: z.object({ driverId: z.string().uuid() }) },
-  responses: {
-    200: successResponse("Payout methods retrieved successfully"),
-    403: errorResponse("Missing permission: read on users"),
-    404: errorResponse("Driver not found"),
-  },
-  tags: ["admin", "payouts"],
-  security: [{ bearer: [] }],
-});
-
-registry.registerPath({
-  method: "get",
-  path: "/payouts/admin/history",
-  description: "Admin: View all payout history with optional filtering",
-  request: {
-    query: z.object({
-      driverId: z.string().uuid().optional(),
-      status: z.enum(["pending", "processing", "completed", "failed"]).optional(),
-      page: z.coerce.number().int().min(1).default(1),
-      limit: z.coerce.number().int().min(1).max(100).default(20),
-    }),
-  },
-  responses: {
-    200: successResponse("Payout history retrieved successfully", payoutHistoryListResponseSchema),
-    403: errorResponse("Missing permission: read on payouts"),
-  },
-  tags: ["admin", "payouts"],
-  security: [{ bearer: [] }],
-});
-
-registry.registerPath({
-  method: "get",
-  path: "/payouts/admin/users/{driverId}/history",
-  description: "Admin: View specific driver's payout history",
-  request: {
-    params: z.object({ driverId: z.string().uuid() }),
-    query: z.object({
-      status: z.enum(["pending", "processing", "completed", "failed"]).optional(),
-      page: z.coerce.number().int().min(1).default(1),
-      limit: z.coerce.number().int().min(1).max(100).default(20),
-    }),
-  },
-  responses: {
-    200: successResponse("Payout history retrieved successfully", payoutHistoryListResponseSchema),
-    403: errorResponse("Missing permission: read on payouts"),
-  },
-  tags: ["admin", "payouts"],
-  security: [{ bearer: [] }],
-});
-
-registry.registerPath({
-  method: "post",
-  path: "/payouts/admin/users/{driverId}/trigger",
-  description: "Admin: Manually trigger payout for driver using their primary method and wallet balance",
-  request: { params: z.object({ driverId: z.string().uuid() }) },
-  responses: {
-    200: successResponse("Payout initiated successfully"),
-    400: errorResponse("No primary payout method or insufficient balance"),
-    403: errorResponse("Missing permission: update on payouts"),
-    404: errorResponse("Driver not found"),
-    409: errorResponse("Transfer failed"),
-  },
-  tags: ["admin", "payouts"],
-  security: [{ bearer: [] }],
-});
-
-registry.registerPath({
-  method: "get",
-  path: "/payouts/admin/users/{driverId}/stats",
-  description: "Admin: View driver payout statistics",
-  request: { params: z.object({ driverId: z.string().uuid() }) },
-  responses: {
-    200: successResponse("Payout statistics retrieved successfully", payoutStatsResponseSchema),
-    403: errorResponse("Missing permission: read on payouts"),
-  },
-  tags: ["admin", "payouts"],
-  security: [{ bearer: [] }],
 });
