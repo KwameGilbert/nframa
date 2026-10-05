@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import db from "../../src/database/knex.js";
 import { flushActivityLogs } from "../../src/services/activityLog.service.js";
+import { flushNotifications } from "../../src/services/notification.service.js";
 
 type Criteria = Record<string, string>;
 
@@ -51,8 +52,8 @@ const DELETE_ORDER = [
 
 // Run once per test file, from tests/setup.ts's afterAll, before that file's connection pool closes.
 export async function cleanupTestData(): Promise<void> {
-  // TODO(push step 3): await flushNotifications() here once the dispatcher exists, so no in-flight push writes
-  // an inbox row after its user is deleted.
+  // A delivery still in flight would write an inbox row after its user is deleted.
+  await flushNotifications();
   await flushActivityLogs();
   await db("activityLogs").where("requestId", "like", `${REQUEST_ID_PREFIX}%`).del();
 

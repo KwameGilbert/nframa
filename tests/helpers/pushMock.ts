@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID, createECDH } from "node:crypto";
-import { Expo } from "expo-server-sdk";
+import { Expo, type ExpoPushErrorReceipt } from "expo-server-sdk";
 import type { ExpoReceiptResult, ExpoSendResult } from "../../src/services/expo.service.js";
 import type { WebPushResult, WebPushSubscription } from "../../src/services/webPush.service.js";
 
@@ -7,14 +7,7 @@ import type { WebPushResult, WebPushSubscription } from "../../src/services/webP
 // tests each steer and inspect only their own devices. Nothing is ever cleared: filter by recipient instead.
 // setup.ts imports only this file: it must never import the database or cleanup.ts (an import cycle hangs vitest).
 
-export type ExpoErrorCode =
-  | "DeviceNotRegistered"
-  | "InvalidCredentials"
-  | "MessageRateExceeded"
-  | "MessageTooBig"
-  | "ProviderError"
-  | "DeveloperError"
-  | "ExpoError";
+export type ExpoErrorCode = NonNullable<NonNullable<ExpoPushErrorReceipt["details"]>["error"]>;
 
 // "throw" makes the whole Expo call reject; an error code makes that token's ticket (or receipt) fail with it.
 type ExpoOutcome = "ok" | "throw" | ExpoErrorCode;

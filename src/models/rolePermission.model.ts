@@ -3,6 +3,7 @@ import db from "../database/knex.js";
 import { BaseModel } from "./BaseModel.js";
 import {
   MODULES,
+  type Action,
   type Module,
   type ModuleActions,
   type PermissionMap,
@@ -20,6 +21,13 @@ export interface RolePermissionRow {
   createdAt: Date;
   updatedAt: Date;
 }
+
+const ACTION_COLUMNS = {
+  create: "canCreate",
+  read: "canRead",
+  update: "canUpdate",
+  delete: "canDelete",
+} as const satisfies Record<Action, keyof RolePermissionRow>;
 
 function toActions(row: RolePermissionRow): ModuleActions {
   return { create: row.canCreate, read: row.canRead, update: row.canUpdate, delete: row.canDelete };
@@ -70,17 +78,31 @@ class RolePermissionModel extends BaseModel<RolePermissionRow> {
     );
   }
 
-  // Only an admin who may act right now gets permissions: user row active and not soft-deleted, admin record
-  // active. So suspending an admin cuts their access on their next request, not when their token expires.
-  async findForActiveAdmin(userId: string): Promise<PermissionMap> {
-    const rows: RolePermissionRow[] = await db("rolePermissions as rp")
+  // Only grants of an admin who may act right now: user row active and not soft-deleted, admin record active. So
+  // suspending an admin cuts their access on their next request, not when their token expires.
+  private activeAdminGrants() {
+    return db("rolePermissions as rp")
       .join("adminUsers as a", "a.roleId", "rp.roleId")
       .join("users as u", "u.id", "a.userId")
-      .where({ "a.userId": userId, "a.status": "active", "u.status": "active" })
-      .whereNull("u.deletedAt")
+      .where({ "a.status": "active", "u.status": "active" })
+      .whereNull("u.deletedAt");
+  }
+
+  async findForActiveAdmin(userId: string): Promise<PermissionMap> {
+    const rows: RolePermissionRow[] = await this.activeAdminGrants()
+      .where({ "a.userId": userId })
       .select("rp.*");
 
     return toPermissionMap(rows);
+  }
+
+  // Every admin who may do this on the module right now (e.g. who a desk alert goes to), by the same rules.
+  async adminUserIdsWithPermission(module: Module, action: Action = "read"): Promise<string[]> {
+    const rows: { userId: string }[] = await this.activeAdminGrants()
+      .where({ "rp.module": module, [`rp.${ACTION_COLUMNS[action]}`]: true })
+      .select("a.userId");
+
+    return rows.map((row) => row.userId);
   }
 
   // Replaces the role's whole permission set. Modules with every action false are dropped, not stored.

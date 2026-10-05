@@ -15,6 +15,21 @@ export interface Notification {
   createdAt: Date;
 }
 
+export type NotificationView = Omit<Notification, "userId">;
+
+// What clients see of an inbox row (the API and the notification:new event).
+export function toNotificationView({
+  id,
+  type,
+  title,
+  body,
+  data,
+  readAt,
+  createdAt,
+}: Notification): NotificationView {
+  return { id, type, title, body, data, readAt, createdAt };
+}
+
 export interface NewNotification {
   userId: string;
   type: NotificationType;

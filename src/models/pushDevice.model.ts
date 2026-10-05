@@ -87,11 +87,10 @@ class PushDeviceModel extends BaseModel<PushDevice> {
   async listTargetsForUsers(userIds: string[], staleDays: number): Promise<PushDevice[]> {
     if (userIds.length === 0) return [];
 
-    const stale = () =>
-      this.table
-        .whereIn("userId", userIds)
-        .whereRaw(`"updatedAt" < now() - (? * interval '1 day')`, [staleDays]);
-    await stale().del();
+    await this.table
+      .whereIn("userId", userIds)
+      .whereRaw(`"updatedAt" < now() - (? * interval '1 day')`, [staleDays])
+      .del();
 
     return this.table.whereIn("userId", userIds).orderBy("createdAt");
   }
