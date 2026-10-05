@@ -23,6 +23,8 @@ export function trackForCleanup(table: string, criteria: Criteria): void {
 // verificationDocuments/verificationDocumentHistory/rolePermissions cascade on their own when their
 // parent is deleted; they're listed anyway so the order stays self-documenting.
 const DELETE_ORDER = [
+  "notifications", // cascades with its user; listed first so the order stays self-documenting
+  "pushDevices", // cascades with its user; listed first so the order stays self-documenting
   "tripReports", // cascades with its trip or users; listed first so the order stays self-documenting
   "tripReviews", // cascades with its trip or user; listed first so the order stays self-documenting
   "payoutHistory", // FK on payoutMethods and users
@@ -49,6 +51,8 @@ const DELETE_ORDER = [
 
 // Run once per test file, from tests/setup.ts's afterAll, before that file's connection pool closes.
 export async function cleanupTestData(): Promise<void> {
+  // TODO(push step 3): await flushNotifications() here once the dispatcher exists, so no in-flight push writes
+  // an inbox row after its user is deleted.
   await flushActivityLogs();
   await db("activityLogs").where("requestId", "like", `${REQUEST_ID_PREFIX}%`).del();
 

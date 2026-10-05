@@ -142,6 +142,21 @@ export const TRIP_SETTINGS = {
     description:
       "Hours after a trip ends during which its rider or driver can still report the other person (a report can always be filed while the trip is accepted or under way)",
   },
+  "notifications.retentionDays": {
+    type: "number",
+    min: 7,
+    max: 3650,
+    default: 90,
+    description:
+      "Days a notification stays in a user's inbox; older ones are deleted whenever that user gets a new one",
+  },
+  "push.deviceStaleDays": {
+    type: "number",
+    min: 7,
+    default: 45,
+    description:
+      "Days after which a push device that hasn't re-registered is ignored and deleted (apps re-register on every launch, and refresh tokens last 30 days, so a device unseen this long belongs to a dead session)",
+  },
   "wallet.minTopUp": {
     type: "number",
     min: 0,

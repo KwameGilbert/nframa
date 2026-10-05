@@ -63,6 +63,27 @@ vi.mock("../src/services/paystack.service.js", async (importActual) => {
   };
 });
 
+// No test calls Expo: sending and receipts go to tests/helpers/pushMock.ts, which tests steer and inspect.
+vi.mock("../src/services/expo.service.js", async () => {
+  const { expoMock } = await import("./helpers/pushMock.js");
+  return {
+    sendExpoPush: vi.fn(expoMock.send),
+    fetchExpoReceipts: vi.fn(expoMock.receipts),
+  };
+});
+
+// No test calls a web push service: sending goes to tests/helpers/pushMock.ts. Whether web push is configured and the
+// public key stay real, against this throwaway VAPID pair (made once with `web-push generate-vapid-keys`).
+process.env.VAPID_PUBLIC_KEY =
+  "BBv2rBboQDgcEFSLIhO3tGkrB_qZfKj12yc-3LcDF_WfV11qi84vrtA7nWYnbN3xvIdyf_mdgqs3Gk4iKs_n7Ek";
+process.env.VAPID_PRIVATE_KEY = "4ppL-G9bR_S6rQp5aKDsWxbz_3WJ70dNFyGSeWreA4k";
+process.env.VAPID_SUBJECT = "mailto:test@example.com";
+vi.mock("../src/services/webPush.service.js", async (importActual) => {
+  const actual = await importActual<typeof import("../src/services/webPush.service.js")>();
+  const { webPushMock } = await import("./helpers/pushMock.js");
+  return { ...actual, sendWebPush: vi.fn(webPushMock.send) };
+});
+
 beforeAll(async () => {
   // Run any pending migrations and seeds before tests start
   await db.migrate.latest();

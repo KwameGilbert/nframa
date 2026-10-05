@@ -18,6 +18,7 @@ export const ACTIVITY_MODULES = [
   "payouts",
   "sos",
   "reports",
+  "notifications",
   "activityLogs",
 ] as const;
 
@@ -25,7 +26,7 @@ export type ActivityModule = (typeof ACTIVITY_MODULES)[number];
 
 export const activityModuleSchema = z.enum(ACTIVITY_MODULES).meta({
   description:
-    "Area of the app the action belongs to: auth (sign-up, sign-in, sign-out, passwords), users (rider/driver/admin accounts), admin (admin records), roles (roles and their permissions), settings, verification (documents and driver verification status), drivers, riders, vehicles, commutes (driver commutes), trips (rider trips on a commute), wallets (wallet top-ups and other money movements), payouts (drivers' payout methods), sos (SOS alerts and the safety desk), reports (trip misconduct and safety reports), activityLogs (audit trail views)",
+    "Area of the app the action belongs to: auth (sign-up, sign-in, sign-out, passwords), users (rider/driver/admin accounts), admin (admin records), roles (roles and their permissions), settings, verification (documents and driver verification status), drivers, riders, vehicles, commutes (driver commutes), trips (rider trips on a commute), wallets (wallet top-ups and other money movements), payouts (drivers' payout methods), sos (SOS alerts and the safety desk), reports (trip misconduct and safety reports), notifications (push devices and the notification inbox), activityLogs (audit trail views)",
   example: "settings",
 });
 
