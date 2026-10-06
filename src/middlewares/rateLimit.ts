@@ -73,3 +73,7 @@ export const sosLimit = limitBy(byUser, 60);
 export const tripBoardLimit = limitBy(byUser, 60);
 // Per account. Filing a report uploads images, so this keeps one account from filling the storage.
 export const reportLimit = limitBy(byUser, 20);
+// Per account. The apps register their push token on every launch and sign-in: a flood guard well above that.
+export const deviceLimit = limitBy(byUser, 60);
+// Per account. Reading and clearing one's own inbox only touches the database.
+export const notificationLimit = limitBy(byUser, 300);

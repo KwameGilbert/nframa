@@ -16,6 +16,7 @@ import {
   requestOtpSchema,
   verifyOtpSchema,
   refreshTokenSchema,
+  logoutSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
   changePasswordSchema,
@@ -57,7 +58,7 @@ authRouter.post(
   refreshSession,
 );
 authRouter.get("/auth/me", authenticate, getMe);
-authRouter.post("/auth/logout", validate({ body: refreshTokenSchema }), logout);
+authRouter.post("/auth/logout", validate({ body: logoutSchema }), logout);
 authRouter.post(
   "/auth/password/forgot",
   authIpLimit,

@@ -15,6 +15,9 @@ const connection: Knex.PgConnectionConfig = {
 const base: Knex.Config = {
   client: "pg",
   connection,
+  // A failed query's error message shows its SQL with placeholders, not the bound values: errors are logged, and
+  // the values are tokens, phone numbers and emails.
+  compileSqlOnError: false,
   migrations: {
     directory: "./src/database/migrations",
   },

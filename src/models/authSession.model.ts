@@ -1,6 +1,7 @@
 import type { Knex } from "knex";
 import db from "../database/knex.js";
 import { BaseModel } from "./BaseModel.js";
+import { pushDeviceModel } from "./pushDevice.model.js";
 
 export interface AuthSession {
   id: string;
@@ -44,8 +45,21 @@ class AuthSessionModel extends BaseModel<AuthSession> {
     return this.updateById(id, { lastUsedAt: new Date() });
   }
 
-  revoke(id: string) {
-    return this.updateById(id, { revokedAt: new Date() });
+  revoke(id: string, trx: Knex = db) {
+    return trx(this.tableName).where({ id }).update({ revokedAt: new Date() });
+  }
+
+  // Logout: revokes the session and removes the push device the app named (the session user's own only) in one
+  // transaction, so a failure leaves both in place and a retried logout still finds the session.
+  async signOut(session: Pick<AuthSession, "id" | "userId">, pushToken?: string): Promise<void> {
+    if (!pushToken) {
+      await this.revoke(session.id);
+      return;
+    }
+    await db.transaction(async (trx) => {
+      await this.revoke(session.id, trx);
+      await pushDeviceModel.removeByToken(pushToken, session.userId, trx);
+    });
   }
 
   revokeAllForUser(userId: string, trx: Knex = db) {

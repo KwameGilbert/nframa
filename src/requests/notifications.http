@@ -1,0 +1,27 @@
+@baseUrl = http://localhost:3000
+
+# Any signed-in user's Access Token: the inbox is always the caller's own
+@userToken = PASTE_USER_TOKEN_HERE
+
+### My inbox, newest first, with unreadCount (filters: unread=true|false, type; page, limit up to 50)
+# @name listNotifications
+GET {{baseUrl}}/notifications?limit=20
+Authorization: Bearer {{userToken}}
+
+@notificationId = {{listNotifications.response.body.data.items[0].id}}
+
+### Only unread ones of one type
+GET {{baseUrl}}/notifications?unread=true&type=trip.accepted
+Authorization: Bearer {{userToken}}
+
+### Mark one read (idempotent; a push's data.notificationId says which)
+POST {{baseUrl}}/notifications/{{notificationId}}/read
+Authorization: Bearer {{userToken}}
+
+### Mark all read (then reset the badge to unreadCount)
+POST {{baseUrl}}/notifications/read-all
+Authorization: Bearer {{userToken}}
+
+### Delete one
+DELETE {{baseUrl}}/notifications/{{notificationId}}
+Authorization: Bearer {{userToken}}

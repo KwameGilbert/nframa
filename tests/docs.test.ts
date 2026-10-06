@@ -158,7 +158,19 @@ describe("OpenAPI error examples", () => {
 });
 
 describe("OpenAPI HTTP verbs", () => {
-  const ACTIONS = ["accept", "decline", "cancel", "withdraw", "complete", "arrived", "board", "no-show"];
+  const ACTIONS = [
+    "accept",
+    "decline",
+    "cancel",
+    "withdraw",
+    "complete",
+    "arrived",
+    "board",
+    "no-show",
+    "read",
+    "read-all",
+    "unregister",
+  ];
 
   async function operations() {
     const res = await api.get("/openapi.json");

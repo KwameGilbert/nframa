@@ -38,11 +38,11 @@ export interface NewNotification {
   data?: Record<string, string>;
 }
 
-export interface ListNotificationsQuery {
+export interface NotificationListFilter {
   page: number;
   limit: number;
   unread?: boolean;
-  type?: string;
+  type?: NotificationType;
 }
 
 class NotificationModel extends BaseModel<Notification> {
@@ -57,7 +57,7 @@ class NotificationModel extends BaseModel<Notification> {
 
   async listForUser(
     userId: string,
-    { page, limit, unread, type }: ListNotificationsQuery,
+    { page, limit, unread, type }: NotificationListFilter,
   ): Promise<{ totalItems: number; items: Notification[] }> {
     const matching = () =>
       this.table.where({ userId }).modify((query) => {

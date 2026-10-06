@@ -21,6 +21,15 @@ export interface PushDevice {
   updatedAt: Date;
 }
 
+// What clients (and the audit trail) see of a device: never the token or keys.
+export const DEVICE_VIEW_COLUMNS = ["id", "platform", "createdAt", "updatedAt"] as const;
+
+export type PushDeviceView = Pick<PushDevice, (typeof DEVICE_VIEW_COLUMNS)[number]>;
+
+export function toDeviceView({ id, platform, createdAt, updatedAt }: PushDeviceView): PushDeviceView {
+  return { id, platform, createdAt, updatedAt };
+}
+
 export interface RegisterDeviceInput {
   platform: PushPlatform;
   token: string;
@@ -99,9 +108,18 @@ class PushDeviceModel extends BaseModel<PushDevice> {
     return this.listTargetsForUsers([userId], staleDays);
   }
 
-  // Only the caller's own row, so a token someone else holds can't be removed by guessing it.
-  async removeByToken(token: string, userId: string): Promise<boolean> {
-    return (await this.table.where({ token, userId }).del()) > 0;
+  // Only the caller's own row, so a token someone else holds can't be removed by guessing it. Returns the API view
+  // of what it removed, undefined when nothing matched.
+  async removeByToken(
+    token: string,
+    userId: string,
+    trx: Knex = db,
+  ): Promise<PushDeviceView | undefined> {
+    const [row] = await trx(this.tableName)
+      .where({ token, userId })
+      .del()
+      .returning([...DEVICE_VIEW_COLUMNS]);
+    return row;
   }
 
   removeByTokens(tokens: string[]): Promise<number> {

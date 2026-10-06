@@ -5,6 +5,7 @@ import { riderProfileResponseSchema } from "./riderProfile.schema.js";
 import { adminUserResponseSchema } from "./adminUser.schema.js";
 import { permissionsSchema } from "./role.schema.js";
 import { emailSchema, passwordSchema, phoneCountryCodeSchema } from "./common.schema.js";
+import { pushTokenSchema } from "./device.schema.js";
 
 const otpCodeSchema = z
   .string()
@@ -54,6 +55,16 @@ export const refreshTokenSchema = z.object({
 });
 
 export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
+
+export const logoutSchema = refreshTokenSchema.extend({
+  pushToken: pushTokenSchema.optional().meta({
+    description:
+      "This device's push token (Expo token, or a browser's subscription endpoint), so it stops getting push notifications for this account. Only removed from the session's own account",
+    example: "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]",
+  }),
+});
+
+export type LogoutInput = z.infer<typeof logoutSchema>;
 
 export const forgotPasswordSchema = z.object({
   email: emailSchema,

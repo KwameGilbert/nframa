@@ -1,0 +1,59 @@
+@baseUrl = http://localhost:3000
+
+# Any signed-in user's Access Token (rider, driver or admin): devices are always the caller's own
+@userToken = PASTE_USER_TOKEN_HERE
+
+# The refresh token from the same sign-in (for logout)
+@refreshToken = PASTE_REFRESH_TOKEN_HERE
+
+# The phone's Expo push token (getExpoPushTokenAsync({ projectId }) on a physical device)
+@expoToken = ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]
+
+### Register a phone (on every sign-in, cold start, foreground and token change)
+POST {{baseUrl}}/devices
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "platform": "android",
+  "token": "{{expoToken}}"
+}
+
+### Web: get the key for pushManager.subscribe (null = web push not configured)
+GET {{baseUrl}}/push/vapid-key
+Authorization: Bearer {{userToken}}
+
+### Register a browser: send subscription.toJSON() as is
+POST {{baseUrl}}/devices
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "platform": "web",
+  "subscription": {
+    "endpoint": "https://fcm.googleapis.com/fcm/send/dQw4w9WgXcQ:APA91bHPRgkF3JUikC4ENAHEeMrd41Zxv3hVZjC9KtT8OvPVGJ",
+    "expirationTime": null,
+    "keys": {
+      "p256dh": "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM",
+      "auth": "tBHItJI5svbpez7KI4CCXg"
+    }
+  }
+}
+
+### Stop pushes to a device without signing out (always 200)
+POST {{baseUrl}}/devices/unregister
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "token": "{{expoToken}}"
+}
+
+### Sign out and stop pushes to this device in one call (always 200)
+POST {{baseUrl}}/auth/logout
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}",
+  "pushToken": "{{expoToken}}"
+}

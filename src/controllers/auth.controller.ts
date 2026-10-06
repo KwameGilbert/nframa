@@ -22,6 +22,7 @@ import type {
   RequestOtpInput,
   VerifyOtpInput,
   RefreshTokenInput,
+  LogoutInput,
   ForgotPasswordInput,
   ResetPasswordInput,
   ChangePasswordInput,
@@ -430,11 +431,12 @@ export async function refreshSession(req: Request, res: Response) {
 }
 
 export async function logout(req: Request, res: Response) {
-  const { refreshToken } = req.validated.body as RefreshTokenInput;
+  const { refreshToken, pushToken } = req.validated.body as LogoutInput;
   const session = await authSessionModel.findActiveByTokenHash(hashRefreshToken(refreshToken));
 
+  // The refresh token is what authorizes removing the device, so a dead one removes nothing.
   if (session) {
-    await authSessionModel.revoke(session.id);
+    await authSessionModel.signOut(session, pushToken);
   }
 
   sendSuccess(res, "Logged out successfully");

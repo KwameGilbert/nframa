@@ -4,6 +4,7 @@ import {
   requestOtpSchema,
   verifyOtpSchema,
   refreshTokenSchema,
+  logoutSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
   changePasswordSchema,
@@ -182,16 +183,20 @@ registry.registerPath({
   method: "post",
   path: "/auth/logout",
   tags: ["Auth"],
-  summary: "Revoke a refresh token session",
-  description: "Always 204, even if the refresh token was already invalid.",
+  summary: "Revoke a refresh token session (and stop this device's push notifications)",
+  description:
+    "Anyone holding the refresh token may call it; no access token needed (the refresh token is the authorization). Revokes that session. Send pushToken (the Expo push token, or a browser's subscription endpoint, as registered with POST /devices) to also stop push notifications to this device: it is removed in the same step, and only from the session's own account, so someone else's device is never touched. The device is not removed when the refresh token is already revoked, expired or unknown. Always 200, even if the refresh token was already invalid or the device wasn't registered, so the response says nothing about either. Recorded in the audit trail as auth.logout (tokens blanked) when a live session was signed out. Not rate limited.",
   request: {
     body: {
-      content: { "application/json": { schema: refreshTokenSchema } },
+      content: { "application/json": { schema: logoutSchema } },
     },
   },
   responses: {
     200: successResponse("Logged out successfully"),
-    400: errorResponse("Validation error"),
+    400: errorResponse(
+      "Validation error: a missing or empty refreshToken, or a pushToken over 2048 characters",
+      "refreshToken: Invalid input: expected string, received undefined",
+    ),
   },
 });
 
