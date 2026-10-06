@@ -24,6 +24,9 @@ export async function uploadFile(
   return { fileUrl, storageKey: publicId };
 }
 
-export async function deleteFile(storageKey: string): Promise<void> {
-  await cloudinaryService.remove(storageKey);
+export async function deleteFile(
+  storageKey: string,
+  resourceType: cloudinaryService.ResourceType = "image",
+): Promise<void> {
+  await cloudinaryService.remove(storageKey, resourceType);
 }

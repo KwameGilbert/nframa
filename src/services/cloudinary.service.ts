@@ -46,7 +46,11 @@ export async function upload(
   });
 }
 
-export async function remove(publicId: string): Promise<void> {
+export type ResourceType = "image" | "video" | "raw";
+
+// destroy() doesn't accept "auto": it needs the type the file was stored as. Uploads with "auto" store images
+// and PDFs as "image", hence the default.
+export async function remove(publicId: string, resourceType: ResourceType = "image"): Promise<void> {
   configure();
-  await cloudinary.uploader.destroy(publicId, { resource_type: "auto" });
+  await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
 }

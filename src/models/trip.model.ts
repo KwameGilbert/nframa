@@ -8,6 +8,7 @@ import { calculateWait, type WaitSettings } from "../services/fare.service.js";
 import { EARTH_RADIUS_METERS, type Point } from "../services/geo.js";
 import { AppError } from "../utils/AppError.js";
 import { generateCode } from "../utils/code.js";
+import { isUniqueViolation } from "../utils/dbErrors.js";
 import { roundMoney } from "../utils/money.js";
 import { departureAt, isoWeekday } from "../utils/tripTime.js";
 import type { AdminListTripsQuery } from "../schemas/trip.schema.js";
@@ -311,11 +312,6 @@ interface PhoneColumns {
 
 function phoneOf(row: PhoneColumns) {
   return row.phoneNumber ? `${row.phoneCountryCode ?? ""}${row.phoneNumber}` : null;
-}
-
-function isUniqueViolation(err: unknown, constraint: string) {
-  const { code, constraint: name } = err as { code?: string; constraint?: string };
-  return code === "23505" && name === constraint;
 }
 
 // Locks the commute row for the rest of the transaction: the first lock wherever a seat is given (see the
