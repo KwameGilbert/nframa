@@ -28,7 +28,7 @@ paths:
 Devices are registered to send push notifications to users. The system supports three platforms: **ios** and **android** (via Expo) and **web** (via Web Push API). `src/models/pushDevice.model.ts` manages the `pushDevices` table; tokens and web push keys are never returned to clients or logged (marked with `excludedColumns`).
 
 - **Cap:** Up to **10 devices per account** (`MAX_DEVICES_PER_USER`). Registering an 11th drops the one **seen longest ago** (by `updatedAt`). An upsert on the token means a phone shared between accounts moves to the newer owner.
-- **Stale cleanup:** A device not seen for **45 days** (setting `push.deviceStaleDays`) stops getting pushes and is removed from the table. This is a background process (usually nightly).
+- **Stale cleanup:** A device not seen for **45 days** (setting `push.deviceStaleDays`) stops getting pushes: there's no cron, `listTargetsForUsers` deletes that user's stale devices just before each delivery.
 - **Token refresh:** A device registered with the same token updates its `updatedAt` but doesn't create a new row. The audit trail records it only if the device is new to the account or its owner changed, never on every refresh (apps re-register on launch and token changes).
 - **Web push:** A web subscription's endpoint must be the **https URL exactly as the browser gives it** (no port, no user info, no rewrite), on a known push service (`fcm.googleapis.com`, `*.push.services.mozilla.com`, `*.push.apple.com`, `*.notify.windows.com`, checked via `isAllowedWebPushHost`). The `p256dh` and `auth` keys must be **87 and 22 base64url characters** respectively.
 - **Sign-out:** To stop pushes to a device at sign-out, pass it to `POST /auth/logout` in the request body; it's removed before the next push delivery to that token. Otherwise, the device stays registered until the 45-day stale timeout or the user unregisters it manually.
@@ -39,7 +39,8 @@ The notification inbox is user-owned, kept for **90 days** (setting `notificatio
 
 - **Read tracking:** `readAt` is `NULL` for unread, and the first time it's set (via `POST /notifications/{id}/read`) it's idempotent — reading it again changes nothing and returns the same first `readAt`.
 - **Unread count:** Queried as `COUNT(*) WHERE userId = $1 AND readAt IS NULL`. It reflects the whole inbox, not just the current page or filter.
-- **Pruning:** Done by batch delete every day or when a user deletes their account (soft-delete), removing all their `notifications` rows. No individual rows survive the 90-day horizon.
+- **Pruning:** No cron: each new inbox row prunes that user's rows older than `notifications.retentionDays` (90, `pruneOlderThan`). Sign-out, account deletion, reactivation and admin deletion remove all of a user's rows (`removeAllForUser`, in the same transaction).
+- **Support:** `support.*` types are in `.claude/rules/support.md` (chat pushes only for the first unread message of a run; only the ticket id travels).
 - **Type filtering:** Some notification types don't land in the inbox (marked `inbox: false` in `config/notificationTypes.ts`): `trip.driverArrived`, `sos.deskAlert`, and `report.deskUrgent` are push-only. Filtering by one of these returns a **400**, with the message "type that is unknown or never kept in the inbox".
 
 ## Notification Types

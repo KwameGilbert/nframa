@@ -18,8 +18,9 @@ Every response has the shape `{ "success": true, "message": "...", "data": ... }
 7. [Trips (Driver Side)](#trips-driver-side)
 8. [Admin Document Review](#admin-document-review)
 9. [Push Notifications & Inbox](#push-notifications--inbox)
-10. [Error Codes & Handling](#error-codes--handling)
-11. [Rate Limiting](#rate-limiting)
+10. [Support & Chat](#support--chat)
+11. [Error Codes & Handling](#error-codes--handling)
+12. [Rate Limiting](#rate-limiting)
 
 ---
 
@@ -1520,6 +1521,82 @@ Push and inbox endpoints are rate-limited per account: **300 requests per 15 min
 
 ---
 
+## Support & Chat
+
+Riders and drivers open a support ticket and chat with Nframa Support (text, photos, videos, voice notes, documents). Everything below is the rider/driver side; a ticket is only ever visible to the person who opened it (anyone else gets 404). Staff appear by first name ("Ama"); show them as "Ama · Nframa Support".
+
+### Opening a ticket
+
+1. `GET /support/categories` → the categories this account can pick (`{ id, name, description }`). A driver also sees driver-only ones such as payouts.
+2. `POST /support/tickets` with `categoryId`, `subject` (3 to 120 characters), and a first `message` and/or files. Link what it's about with any of `tripId`, `transactionId`, `payoutId` (drivers) or `relatedTicketId` (an earlier ticket); each must be the caller's own.
+   - **From a trip screen** ("Chat with Support", "Report Fare Issue"): pre-fill `tripId` and a category such as "Fare dispute".
+   - **From a withdrawal receipt** ("Contact Support"): pre-fill `payoutId` and "Payouts & earnings".
+   - **Text only:** JSON. **With files:** `multipart/form-data`, repeating `attachments` once per file (up to 5).
+3. The response is the ticket, with a `code` such as `ST-7KQ2MX` the user can quote.
+
+```js
+const form = new FormData();
+form.append("categoryId", categoryId);
+form.append("subject", "Charged twice for this morning's trip");
+form.append("message", "I was charged GHS 25 twice.");
+form.append("tripId", tripId);
+form.append("attachments", { uri: photo.uri, name: "receipt.jpg", type: "image/jpeg" });
+form.append("attachments", { uri: recording.uri, name: "voice.m4a", type: "audio/x-m4a" }); // voice note
+await fetch(`${BASE_URL}/support/tickets`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+```
+
+| Kind | Types | Max size |
+| --- | --- | --- |
+| Image | JPEG, PNG, WEBP, HEIC (stored as JPEG) | 10 MB |
+| Video | MP4, MOV, WEBM, 3GP | 50 MB |
+| Audio (voice notes) | M4A, AAC, MP3, OGG, WEBM, WAV | 16 MB |
+| Document | PDF, Word, Excel, TXT, CSV | 10 MB |
+
+Each attachment comes back as `{ id, kind, fileUrl, thumbnailUrl (video poster), mimeType, fileName, sizeBytes, durationSeconds, width, height }`.
+
+### The ticket list and statuses
+
+`GET /support/tickets` (newest activity first; filter with repeated `status`, `tripId`, or search with `q`): each ticket carries `unreadCount` and `lastMessage` (`{ from: "user" | "support", preview, attachmentKind, deleted }`) for the inbox row. With `q`, results come best match first and each carries `matchedMessage` (`{ seq, snippet }`): open the chat with `around=<seq>` to jump to it.
+
+| Status | Meaning for the user |
+| --- | --- |
+| `open` | Waiting for an agent |
+| `inProgress` | An agent is on it |
+| `awaitingUser` | Support replied and is waiting for you (resolves by itself after 5 days of silence) |
+| `resolved` | Done. A reply within 7 days (`reopenUntil`) reopens it; you can rate the help |
+| `closed` | Final. `canReply` is false: offer "Open a new ticket" and pass this one as `relatedTicketId` |
+
+`POST /support/tickets/{id}/resolve` ("My problem is solved") and `POST /support/tickets/{id}/rate` (`{ rating: 1-5, comment? }`, once per resolution).
+
+### The chat screen
+
+- **Load:** `GET /support/tickets/{id}/messages` returns the latest 30, **oldest first**, with `hasMoreBefore`, `hasMoreAfter` and `readMarkers`. Scroll up with `before=<seq of the oldest shown>`; after a reconnect catch up with `after=<seq of the newest shown>`; jump with `around=<seq>`. `attachmentKind=image` (etc.) gives a media gallery. Order and page by `seq`, never `createdAt`, and **deduplicate by `id`** when merging pages, send responses and live events.
+- **Items:** `kind` is `message` or `event` (status changes, e.g. `{ type: "statusChanged", data: { from, to, reason } }`; render as a centred system line). A deleted message has `deleted: true`, `removedBy: "user" | "support"` and no body or files: show "This message was deleted". `replyToMessageId` points at the quoted message.
+- **Send:** `POST /support/tickets/{id}/messages` with `{ body, replyToMessageId? }` (JSON) or multipart with `attachments`, or over the socket (below). The response has the message and the updated ticket.
+- **Delete:** `DELETE /support/tickets/{id}/messages/{messageId}`, own messages within 15 minutes (409 after; 403 for someone else's).
+- **Ticks:** `readMarkers.staff` is the last `seq` support has read: your messages at or below it are "read", the rest "sent". Mark the chat read with `POST /support/tickets/{id}/read` (or the socket) when it's on screen; `unreadCount` drops to 0.
+
+### Real time
+
+Listen to `support:message`, `support:ticketUpdated`, `support:messageDeleted`, `support:read` and `support:typing` (payloads in `SOCKET_KEYS.md`). The socket also accepts, with an acknowledgement:
+
+```js
+socket.emit("support:send", { ticketId, body: "Thanks!", replyToMessageId }, (ack) => {
+  if (!ack.ok) showError(ack.error); // same messages and status codes as the HTTP route
+});
+socket.emit("support:read", { ticketId }, (ack) => {});
+socket.emit("support:typing", { ticketId, isTyping: true }); // no ack; send at most every 3 s, and false when they stop
+```
+
+Files and deletes go over HTTP only.
+
+### Pushes and limits
+
+- `support.reply` (support replied; one push until the user reads), `support.statusChanged` (resolved/closed, also in the inbox), `support.openedForYou` (support opened a ticket for the user, also in the inbox). `data.ticketId` opens the ticket.
+- Per account: 10 new tickets, 120 messages / resolves / rates, 300 reads per 15 minutes (the socket counts separately: 120 sends, 300 reads).
+
+---
+
 ## Error Codes & Handling
 
 | Code      | Meaning                                      | Retry?              | Action                                                     |
@@ -1612,6 +1689,16 @@ Standard `RateLimit` / `RateLimit-Policy` response headers (draft-8 format) tell
 | GET    | `/admin/driver/verification/pending`        | ✓ (admin)  | List documents awaiting review                       |
 | PATCH  | `/admin/verification/document/{documentId}` | ✓ (admin)  | Review a document                                    |
 | PATCH  | `/admin/driver/{userId}/verification`       | ✓ (admin)  | Approve/change driver status                         |
+| GET    | `/support/categories`                       | user       | Categories to open a ticket under                    |
+| POST   | `/support/tickets`                          | user       | Open a ticket (JSON or multipart with files)         |
+| GET    | `/support/tickets`                          | user       | My tickets (status filter, search `q`)               |
+| GET    | `/support/tickets/{id}`                     | user       | One ticket (`canReply`, `reopenUntil`)               |
+| GET    | `/support/tickets/{id}/messages`            | user       | The chat, paged by `seq`                             |
+| POST   | `/support/tickets/{id}/messages`            | user       | Send a message (JSON or multipart)                   |
+| DELETE | `/support/tickets/{id}/messages/{messageId}`| user       | Delete my message (15 minutes)                       |
+| POST   | `/support/tickets/{id}/read`                | user       | Mark the chat read                                   |
+| POST   | `/support/tickets/{id}/resolve`             | user       | Mark my ticket resolved                              |
+| POST   | `/support/tickets/{id}/rate`                | user       | Rate the help (1 to 5)                               |
 
 ---
 
