@@ -4,6 +4,7 @@ import { generateCode } from "../utils/code.js";
 import { isUniqueViolation } from "../utils/dbErrors.js";
 import { settingModel } from "./setting.model.js";
 import { supportMessageModel, type SupportMessage } from "./supportMessage.model.js";
+import { matchSql, scoreSql, searchClauses, searchTerms } from "./supportSearch.js";
 import type { StoredAttachment } from "../services/storage.service.js";
 import type { SupportPriority } from "../schemas/supportCategory.schema.js";
 import {
@@ -152,6 +153,34 @@ function applyStaffFilters(q: Knex.QueryBuilder, query: AdminListTicketsQuery, a
   return q;
 }
 
+// Narrows base to the tickets matching q (if any) and returns how to order by relevance.
+function searchOf(base: Knex.QueryBuilder, q: string | undefined, staff: boolean) {
+  if (!q) return null;
+  const clauses = searchClauses(searchTerms(q), staff);
+  const match = matchSql(clauses);
+  base.whereRaw(match.sql, match.bindings);
+  const score = scoreSql(clauses);
+  return {
+    byScore: (query: Knex.QueryBuilder) =>
+      query.orderByRaw(`${score.sql} DESC, t."lastMessageAt" DESC, t.id`, score.bindings),
+  };
+}
+
+// One page of base (with names) plus the total, counted on the same filters.
+async function page(
+  base: Knex.QueryBuilder,
+  { page: pageNumber, limit }: { page: number; limit: number },
+  order: (query: Knex.QueryBuilder) => Knex.QueryBuilder,
+) {
+  const [items, [{ count }]] = await Promise.all([
+    order(withNames(base.clone()))
+      .limit(limit)
+      .offset((pageNumber - 1) * limit),
+    base.clone().count<{ count: string }[]>("* as count"),
+  ]);
+  return { items: items as SupportTicket[], totalItems: Number(count) };
+}
+
 function applySort(q: Knex.QueryBuilder, sort: AdminListTicketsQuery["sort"]) {
   switch (sort) {
     case "newest":
@@ -266,29 +295,47 @@ export const supportTicketModel = {
     const base = db("supportTickets as t").where("t.userId", userId).whereNull("t.detachedAt");
     if (query.status) base.whereIn("t.status", query.status);
     if (query.tripId) base.where("t.tripId", query.tripId);
+    const search = searchOf(base, query.q, false);
 
-    const [items, [{ count }]] = await Promise.all([
-      withNames(base.clone())
-        .orderBy([
-          { column: "t.lastMessageAt", order: "desc" },
-          { column: "t.id", order: "asc" },
-        ])
-        .limit(query.limit)
-        .offset((query.page - 1) * query.limit),
-      base.clone().count<{ count: string }[]>("* as count"),
-    ]);
-    return { items: items as SupportTicket[], totalItems: Number(count) };
+    return page(base, query, (q) =>
+      search ? search.byScore(q) : q.orderBy([{ column: "t.lastMessageAt", order: "desc" }, { column: "t.id" }]),
+    );
   },
 
   async listForStaff(query: AdminListTicketsQuery, adminId: string) {
     const base = applyStaffFilters(db("supportTickets as t"), query, adminId);
-    const [items, [{ count }]] = await Promise.all([
-      applySort(withNames(base.clone()), query.sort)
-        .limit(query.limit)
-        .offset((query.page - 1) * query.limit),
-      base.clone().count<{ count: string }[]>("* as count"),
-    ]);
-    return { items: items as SupportTicket[], totalItems: Number(count) };
+    const search = searchOf(base, query.q, true);
+    const sort = query.sort ?? (search ? "relevance" : "queue");
+
+    return page(base, query, (q) =>
+      sort === "relevance" && search ? search.byScore(q) : applySort(q, sort),
+    );
+  },
+
+  // For search results: per ticket, the latest message that matched, as plain text around the match.
+  async matchedMessages(ids: string[], q: string | undefined, staff: boolean) {
+    const matches = new Map<string, { id: string; seq: number; snippet: string; internal: boolean; createdAt: Date }>();
+    if (!q || ids.length === 0) return matches;
+    const { tsquery } = searchTerms(q);
+    const query = db("supportTicketMessages as m")
+      .distinctOn("m.ticketId")
+      .whereIn("m.ticketId", ids)
+      .whereRaw(`m."searchVector" @@ ${tsquery.sql}`, tsquery.bindings)
+      .orderBy([{ column: "m.ticketId" }, { column: "m.seq", order: "desc" }])
+      .select(
+        "m.id",
+        "m.ticketId",
+        "m.seq",
+        "m.internal",
+        "m.createdAt",
+        db.raw(
+          `ts_headline('english', coalesce(m.body, ''), ${tsquery.sql}, 'StartSel="", StopSel="", MaxFragments=1, MaxWords=20, MinWords=8') AS snippet`,
+          tsquery.bindings,
+        ),
+      );
+    if (!staff) query.where("m.internal", false).whereNull("m.deletedAt");
+    for (const { ticketId, ...match } of await query) matches.set(ticketId, match);
+    return matches;
   },
 
   // Tab counts over the whole queue, in one pass.

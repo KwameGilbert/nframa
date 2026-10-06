@@ -57,11 +57,18 @@ export const createTicketMultipartSchema = createTicketSchema.extend({
     .meta({ description: "Up to 5 files; repeat the attachments field once per file" }),
 });
 
+const searchSchema = z.string().trim().min(2).max(200).optional().meta({
+  description:
+    'Search: a ticket code (ST-7KQ2MX, 7kq2mx), words from the subject or messages (stemmed, word starts match, small typos forgiven), or "an exact phrase", either OR other, -excluded',
+  example: "refund",
+});
+
 export const listMyTicketsQuerySchema = z.object({
   status: oneOrMany(z.enum(SUPPORT_STATUSES))
     .optional()
     .meta({ description: "Only tickets in these statuses; repeat the parameter for several" }),
   tripId: z.uuid().optional().meta({ description: "Only tickets about this trip" }),
+  q: searchSchema,
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
@@ -164,7 +171,7 @@ export const readResponseSchema = z.object({ lastReadSeq: z.number().int() });
 
 // Staff.
 
-export const SUPPORT_SORTS = ["queue", "newest", "oldest", "lastActivity"] as const;
+export const SUPPORT_SORTS = ["queue", "relevance", "newest", "oldest", "lastActivity"] as const;
 
 export const adminListTicketsQuerySchema = z.object({
   status: oneOrMany(z.enum(SUPPORT_STATUSES)).optional(),
@@ -185,9 +192,10 @@ export const adminListTicketsQuerySchema = z.object({
     .meta({ description: "true: the last message came from the user (they are waiting on support)" }),
   from: z.iso.date().optional().meta({ description: "Opened on or after this day (YYYY-MM-DD, UTC)" }),
   to: z.iso.date().optional().meta({ description: "Opened on or before this day (YYYY-MM-DD, UTC)" }),
-  sort: z.enum(SUPPORT_SORTS).default("queue").meta({
+  q: searchSchema,
+  sort: z.enum(SUPPORT_SORTS).optional().meta({
     description:
-      "queue (default): active tickets first, then by priority, then the longest waiting. newest / oldest: by when opened. lastActivity: latest message first",
+      "queue (default without q): active tickets first, then by priority, then the longest waiting. relevance (default with q): best match first. newest / oldest: by when opened. lastActivity: latest message first",
   }),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
@@ -277,8 +285,19 @@ export const userTicketDetailResponseSchema = userTicketResponseSchema.extend({
     .meta({ description: "For a resolved ticket: replying before this reopens it; after it, it closes" }),
 });
 
+const matchedMessageSchema = z
+  .object({
+    id: z.uuid(),
+    seq: z.number().int().meta({ description: "Open the conversation with around=<seq> to jump to it" }),
+    snippet: z.string().meta({ description: "Plain text around the match" }),
+    internal: z.boolean(),
+    createdAt: z.iso.datetime(),
+  })
+  .nullable()
+  .meta({ description: "With q: the latest message that matched, if any" });
+
 export const userTicketListResponseSchema = z.object({
-  items: z.array(userTicketResponseSchema),
+  items: z.array(userTicketResponseSchema.extend({ matchedMessage: matchedMessageSchema })),
   pagination: z.object({
     page: z.number().int(),
     limit: z.number().int(),
@@ -335,7 +354,7 @@ const countsSchema = z.object({
 });
 
 export const staffTicketListResponseSchema = userTicketListResponseSchema.extend({
-  items: z.array(staffTicketResponseSchema),
+  items: z.array(staffTicketResponseSchema.extend({ matchedMessage: matchedMessageSchema })),
   stats: countsSchema.meta({ description: "Counts over the whole queue (not the filters), for tabs" }),
 });
 

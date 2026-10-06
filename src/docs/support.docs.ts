@@ -77,7 +77,7 @@ registry.registerPath({
   path: "/support/tickets",
   tags: [TAG],
   summary: "List my support tickets (riders and drivers)",
-  description: `Newest activity first. Each ticket carries unreadCount (support messages you haven't read) and lastMessage (a 120-character preview, or the kind of file sent) for the inbox screen. Filter by status (repeat the parameter for several, e.g. ?status=open&status=inProgress) or by trip. ${SWEEP} Rate limited per account (300 per 15 minutes, shared by every support read).`,
+  description: `Newest activity first. Each ticket carries unreadCount (support messages you haven't read) and lastMessage (a 120-character preview, or the kind of file sent) for the inbox screen. Filter by status (repeat the parameter for several, e.g. ?status=open&status=inProgress) or by trip, or search with q (code, subject and messages; best matches first, each with matchedMessage to jump to). ${SWEEP} Rate limited per account (300 per 15 minutes, shared by every support read).`,
   security: [{ bearerAuth: [] }],
   request: { query: listMyTicketsQuerySchema },
   responses: {
@@ -167,7 +167,7 @@ registry.registerPath({
   tags: [TAG],
   summary: "The support queue (needs support: read)",
   description:
-    "Every ticket, including those of deleted accounts and recycled phone numbers (detachedAt). Filters combine with AND; status, priority, categoryId and rating can be repeated for several values. assignedTo takes me, unassigned or an admin's id; needsReply=true keeps tickets whose last message is the user's. The default sort, queue, puts active tickets first, then the most urgent, then the longest waiting. Each item carries unreadCount (user messages no agent has read) and lastMessage (notes included). stats counts the whole queue regardless of filters (per status, unassigned, mine, needsReply) for tabs. Before answering, idle and expired tickets are resolved or closed. Needs support: read.",
+    "Every ticket, including those of deleted accounts and recycled phone numbers (detachedAt). Filters combine with AND; status, priority, categoryId and rating can be repeated for several values. assignedTo takes me, unassigned or an admin's id; needsReply=true keeps tickets whose last message is the user's. q searches codes, subjects, messages and notes, the raiser's name, email and phone (0… or +233…) and the agent's name; with q the default sort is relevance and each item carries matchedMessage (open the conversation with around=<seq>). Without q, the default sort, queue, puts active tickets first, then the most urgent, then the longest waiting. Each item carries unreadCount (user messages no agent has read) and lastMessage (notes included). stats counts the whole queue regardless of filters (per status, unassigned, mine, needsReply) for tabs. Before answering, idle and expired tickets are resolved or closed. Needs support: read.",
   security: [{ bearerAuth: [] }],
   request: { query: adminListTicketsQuerySchema },
   responses: {

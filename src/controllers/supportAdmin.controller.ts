@@ -56,10 +56,16 @@ export async function adminListTickets(req: Request, res: Response) {
     supportTicketModel.listForStaff(query, adminId),
     supportTicketModel.stats(adminId),
   ]);
-  const activity = await supportTicketModel.activity(items, "staff");
+  const [activity, matches] = await Promise.all([
+    supportTicketModel.activity(items, "staff"),
+    supportTicketModel.matchedMessages(items.map((t) => t.id), query.q, true),
+  ]);
 
   sendSuccess(res, "Support tickets retrieved successfully", {
-    items: items.map((ticket) => staffTicketView(ticket, activity.get(ticket.id))),
+    items: items.map((ticket) => ({
+      ...staffTicketView(ticket, activity.get(ticket.id)),
+      matchedMessage: matches.get(ticket.id) ?? null,
+    })),
     pagination: {
       page: query.page,
       limit: query.limit,

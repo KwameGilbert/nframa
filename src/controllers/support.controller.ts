@@ -120,10 +120,17 @@ export async function listMyTickets(req: Request, res: Response) {
 
   await supportTicketModel.sweep({ userId });
   const { items, totalItems } = await supportTicketModel.listForUser(userId, query);
-  const activity = await supportTicketModel.activity(items, "user");
+  const ids = items.map((t) => t.id);
+  const [activity, matches] = await Promise.all([
+    supportTicketModel.activity(items, "user"),
+    supportTicketModel.matchedMessages(ids, query.q, false),
+  ]);
 
   sendSuccess(res, "Support tickets retrieved successfully", {
-    items: items.map((ticket) => userTicketView(ticket, activity.get(ticket.id))),
+    items: items.map((ticket) => ({
+      ...userTicketView(ticket, activity.get(ticket.id)),
+      matchedMessage: matches.get(ticket.id) ?? null,
+    })),
     pagination: {
       page: query.page,
       limit: query.limit,
