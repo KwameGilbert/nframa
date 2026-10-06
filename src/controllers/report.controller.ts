@@ -11,6 +11,7 @@ import { tripModel, type Trip } from "../models/trip.model.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { sendReportEmail } from "../services/email.service.js";
 import { emitToReportsDesk, emitToUser } from "../services/socket.service.js";
+import { notifyReportCreated, notifyReport, notifyReportsDesk } from "../services/notificationEvents.service.js";
 import { deleteFile, uploadFile } from "../services/storage.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
@@ -162,6 +163,8 @@ export async function createReport(req: Request, res: Response) {
     reporterRole: report.reporterRole,
     createdAt: report.createdAt,
   });
+  void notifyReportCreated(reporterUserId, { id: report.id, severity: report.severity });
+  void notifyReportsDesk({ id: report.id, severity: report.severity });
   void sendReportEmail(reporterUserId, "received", { urgent: report.severity === "urgent" });
 
   logActivity(req, {
@@ -302,6 +305,8 @@ export async function adminUpdateReportStatus(req: Request, res: Response) {
   // never told.
   emitToUser(report.reporterUserId, "report:statusChanged", statusChange(report));
   emitToReportsDesk("report:statusChanged", statusChange(report));
+  void notifyReport(report.reporterUserId, { id: report.id, status: report.status });
+  void notifyReportsDesk({ id: report.id, severity: report.severity });
   void sendReportEmail(report.reporterUserId, input.status, {
     outcomeMessage: report.outcomeMessage,
   });

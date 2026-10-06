@@ -5,6 +5,7 @@ import { tripModel } from "../models/trip.model.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { sendSosEmail } from "../services/email.service.js";
 import { emitToSafetyDesk, emitToUser } from "../services/socket.service.js";
+import { notifySafetyDesk, notifySos } from "../services/notificationEvents.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 import type {
@@ -99,6 +100,7 @@ export async function triggerSos(req: Request, res: Response) {
   sendCreated(res, "Emergency SOS alert triggered successfully", userView(incident));
 
   emitToSafetyDesk("sos:triggered", alertOf(incident));
+  void notifySafetyDesk(incident.id);
   void sendSosEmail(userId, "triggered");
 
   logActivity(req, {
@@ -174,6 +176,7 @@ export async function adminCancelIncident(req: Request, res: Response) {
   // The person's status screen follows along live; the rest of the desk drops it from the queue.
   emitToUser(incident.userId, "sos:statusChanged", statusChangeOf(incident));
   emitToSafetyDesk("sos:cancelled", statusChangeOf(incident));
+  void notifySos(incident.userId, { id: incident.id, status: incident.status });
   void sendSosEmail(incident.userId, incident.status);
 
   logActivity(req, {
@@ -249,6 +252,7 @@ export async function adminUpdateIncidentStatus(req: Request, res: Response) {
   // The person's status screen follows along live; other dispatchers see who moved it.
   emitToUser(incident.userId, "sos:statusChanged", statusChangeOf(incident));
   emitToSafetyDesk("sos:statusChanged", statusChangeOf(incident));
+  void notifySos(incident.userId, { id: incident.id, status: incident.status });
   void sendSosEmail(incident.userId, incident.status);
 
   logActivity(req, {

@@ -178,6 +178,15 @@ export function notifyReport(userId: string, report: { id: string; status: strin
   });
 }
 
+// When a report is first filed, tell the reporter it was received.
+export function notifyReportCreated(userId: string, report: { id: string; severity: string }) {
+  return deliverNotification(userId, "report.created", {
+    title: "Report filed",
+    body: "Your report has been filed and our team will review it soon.",
+    data: { reportId: report.id },
+  });
+}
+
 // Every admin who can read the reports module, for an urgent report only.
 export function notifyReportsDesk(report: { id: string; severity: string }) {
   if (report.severity !== "urgent") return Promise.resolve();

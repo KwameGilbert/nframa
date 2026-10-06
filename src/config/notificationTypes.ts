@@ -24,6 +24,7 @@ export const NOTIFICATION_TYPES = {
   "trip.noShow": { channel: "trips", priority: "normal", ttl: 6 * HOUR, inbox: true, lockScreen: "full" },
   "sos.deskAlert": { channel: "safety", priority: "high", ttl: HOUR, inbox: false, lockScreen: "full" },
   "sos.statusChanged": { channel: "safety", priority: "high", ttl: 24 * HOUR, inbox: true, lockScreen: "private" },
+  "report.created": { channel: "safety", priority: "normal", ttl: 24 * HOUR, inbox: true, lockScreen: "full" },
   "report.deskUrgent": { channel: "safety", priority: "high", ttl: HOUR, inbox: false, lockScreen: "full" },
   "report.statusChanged": { channel: "safety", priority: "normal", ttl: 24 * HOUR, inbox: true, lockScreen: "private" },
   "driver.verification": { channel: "account", priority: "normal", ttl: 24 * HOUR, inbox: true, lockScreen: "full" },
