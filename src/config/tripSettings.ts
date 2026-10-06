@@ -157,6 +157,22 @@ export const TRIP_SETTINGS = {
     description:
       "Days after which a push device that hasn't re-registered is ignored and deleted (apps re-register on every launch, and refresh tokens last 30 days, so a device unseen this long belongs to a dead session)",
   },
+  "support.reopenWindowDays": {
+    type: "number",
+    min: 1,
+    max: 90,
+    default: 7,
+    description:
+      "Days after a support ticket is resolved during which a reply from the user reopens it; after that it closes for good and they open a new one",
+  },
+  "support.autoResolveDays": {
+    type: "number",
+    min: 1,
+    max: 90,
+    default: 5,
+    description:
+      "Days a support ticket can wait on the user's reply before it is resolved automatically",
+  },
   "wallet.minTopUp": {
     type: "number",
     min: 0,

@@ -9,6 +9,7 @@ export const MODULES = [
   "roles",
   "settings",
   "sos",
+  "support",
   "trips",
   "users",
   "verification",

@@ -3,7 +3,7 @@ import { MODULES } from "../config/permissions.js";
 
 export const moduleSchema = z.enum(MODULES).meta({
   description:
-    "A feature area that can have permissions: activityLogs (the audit trail), admin (admin accounts — creating, viewing, updating and deleting them, distinct from roles which only covers role definitions), commutes (every driver's commutes, not just your own), payouts (drivers' payout methods), roles (role and permission definitions), settings (platform settings), trips (admin view of all trips; delete also lets staff cancel one), users (riders, drivers and their profiles, vehicles, emergency contacts, reviews, SOS incidents and payment methods), verification (driver documents and verification status)",
+    "A feature area that can have permissions: activityLogs (the audit trail), admin (admin accounts — creating, viewing, updating and deleting them, distinct from roles which only covers role definitions), commutes (every driver's commutes, not just your own), payouts (drivers' payout methods), roles (role and permission definitions), settings (platform settings), support (the support desk: tickets, chat and categories), trips (admin view of all trips; delete also lets staff cancel one), users (riders, drivers and their profiles, vehicles, emergency contacts, reviews, SOS incidents and payment methods), verification (driver documents and verification status)",
   example: "users",
 });
 

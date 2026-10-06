@@ -18,6 +18,7 @@ export const ACTIVITY_MODULES = [
   "payouts",
   "sos",
   "reports",
+  "support",
   "notifications",
   "activityLogs",
 ] as const;

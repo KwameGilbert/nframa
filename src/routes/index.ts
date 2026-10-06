@@ -7,6 +7,7 @@ import { emergencyContactRouter } from "./emergencyContact.routes.js";
 import { sosIncidentRouter } from "./sosIncident.routes.js";
 import { reviewRouter } from "./review.routes.js";
 import { reportRouter } from "./report.routes.js";
+import { supportRouter } from "./support.routes.js";
 import { riderProfileRouter } from "./riderProfile.routes.js";
 import { vehicleRouter } from "./vehicle.routes.js";
 import { roleRouter } from "./role.routes.js";
@@ -44,9 +45,10 @@ router.use(riderProfileRouter);
 router.use(vehicleRouter);
 router.use(roleRouter);
 router.use(rolePermissionRouter);
-// Before adminUserRouter: GET /admin/:userId would otherwise match "/admin/payment-methods", "/admin/payout-methods"
-// and "/admin/reports".
+// Before adminUserRouter: GET /admin/:userId would otherwise match "/admin/payment-methods", "/admin/payout-methods",
+// "/admin/reports" and "/admin/support".
 router.use(reportRouter);
+router.use(supportRouter);
 router.use(paymentMethodRouter);
 router.use(payoutRouter);
 router.use(adminUserRouter);

@@ -21,6 +21,37 @@ vi.mock("../src/services/storage.service.js", () => ({
       storageKey,
     };
   }),
+  uploadAttachment: vi.fn(
+    async (
+      _path: string,
+      folder: string,
+      { mimeType, fileName, sizeBytes }: { mimeType: string; fileName: string; sizeBytes: number },
+    ) => {
+      const kind = mimeType.startsWith("image/")
+        ? "image"
+        : mimeType.startsWith("video/")
+          ? "video"
+          : mimeType.startsWith("audio/")
+            ? "audio"
+            : "document";
+      const id = randomUUID();
+      const storageKey = `nframa/${folder}/${id}`;
+      return {
+        id,
+        kind,
+        fileUrl: `https://mock-storage.test/${storageKey}`,
+        thumbnailUrl: kind === "video" ? `https://mock-storage.test/${storageKey}.jpg` : null,
+        storageKey,
+        resourceType: kind === "document" ? "raw" : kind === "image" ? "image" : "video",
+        mimeType,
+        fileName,
+        sizeBytes,
+        durationSeconds: kind === "video" || kind === "audio" ? 12 : null,
+        width: kind === "image" || kind === "video" ? 640 : null,
+        height: kind === "image" || kind === "video" ? 480 : null,
+      };
+    },
+  ),
   deleteFile: vi.fn(async () => undefined),
 }));
 
@@ -31,6 +62,8 @@ vi.mock("../src/services/socket.service.js", () => ({
   emitToUser: vi.fn(),
   emitToSafetyDesk: vi.fn(),
   emitToReportsDesk: vi.fn(),
+  emitToSupportDesk: vi.fn(),
+  SUPPORT_DESK_ROOM: "admin:support",
   joinSocketRooms: vi.fn(),
 }));
 

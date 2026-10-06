@@ -1,0 +1,44 @@
+@baseUrl = http://localhost:3000
+
+# Rider or Driver Access Token (the person asking for help)
+@userToken = PASTE_USER_TOKEN_HERE
+
+# Admin Access Token (support: read for the desk, update to act, create/delete for categories)
+@adminToken = PASTE_ADMIN_TOKEN_HERE
+
+### Categories I can open a ticket under
+GET {{baseUrl}}/support/categories
+Authorization: Bearer {{userToken}}
+
+### Every category, with ticket counts (support: read)
+GET {{baseUrl}}/admin/support/categories
+Authorization: Bearer {{adminToken}}
+
+### Create a category (support: create)
+# @name createCategory
+POST {{baseUrl}}/admin/support/categories
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Promotions",
+  "description": "Questions about promo codes and offers.",
+  "audience": "rider",
+  "defaultPriority": "low",
+  "sortOrder": 95
+}
+
+@categoryId = {{createCategory.response.body.data.id}}
+
+### Deactivate it (support: update)
+PATCH {{baseUrl}}/admin/support/categories/{{categoryId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "isActive": false
+}
+
+### Delete it: only while no ticket uses it (support: delete)
+DELETE {{baseUrl}}/admin/support/categories/{{categoryId}}
+Authorization: Bearer {{adminToken}}

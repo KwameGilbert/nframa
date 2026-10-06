@@ -48,6 +48,44 @@ export async function upload(
 
 export type ResourceType = "image" | "video" | "raw";
 
+export interface UploadedPath {
+  fileUrl: string;
+  publicId: string;
+  thumbnailUrl: string | null;
+  width: number | null;
+  height: number | null;
+  durationSeconds: number | null;
+}
+
+// From a temp file on disk, with the exact resource type: Cloudinary then refuses a file that isn't what its
+// type claims. format converts on upload (HEIC photos are stored as JPEG).
+export async function uploadPath(
+  path: string,
+  { publicId, resourceType, format }: { publicId: string; resourceType: ResourceType; format?: string },
+): Promise<UploadedPath> {
+  configure();
+
+  const result = await cloudinary.uploader.upload(path, {
+    public_id: publicId,
+    resource_type: resourceType,
+    ...(format ? { format } : {}),
+  });
+  // A video's poster frame (audio has no picture, so no thumbnail).
+  const thumbnailUrl =
+    resourceType === "video" && result.width
+      ? cloudinary.url(result.public_id, { resource_type: "video", format: "jpg", secure: true })
+      : null;
+
+  return {
+    fileUrl: result.secure_url,
+    publicId: result.public_id,
+    thumbnailUrl,
+    width: result.width ?? null,
+    height: result.height ?? null,
+    durationSeconds: typeof result.duration === "number" ? Math.round(result.duration) : null,
+  };
+}
+
 // destroy() doesn't accept "auto": it needs the type the file was stored as. Uploads with "auto" store images
 // and PDFs as "image", hence the default.
 export async function remove(publicId: string, resourceType: ResourceType = "image"): Promise<void> {

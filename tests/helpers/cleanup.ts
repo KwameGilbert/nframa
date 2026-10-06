@@ -24,6 +24,9 @@ export function trackForCleanup(table: string, criteria: Criteria): void {
 // verificationDocuments/verificationDocumentHistory/rolePermissions cascade on their own when their
 // parent is deleted; they're listed anyway so the order stays self-documenting.
 const DELETE_ORDER = [
+  "supportTicketMessages", // cascades with its ticket; listed first so the order stays self-documenting
+  "supportTickets", // FK on supportCategories (RESTRICT), users, trips, transactions, payoutHistory
+  "supportCategories", // RESTRICT from supportTickets
   "notifications", // cascades with its user; listed first so the order stays self-documenting
   "pushDevices", // cascades with its user; listed first so the order stays self-documenting
   "tripReports", // cascades with its trip or users; listed first so the order stays self-documenting

@@ -58,7 +58,15 @@ export function emitToReportsDesk(event: string, payload?: unknown): void {
   emitToRoom(REPORTS_DESK_ROOM, event, payload);
 }
 
-// Every account joins its own room; an active admin with sos: read also joins the safety desk, and one with reports: read the reports desk.
+// Admins who can read the support module join this room to see tickets, messages and typing as they happen.
+export const SUPPORT_DESK_ROOM = "admin:support";
+
+export function emitToSupportDesk(event: string, payload?: unknown): void {
+  emitToRoom(SUPPORT_DESK_ROOM, event, payload);
+}
+
+// Every account joins its own room; an active admin also joins the desk of each of sos, reports and support it
+// can read.
 export async function joinSocketRooms(socket: {
   data: SocketData;
   join: (room: string) => unknown;
@@ -73,6 +81,9 @@ export async function joinSocketRooms(socket: {
     }
     if (permissions.reports?.read) {
       socket.join(REPORTS_DESK_ROOM);
+    }
+    if (permissions.support?.read) {
+      socket.join(SUPPORT_DESK_ROOM);
     }
   }
 }

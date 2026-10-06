@@ -77,3 +77,5 @@ export const reportLimit = limitBy(byUser, 20);
 export const deviceLimit = limitBy(byUser, 60);
 // Per account. Reading and clearing one's own inbox only touches the database.
 export const notificationLimit = limitBy(byUser, 300);
+// Per account. Reading support categories, tickets and messages only touches the database: a flood guard.
+export const supportBrowseLimit = limitBy(byUser, 300);

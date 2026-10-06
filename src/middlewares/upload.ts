@@ -1,5 +1,13 @@
+import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import multer, { MulterError } from "multer";
 import type { NextFunction, Request, Response } from "express";
+import {
+  ALLOWED_ATTACHMENTS_TEXT,
+  ATTACHMENT_MAX_BYTES,
+  ATTACHMENT_TYPES,
+  MAX_ATTACHMENTS,
+} from "../config/supportAttachments.js";
 import { AppError } from "../utils/AppError.js";
 
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
@@ -181,6 +189,71 @@ export function uploadImages(fieldName: string, maxCount: number) {
         return;
       }
       next(err);
+    });
+  };
+}
+
+const LARGEST_ATTACHMENT = Math.max(...Object.values(ATTACHMENT_MAX_BYTES));
+const KIND_PLURAL = { image: "Images", video: "Videos", audio: "Audio files", document: "Documents" };
+
+// Support message attachments (images, video, voice notes, documents) in one multipart request, under the same
+// field. Written to temp files, not memory: five 50MB videos per request would sink a small host. The temp files
+// are removed once the response ends, whatever happened. JSON passes straight through with no files.
+export function uploadAttachments(fieldName = "attachments", maxCount = MAX_ATTACHMENTS) {
+  const attachments = multer({
+    storage: multer.diskStorage({ destination: tmpdir() }),
+    limits: { fileSize: LARGEST_ATTACHMENT, files: maxCount },
+    fileFilter: (_req, file, cb) => {
+      if (!ATTACHMENT_TYPES[file.mimetype]) {
+        cb(
+          AppError.badRequest(
+            `Unsupported file type: ${file.mimetype}. Allowed: ${ALLOWED_ATTACHMENTS_TEXT}`,
+          ),
+        );
+        return;
+      }
+      cb(null, true);
+    },
+  }).array(fieldName, maxCount);
+
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.is("multipart/form-data")) {
+      next();
+      return;
+    }
+    res.on("close", () => {
+      const files = (req.files ?? []) as Express.Multer.File[];
+      for (const file of files) void rm(file.path, { force: true }).catch(() => undefined);
+    });
+
+    attachments(req, res, (err: unknown) => {
+      if (err instanceof MulterError) {
+        const tooMany = err.code === "LIMIT_FILE_COUNT" || err.code === "LIMIT_UNEXPECTED_FILE";
+        const message =
+          err.code === "LIMIT_FILE_SIZE"
+            ? `File too large. Maximum size is ${LARGEST_ATTACHMENT / (1024 * 1024)}MB`
+            : tooMany
+              ? `You can attach up to ${maxCount} files, under the '${fieldName}' field`
+              : err.message;
+        next(AppError.badRequest(message));
+        return;
+      }
+      if (err) {
+        next(err);
+        return;
+      }
+      for (const file of (req.files ?? []) as Express.Multer.File[]) {
+        const { kind } = ATTACHMENT_TYPES[file.mimetype];
+        if (file.size > ATTACHMENT_MAX_BYTES[kind]) {
+          next(
+            AppError.badRequest(
+              `${KIND_PLURAL[kind]} can be at most ${ATTACHMENT_MAX_BYTES[kind] / (1024 * 1024)}MB each`,
+            ),
+          );
+          return;
+        }
+      }
+      next();
     });
   };
 }
