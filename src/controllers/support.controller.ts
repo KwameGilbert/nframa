@@ -3,17 +3,24 @@ import type { Request, Response } from "express";
 import { settingModel } from "../models/setting.model.js";
 import { supportCategoryModel } from "../models/supportCategory.model.js";
 import { LINKS, supportTicketModel } from "../models/supportTicket.model.js";
+import { supportMessageModel } from "../models/supportMessage.model.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { emitToSupportDesk } from "../services/socket.service.js";
 import {
+  announceMessage,
+  announceRead,
   announceTicket,
+  deleteTicketMessage,
   discardAttachments,
   filesOf,
+  postTicketMessage,
   storeAttachments,
+  ticketNotFound,
 } from "../services/support.service.js";
 import {
   staffTicketView,
   ticketAuditView,
+  userMessageView,
   userTicketDetailView,
   userTicketView,
 } from "../services/supportViews.js";
@@ -21,11 +28,14 @@ import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 import type {
   CreateTicketInput,
+  ListMessagesQuery,
   ListMyTicketsQuery,
+  PostMessageInput,
   RateTicketInput,
 } from "../schemas/support.schema.js";
 
 export const TICKET_ACTIVITY = { module: "support", targetType: "supportTicket" } as const;
+export const MESSAGE_ACTIVITY = { module: "support", targetType: "supportMessage" } as const;
 export const REDACT = ["subject", "message", "body", "comment"];
 
 function raiser(req: Request): { userId: string; role: "rider" | "driver" } {
@@ -35,8 +45,6 @@ function raiser(req: Request): { userId: string; role: "rider" | "driver" } {
   }
   return { userId: req.auth!.id, role };
 }
-
-export const ticketNotFound = (id: string) => AppError.notFound(`Support ticket not found: ${id}`);
 
 // A new ticket needs a message or a file, a category the raiser can use, and only the raiser's own linked records.
 export async function checkNewTicket(
@@ -196,4 +204,65 @@ export async function rateMyTicket(req: Request, res: Response) {
     after: ticketAuditView(ticket),
     redact: REDACT,
   });
+}
+
+// Chat. The ticket must be the caller's own (and not detached): anyone else gets 404.
+async function ownTicket(req: Request) {
+  const { userId } = raiser(req);
+  const { id } = req.validated.params as { id: string };
+  const ticket = await supportTicketModel.findOwned(id, userId);
+  if (!ticket) throw ticketNotFound(id);
+  return { userId, ticket };
+}
+
+export async function listMyMessages(req: Request, res: Response) {
+  const { ticket } = await ownTicket(req);
+  const page = await supportMessageModel.listPage(ticket.id, true, req.validated.query as ListMessagesQuery);
+
+  sendSuccess(res, "Messages retrieved successfully", {
+    ...page,
+    items: page.items.map(userMessageView),
+    readMarkers: { user: ticket.userLastReadSeq, staff: ticket.staffLastReadSeq },
+  });
+}
+
+export async function postMyMessage(req: Request, res: Response) {
+  const { userId, ticket } = await ownTicket(req);
+  const posted = await postTicketMessage(
+    ticket,
+    { side: "user", userId, userName: null, kind: "message" },
+    req.validated.body as PostMessageInput,
+    filesOf(req),
+  );
+
+  sendCreated(res, "Message sent successfully", {
+    message: userMessageView(posted.message),
+    ticket: userTicketView(posted.ticket),
+  });
+
+  announceMessage(posted.ticket, posted.message, posted.events);
+}
+
+export async function deleteMyMessage(req: Request, res: Response) {
+  const { userId, ticket } = await ownTicket(req);
+  const { messageId } = req.validated.params as { messageId: string };
+  const message = await deleteTicketMessage(ticket, messageId, { userId, side: "user", canModerate: false });
+
+  sendSuccess(res, "Message deleted successfully", userMessageView(message));
+
+  logActivity(req, {
+    ...MESSAGE_ACTIVITY,
+    action: "support.message.delete",
+    description: `Deleted a message on support ticket ${ticket.code}`,
+    targetId: messageId,
+  });
+}
+
+export async function readMyTicket(req: Request, res: Response) {
+  const { userId, ticket } = await ownTicket(req);
+  const lastReadSeq = (await supportTicketModel.markRead(ticket.id, "user", userId)) ?? 0;
+
+  sendSuccess(res, "Ticket marked as read", { lastReadSeq });
+
+  announceRead(ticket, "user", lastReadSeq);
 }

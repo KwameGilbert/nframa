@@ -1,5 +1,6 @@
 import type { StoredAttachment } from "./storage.service.js";
 import type { supportTicketModel, SupportTicket, TicketActivity } from "../models/supportTicket.model.js";
+import type { MessageRow } from "../models/supportMessage.model.js";
 
 const PREVIEW_LENGTH = 120;
 const DAY = 86_400_000;
@@ -142,5 +143,47 @@ export function staffTicketDetailView(ticket: SupportTicket, activity: TicketAct
     payout: payout ? { ...payout, amount: Number(payout.amount) } : null,
     relatedTicket: relatedTicket ?? null,
     history,
+  };
+}
+
+const SIDE_LABEL = { user: "user", staff: "support", system: "system" } as const;
+export const firstName = (name: string | null) => name?.trim().split(/\s+/)[0] || null;
+
+function messageBase(m: MessageRow) {
+  const deleted = m.deletedAt !== null;
+  return {
+    id: m.id,
+    seq: m.seq,
+    kind: m.kind,
+    from: SIDE_LABEL[m.senderSide],
+    replyToMessageId: m.replyToMessageId,
+    deleted,
+    removedBy: deleted ? (m.deletedBySide === "user" ? ("user" as const) : ("support" as const)) : null,
+    createdAt: m.createdAt,
+  };
+}
+
+// A user sees agents by first name, events without who did them, and a deleted message as just "deleted".
+export function userMessageView(m: MessageRow) {
+  const base = messageBase(m);
+  const { type, data } = userEventView(m);
+  return {
+    ...base,
+    senderName: base.from === "support" && m.kind !== "event" ? firstName(m.senderName) : null,
+    body: base.deleted ? null : m.body,
+    attachments: base.deleted ? [] : m.attachments.map(attachmentView),
+    event: m.kind === "event" ? { type, data } : null,
+  };
+}
+
+// Staff keep everything, deleted originals included (flagged), except where files are stored.
+export function staffMessageView(m: MessageRow) {
+  return {
+    ...messageBase(m),
+    internal: m.internal,
+    senderName: m.senderName,
+    body: m.body,
+    attachments: m.attachments.map(attachmentView),
+    event: m.kind === "event" ? { type: m.eventType, data: m.eventData ?? {} } : null,
   };
 }

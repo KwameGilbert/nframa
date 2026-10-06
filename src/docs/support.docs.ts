@@ -1,5 +1,12 @@
 import { errorResponse, rateLimitedResponse, registry, successResponse } from "./registry.js";
 import {
+  listMessagesQuerySchema,
+  messagePageResponseSchema,
+  messageParamsSchema,
+  postedMessageResponseSchema,
+  postMessageMultipartSchema,
+  postMessageSchema,
+  readResponseSchema,
   adminCreateTicketMultipartSchema,
   adminCreateTicketSchema,
   adminListTicketsQuerySchema,
@@ -292,5 +299,182 @@ registry.registerPath({
     403: errorResponse("Missing permission: update on support"),
     404: STAFF_NOT_FOUND,
     409: CLOSED,
+  },
+});
+
+// Chat (both sides).
+
+const MESSAGE_NOT_FOUND = errorResponse("No such message on this ticket", "Message not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34");
+const PAGING =
+  "Paged by seq, oldest first: no cursor gives the latest page; before=<seq> scrolls up, after=<seq> catches up after a reconnect, around=<seq> centres on one message (e.g. a search hit). hasMoreBefore / hasMoreAfter say whether to keep going. attachmentKind lists only messages with that kind of file (a media gallery). readMarkers give each side's last read seq for ticks: the other side has read everything up to its marker. Deduplicate by id when merging pages and live events.";
+const POST_BODY = {
+  content: {
+    "application/json": { schema: postMessageSchema },
+    "multipart/form-data": { schema: postMessageMultipartSchema },
+  },
+};
+const FILES =
+  "Send JSON for text, or multipart/form-data with up to 5 files under the repeated attachments field (same types and sizes as opening a ticket). A body or at least one file is required. replyToMessageId quotes an earlier message on the same ticket.";
+
+registry.registerPath({
+  method: "get",
+  path: "/support/tickets/{id}/messages",
+  tags: [TAG],
+  summary: "My ticket's conversation (riders and drivers)",
+  description: `Messages and status events, never staff notes or internal events. Agents appear by first name. A deleted message shows only that it was deleted, and by whom (removedBy). ${PAGING} ${OWN_ONLY} Rate limited per account (300 per 15 minutes, shared by every support read).`,
+  security: [{ bearerAuth: [] }],
+  request: { params: ticketParamsSchema, query: listMessagesQuerySchema },
+  responses: {
+    200: successResponse("Messages retrieved successfully", messagePageResponseSchema),
+    400: errorResponse("Validation error", "Use only one of before, after and around"),
+    401: unauthorized,
+    403: ONLY_USERS,
+    404: NOT_FOUND,
+    429: rateLimitedResponse,
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/support/tickets/{id}/messages",
+  tags: [TAG],
+  summary: "Send a message on my ticket (riders and drivers)",
+  description: `${FILES} Replying while support waits on you moves the ticket back to them; replying to a resolved ticket within the reopen window reopens it (and clears its rating). A closed ticket takes no more messages: open a new one and link it with relatedTicketId. Support is told live (support:message). ${OWN_ONLY} Rate limited per account (120 per 15 minutes).`,
+  security: [{ bearerAuth: [] }],
+  request: { params: ticketParamsSchema, body: POST_BODY },
+  responses: {
+    201: successResponse("Message sent successfully", postedMessageResponseSchema),
+    400: errorResponse("Validation error, no text or file, or a bad reply target", "Write a message or attach a file"),
+    401: unauthorized,
+    403: ONLY_USERS,
+    404: NOT_FOUND,
+    409: errorResponse("The ticket is closed", "This ticket is closed. Open a new ticket and link it with relatedTicketId"),
+    429: rateLimitedResponse,
+  },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/support/tickets/{id}/messages/{messageId}",
+  tags: [TAG],
+  summary: "Delete a message I sent (riders and drivers)",
+  description: `Your own message, within 15 minutes of sending. Everyone then sees "This message was deleted"; support keeps the original for their records. Recorded in the audit trail (support.message.delete). ${OWN_ONLY} Rate limited per account (120 per 15 minutes, shared with messages).`,
+  security: [{ bearerAuth: [] }],
+  request: { params: messageParamsSchema },
+  responses: {
+    200: successResponse("Message deleted successfully"),
+    400: errorResponse("Validation error"),
+    401: unauthorized,
+    403: errorResponse("Not your message", "You can only delete your own messages"),
+    404: MESSAGE_NOT_FOUND,
+    409: errorResponse("Already deleted, or too late", "Messages can only be deleted within 15 minutes of sending"),
+    429: rateLimitedResponse,
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/support/tickets/{id}/read",
+  tags: [TAG],
+  summary: "Mark my ticket's conversation as read (riders and drivers)",
+  description: `Moves your read marker to the latest message (never backwards), clearing unreadCount. Support sees the ticks move live (support:read). ${OWN_ONLY}`,
+  security: [{ bearerAuth: [] }],
+  request: { params: ticketParamsSchema },
+  responses: {
+    200: successResponse("Ticket marked as read", readResponseSchema),
+    400: errorResponse("Validation error"),
+    401: unauthorized,
+    403: ONLY_USERS,
+    404: NOT_FOUND,
+    429: rateLimitedResponse,
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/admin/support/tickets/{id}/messages",
+  tags: [TAG],
+  summary: "A ticket's full conversation (needs support: read)",
+  description: `Messages, internal notes and every event, with senders' full names. Deleted messages keep their text and files, flagged deleted. ${PAGING} Needs support: read.`,
+  security: [{ bearerAuth: [] }],
+  request: { params: ticketParamsSchema, query: listMessagesQuerySchema },
+  responses: {
+    200: successResponse("Messages retrieved successfully", messagePageResponseSchema),
+    400: errorResponse("Validation error", "Use only one of before, after and around"),
+    401: unauthorized,
+    403: errorResponse("Missing permission: read on support"),
+    404: STAFF_NOT_FOUND,
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/admin/support/tickets/{id}/messages",
+  tags: [TAG],
+  summary: "Reply to the user (needs support: update)",
+  description: `${FILES} The ticket then waits on the user (awaitingUser); unassigned, it becomes yours. The user sees your first name. They and other staff are told live (support:message). Needs support: update.`,
+  security: [{ bearerAuth: [] }],
+  request: { params: ticketParamsSchema, body: POST_BODY },
+  responses: {
+    201: successResponse("Message sent successfully", postedMessageResponseSchema),
+    400: errorResponse("Validation error, no text or file, or a bad reply target", "You can only reply to a message on this ticket"),
+    401: unauthorized,
+    403: errorResponse("Missing permission: update on support"),
+    404: STAFF_NOT_FOUND,
+    409: errorResponse("The ticket is closed", "This ticket is closed. Open a new ticket and link it with relatedTicketId"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/admin/support/tickets/{id}/notes",
+  tags: [TAG],
+  summary: "Add an internal note (needs support: update)",
+  description: `For staff only: the user never sees it, and it doesn't change the ticket's status or waiting time. Allowed on closed tickets. ${FILES} Other staff are told live (support:message). Needs support: update.`,
+  security: [{ bearerAuth: [] }],
+  request: { params: ticketParamsSchema, body: POST_BODY },
+  responses: {
+    201: successResponse("Note added successfully", postedMessageResponseSchema),
+    400: errorResponse("Validation error, no text or file, or a bad reply target"),
+    401: unauthorized,
+    403: errorResponse("Missing permission: update on support"),
+    404: STAFF_NOT_FOUND,
+  },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/admin/support/tickets/{id}/messages/{messageId}",
+  tags: [TAG],
+  summary: "Delete my message or note, or remove anyone's (needs support: update)",
+  description:
+    "Your own message or note within 15 minutes with support: update; with support: delete, any message at any time (moderation, e.g. abuse or personal data posted by mistake). The user then sees it as removed by support; staff keep the original. Recorded in the audit trail (support.message.delete for your own, support.message.remove otherwise). Needs support: update.",
+  security: [{ bearerAuth: [] }],
+  request: { params: messageParamsSchema },
+  responses: {
+    200: successResponse("Message deleted successfully"),
+    400: errorResponse("Validation error"),
+    401: unauthorized,
+    403: errorResponse("Lacks support: update, or not your message without support: delete", "You can only delete your own messages"),
+    404: MESSAGE_NOT_FOUND,
+    409: errorResponse("Already deleted, or too late", "This message is already deleted"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/admin/support/tickets/{id}/read",
+  tags: [TAG],
+  summary: "Mark a ticket's conversation as read by support (needs support: read)",
+  description:
+    "Moves support's shared read marker to the latest message (never backwards), clearing the queue's unreadCount. The user sees their ticks move live (support:read). Needs support: read.",
+  security: [{ bearerAuth: [] }],
+  request: { params: ticketParamsSchema },
+  responses: {
+    200: successResponse("Ticket marked as read", readResponseSchema),
+    400: errorResponse("Validation error"),
+    401: unauthorized,
+    403: errorResponse("Missing permission: read on support"),
+    404: STAFF_NOT_FOUND,
   },
 });

@@ -66,6 +66,56 @@ Content-Type: application/json
   "comment": "Sorted out quickly, thanks."
 }
 
+### Chat: the conversation (latest page; before / after / around = a seq to page)
+GET {{baseUrl}}/support/tickets/{{ticketId}}/messages?limit=30
+Authorization: Bearer {{userToken}}
+
+### Chat: send a message (multipart with attachments works as for opening a ticket)
+# @name sendMessage
+POST {{baseUrl}}/support/tickets/{{ticketId}}/messages
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "body": "Here is the receipt you asked for."
+}
+
+@messageId = {{sendMessage.response.body.data.message.id}}
+
+### Chat: delete my message (within 15 minutes)
+DELETE {{baseUrl}}/support/tickets/{{ticketId}}/messages/{{messageId}}
+Authorization: Bearer {{userToken}}
+
+### Chat: mark as read
+POST {{baseUrl}}/support/tickets/{{ticketId}}/read
+Authorization: Bearer {{userToken}}
+
+### Staff: the full conversation, notes included
+GET {{baseUrl}}/admin/support/tickets/{{ticketId}}/messages
+Authorization: Bearer {{adminToken}}
+
+### Staff: reply to the user
+POST {{baseUrl}}/admin/support/tickets/{{ticketId}}/messages
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "body": "Thanks, the refund is on its way."
+}
+
+### Staff: internal note (the user never sees it)
+POST {{baseUrl}}/admin/support/tickets/{{ticketId}}/notes
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "body": "Paystack confirms the double charge; refund issued."
+}
+
+### Staff: mark as read by support
+POST {{baseUrl}}/admin/support/tickets/{{ticketId}}/read
+Authorization: Bearer {{adminToken}}
+
 ### Staff: the queue (support: read). Active first, then priority, then longest waiting
 GET {{baseUrl}}/admin/support/tickets?assignedTo=unassigned&status=open&priority=urgent&priority=high
 Authorization: Bearer {{adminToken}}

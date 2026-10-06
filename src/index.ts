@@ -6,6 +6,7 @@ import { app } from "./app.js";
 import { socketAuthenticate, type SocketData } from "./middlewares/socketAuthenticate.js";
 import { initSocketService, joinSocketRooms } from "./services/socket.service.js";
 import { startPushReceiptSweep } from "./services/pushReceipts.service.js";
+import { registerSupportSocket, type ClientToServerEvents } from "./services/supportSocket.service.js";
 
 config();
 
@@ -25,7 +26,7 @@ process.on("unhandledRejection", (reason) => {
 // Create HTTP server and Socket.IO server
 const httpServer = createServer(app);
 const io = new Server<
-  Record<string, never>,
+  ClientToServerEvents,
   Record<string, never>,
   Record<string, never>,
   SocketData
@@ -48,6 +49,7 @@ io.on("connection", async (socket) => {
     socket.disconnect(true);
     return;
   }
+  registerSupportSocket(socket);
   socketLogger.info({ socketId: socket.id, userId, userType, role }, "Socket connected");
 
   socket.on("disconnect", (reason) => {

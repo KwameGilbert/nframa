@@ -12,10 +12,19 @@ import {
   createTicket,
   getMyTicket,
   listMyTickets,
+  deleteMyMessage,
+  listMyMessages,
+  postMyMessage,
   rateMyTicket,
+  readMyTicket,
   resolveMyTicket,
 } from "../controllers/support.controller.js";
 import {
+  adminDeleteMessage,
+  adminListMessages,
+  adminPostMessage,
+  adminPostNote,
+  adminReadTicket,
   adminCreateTicket,
   adminGetTicket,
   adminListTickets,
@@ -30,7 +39,10 @@ import {
   assignTicketSchema,
   updateTicketSchema,
   createTicketSchema,
+  listMessagesQuerySchema,
   listMyTicketsQuerySchema,
+  messageParamsSchema,
+  postMessageSchema,
   rateTicketSchema,
   ticketParamsSchema,
 } from "../schemas/support.schema.js";
@@ -95,7 +107,78 @@ supportRouter.post(
   rateMyTicket,
 );
 
+supportRouter.get(
+  "/support/tickets/:id/messages",
+  authenticate,
+  supportBrowseLimit,
+  validate({ params: ticketParamsSchema, query: listMessagesQuerySchema }),
+  listMyMessages,
+);
+
+supportRouter.post(
+  "/support/tickets/:id/messages",
+  authenticate,
+  supportMessageLimit,
+  uploadAttachments(),
+  validate({ params: ticketParamsSchema, body: postMessageSchema }),
+  postMyMessage,
+);
+
+supportRouter.delete(
+  "/support/tickets/:id/messages/:messageId",
+  authenticate,
+  supportMessageLimit,
+  validate({ params: messageParamsSchema }),
+  deleteMyMessage,
+);
+
+supportRouter.post(
+  "/support/tickets/:id/read",
+  authenticate,
+  supportBrowseLimit,
+  validate({ params: ticketParamsSchema }),
+  readMyTicket,
+);
+
 // Staff. No limiter, like the other admin desks.
+supportRouter.get(
+  "/admin/support/tickets/:id/messages",
+  authenticate,
+  requirePermission("support", "read"),
+  validate({ params: ticketParamsSchema, query: listMessagesQuerySchema }),
+  adminListMessages,
+);
+
+for (const [path, handler] of [
+  ["messages", adminPostMessage],
+  ["notes", adminPostNote],
+] as const) {
+  supportRouter.post(
+    `/admin/support/tickets/:id/${path}`,
+    authenticate,
+    requirePermission("support", "update"),
+    uploadAttachments(),
+    validate({ params: ticketParamsSchema, body: postMessageSchema }),
+    handler,
+  );
+}
+
+supportRouter.delete(
+  "/admin/support/tickets/:id/messages/:messageId",
+  authenticate,
+  requirePermission("support", "update"),
+  validate({ params: messageParamsSchema }),
+  adminDeleteMessage,
+);
+
+supportRouter.post(
+  "/admin/support/tickets/:id/read",
+  authenticate,
+  requirePermission("support", "read"),
+  validate({ params: ticketParamsSchema }),
+  adminReadTicket,
+);
+
 supportRouter.get(
   "/admin/support/tickets",
   authenticate,

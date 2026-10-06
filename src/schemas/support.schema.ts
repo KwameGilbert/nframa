@@ -75,6 +75,93 @@ export const rateTicketSchema = z.object({
 
 export type RateTicketInput = z.infer<typeof rateTicketSchema>;
 
+export const attachmentSchema = z.object({
+  id: z.uuid(),
+  kind: z.enum(["image", "video", "audio", "document"]),
+  fileUrl: z.url(),
+  thumbnailUrl: z.url().nullable().meta({ description: "A video's poster image" }),
+  mimeType: z.string().meta({ example: "image/jpeg" }),
+  fileName: z.string().meta({ example: "receipt.pdf" }),
+  sizeBytes: z.number().int(),
+  durationSeconds: z.number().int().nullable().meta({ description: "Video and audio only" }),
+  width: z.number().int().nullable(),
+  height: z.number().int().nullable(),
+});
+
+// Chat.
+
+export const messageParamsSchema = z.object({ id: z.uuid(), messageId: z.uuid() });
+
+export const postMessageSchema = z.object({
+  body: messageSchema.optional().meta({ description: "The text. Required unless at least one file is attached" }),
+  replyToMessageId: z.uuid().optional().meta({ description: "The message this one quotes" }),
+});
+
+export type PostMessageInput = z.infer<typeof postMessageSchema>;
+
+export const postMessageMultipartSchema = postMessageSchema.extend({
+  attachments: z
+    .array(z.string().meta({ format: "binary" }))
+    .max(MAX_ATTACHMENTS)
+    .optional()
+    .meta({ description: "Up to 5 files; repeat the attachments field once per file" }),
+});
+
+const seqSchema = z.coerce.number().int().min(1);
+
+export const listMessagesQuerySchema = z
+  .object({
+    before: seqSchema.optional().meta({ description: "Older than this seq (scrolling up)" }),
+    after: seqSchema.optional().meta({ description: "Newer than this seq (catching up)" }),
+    around: seqSchema.optional().meta({ description: "Centred on this seq (jumping to a search hit)" }),
+    limit: z.coerce.number().int().min(1).max(100).default(30),
+    attachmentKind: z
+      .enum(["image", "video", "audio", "document"])
+      .optional()
+      .meta({ description: "Only messages carrying this kind of file (a media gallery)" }),
+  })
+  .refine((q) => [q.before, q.after, q.around].filter((v) => v !== undefined).length <= 1, {
+    message: "Use only one of before, after and around",
+  });
+
+export type ListMessagesQuery = z.infer<typeof listMessagesQuerySchema>;
+
+const messageViewSchema = z.object({
+  id: z.uuid(),
+  seq: z.number().int().meta({ description: "Orders the timeline; use it for cursors and read markers" }),
+  kind: z.enum(["message", "note", "event"]),
+  from: z.enum(["user", "support", "system"]),
+  senderName: z.string().nullable().meta({ description: "An agent's first name (users) or full name (staff)" }),
+  body: z.string().nullable(),
+  attachments: z.array(attachmentSchema),
+  replyToMessageId: z.uuid().nullable(),
+  event: z
+    .object({ type: z.string(), data: z.record(z.string(), z.unknown()) })
+    .nullable()
+    .meta({ description: "For kind event: what changed (from, to, reason, rating)" }),
+  deleted: z.boolean(),
+  removedBy: z.enum(["user", "support"]).nullable().meta({ description: "Who deleted it" }),
+  internal: z.boolean().optional().meta({ description: "Staff only: true for notes and events the user never sees" }),
+  createdAt: z.iso.datetime(),
+});
+
+export const messagePageResponseSchema = z.object({
+  items: z.array(messageViewSchema).meta({ description: "Oldest first" }),
+  hasMoreBefore: z.boolean(),
+  hasMoreAfter: z.boolean(),
+  readMarkers: z.object({
+    user: z.number().int().nullable().meta({ description: "The last seq the user has read" }),
+    staff: z.number().int().nullable().meta({ description: "The last seq support has read" }),
+  }),
+});
+
+export const postedMessageResponseSchema = z.object({
+  message: messageViewSchema,
+  ticket: z.object({ id: z.uuid(), status: supportStatusSchema }).passthrough(),
+});
+
+export const readResponseSchema = z.object({ lastReadSeq: z.number().int() });
+
 // Staff.
 
 export const SUPPORT_SORTS = ["queue", "newest", "oldest", "lastActivity"] as const;
@@ -147,19 +234,6 @@ export type AdminCreateTicketInput = z.infer<typeof adminCreateTicketSchema>;
 
 export const adminCreateTicketMultipartSchema = adminCreateTicketSchema.extend({
   attachments: createTicketMultipartSchema.shape.attachments,
-});
-
-export const attachmentSchema = z.object({
-  id: z.uuid(),
-  kind: z.enum(["image", "video", "audio", "document"]),
-  fileUrl: z.url(),
-  thumbnailUrl: z.url().nullable().meta({ description: "A video's poster image" }),
-  mimeType: z.string().meta({ example: "image/jpeg" }),
-  fileName: z.string().meta({ example: "receipt.pdf" }),
-  sizeBytes: z.number().int(),
-  durationSeconds: z.number().int().nullable().meta({ description: "Video and audio only" }),
-  width: z.number().int().nullable(),
-  height: z.number().int().nullable(),
 });
 
 const lastMessageSchema = z

@@ -1,17 +1,25 @@
 import { randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
+import { hasPermission } from "../middlewares/authorize.js";
 import { rolePermissionModel } from "../models/rolePermission.model.js";
+import { supportMessageModel } from "../models/supportMessage.model.js";
 import { supportTicketModel, type Outcome, type SupportTicket } from "../models/supportTicket.model.js";
 import { userModel } from "../models/user.model.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { emitToSupportDesk, emitToUser } from "../services/socket.service.js";
 import {
+  announceMessage,
+  announceRead,
   announceTicket,
+  deleteTicketMessage,
+  postTicketMessage,
+  ticketNotFound,
   discardAttachments,
   filesOf,
   storeAttachments,
 } from "../services/support.service.js";
 import {
+  staffMessageView,
   staffTicketDetailView,
   staffTicketView,
   ticketAuditView,
@@ -19,11 +27,13 @@ import {
 } from "../services/supportViews.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
-import { checkNewTicket, REDACT, TICKET_ACTIVITY, ticketNotFound } from "./support.controller.js";
+import { checkNewTicket, MESSAGE_ACTIVITY, REDACT, TICKET_ACTIVITY } from "./support.controller.js";
 import type {
   AdminCreateTicketInput,
   AdminListTicketsQuery,
   AssignTicketInput,
+  ListMessagesQuery,
+  PostMessageInput,
   UpdateTicketInput,
 } from "../schemas/support.schema.js";
 
@@ -218,4 +228,78 @@ export async function unassignTicket(req: Request, res: Response) {
 export async function listAssignees(_req: Request, res: Response) {
   const ids = await rolePermissionModel.adminUserIdsWithPermission("support", "update");
   sendSuccess(res, "Support agents retrieved successfully", await supportTicketModel.assignees(ids));
+}
+
+// Chat.
+async function staffTicket(req: Request) {
+  const { id } = req.validated.params as { id: string };
+  const ticket = await supportTicketModel.findById(id);
+  if (!ticket) throw ticketNotFound(id);
+  return ticket;
+}
+
+export async function adminListMessages(req: Request, res: Response) {
+  const ticket = await staffTicket(req);
+  const page = await supportMessageModel.listPage(ticket.id, false, req.validated.query as ListMessagesQuery);
+
+  sendSuccess(res, "Messages retrieved successfully", {
+    ...page,
+    items: page.items.map(staffMessageView),
+    readMarkers: { user: ticket.userLastReadSeq, staff: ticket.staffLastReadSeq },
+  });
+}
+
+// A public reply (kind message) or an internal note: same flow, notes never reach the user.
+function staffPost(kind: "message" | "note") {
+  return async (req: Request, res: Response) => {
+    const ticket = await staffTicket(req);
+    const adminId = adminIdOf(req);
+    const admin = await userModel.findById(adminId);
+    const posted = await postTicketMessage(
+      ticket,
+      { side: "staff", userId: adminId, userName: admin?.fullName ?? null, kind },
+      req.validated.body as PostMessageInput,
+      filesOf(req),
+    );
+
+    sendCreated(res, kind === "note" ? "Note added successfully" : "Message sent successfully", {
+      message: staffMessageView(posted.message),
+      ticket: staffTicketView(posted.ticket),
+    });
+
+    announceMessage(posted.ticket, posted.message, posted.events);
+  };
+}
+
+export const adminPostMessage = staffPost("message");
+export const adminPostNote = staffPost("note");
+
+// Own staff messages within the window with support: update; anyone's, any time, with support: delete (moderation).
+export async function adminDeleteMessage(req: Request, res: Response) {
+  const ticket = await staffTicket(req);
+  const { messageId } = req.validated.params as { messageId: string };
+  const adminId = adminIdOf(req);
+  const canModerate = await hasPermission(req, "support", "delete");
+  const message = await deleteTicketMessage(ticket, messageId, { userId: adminId, side: "staff", canModerate });
+
+  sendSuccess(res, "Message deleted successfully", staffMessageView(message));
+
+  const own = message.senderUserId === adminId && message.senderSide === "staff";
+  logActivity(req, {
+    ...MESSAGE_ACTIVITY,
+    action: own ? "support.message.delete" : "support.message.remove",
+    description: own
+      ? `Deleted their message on support ticket ${ticket.code}`
+      : `Removed a ${message.senderSide === "user" ? "user's" : "colleague's"} message on support ticket ${ticket.code}`,
+    targetId: messageId,
+  });
+}
+
+export async function adminReadTicket(req: Request, res: Response) {
+  const ticket = await staffTicket(req);
+  const lastReadSeq = (await supportTicketModel.markRead(ticket.id, "staff")) ?? 0;
+
+  sendSuccess(res, "Ticket marked as read", { lastReadSeq });
+
+  announceRead(ticket, "staff", lastReadSeq);
 }

@@ -578,6 +578,88 @@ export const supportTicketModel = {
     });
   },
 
+  // One chat message or staff note, in one transaction under the ticket's lock: the sweep for this ticket, the status
+  // change the post causes (with its events, before the message in seq order), the message, and the ticket's
+  // counters. A refusal is returned, not thrown, so a close made by the sweep still commits.
+  async postMessage(post: {
+    ticketId: string;
+    side: "user" | "staff";
+    userId: string;
+    userName?: string | null;
+    kind: "message" | "note";
+    body: string | null;
+    attachments: StoredAttachment[];
+    replyToMessageId?: string;
+  }): Promise<Outcome<SupportTicket> & { message?: SupportMessage }> {
+    const { ticketId: id, side, userId, kind } = post;
+    return db.transaction(async (trx) => {
+      await supportTicketModel.sweep({ id }, trx);
+      const locked = await lock(trx, id, side === "user" ? userId : undefined);
+      if (!locked) return { ok: false, reason: "notFound" };
+      if (locked.status === "closed" && kind === "message") return { ok: false, reason: "closed" };
+
+      if (post.replyToMessageId) {
+        const target = await trx("supportTicketMessages")
+          .where({ id: post.replyToMessageId, ticketId: id })
+          .whereNot("kind", "event")
+          .first("internal");
+        if (!target || (kind === "message" && target.internal)) return { ok: false, reason: "badReply" };
+      }
+
+      const update: Record<string, unknown> = {};
+      const events: SupportMessage[] = [];
+      const event = (type: SupportMessage["eventType"] & string, internal: boolean, data: Record<string, unknown>) =>
+        supportMessageModel
+          .insertEventIn(trx, { ticketId: id, type, side, userId, internal, data })
+          .then((e) => events.push(e));
+
+      if (kind === "message" && side === "user") {
+        const to = locked.assignedAdminId ? "inProgress" : "open";
+        if (locked.status === "resolved") {
+          Object.assign(update, { status: to, resolvedAt: null, rating: null, ratingComment: null, ratedAt: null });
+          await event("statusChanged", false, { from: "resolved", to, reason: "userReplied" });
+        } else if (locked.status === "awaitingUser") update.status = to;
+      }
+      if (kind === "message" && side === "staff") {
+        if (!locked.assignedAdminId) {
+          Object.assign(update, { assignedAdminId: userId, assignedAt: trx.fn.now() });
+          await event("assigned", true, { adminId: userId, adminName: post.userName ?? null, previousAdminId: null, byAdminId: userId });
+        }
+        if (ACTIVE_SUPPORT_STATUSES.includes(locked.status)) update.status = "awaitingUser";
+        update.firstResponseAt = trx.raw(`coalesce("firstResponseAt", now())`);
+      }
+
+      const message = await supportMessageModel.insertMessageIn(trx, { ...post, ticketId: id });
+      // A note is staff talking among themselves: it doesn't make the ticket active or reset its idle clock.
+      if (kind === "message") Object.assign(update, { lastMessageAt: message.createdAt, lastMessageSide: side });
+      await trx("supportTickets")
+        .where({ id })
+        .update({
+          ...update,
+          [side === "user" ? "userLastReadSeq" : "staffLastReadSeq"]: message.seq,
+          updatedAt: trx.fn.now(),
+        });
+      return { ok: true, ticket: await reload(trx, id), events, message };
+    });
+  },
+
+  // Moves a side's read marker up to the latest message it can see; never backwards, and never touches updatedAt.
+  async markRead(id: string, side: Viewer, ownerId?: string): Promise<number | undefined> {
+    const marker = side === "user" ? "userLastReadSeq" : "staffLastReadSeq";
+    const query = db("supportTickets")
+      .where({ id })
+      .update({
+        [marker]: db.raw(
+          `greatest(coalesce("${marker}", 0), (SELECT coalesce(max(seq), 0) FROM "supportTicketMessages" m
+             WHERE m."ticketId" = "supportTickets".id ${side === "user" ? "AND m.internal = false" : ""}))`,
+        ),
+      })
+      .returning(marker);
+    if (ownerId) query.where({ userId: ownerId }).whereNull("detachedAt");
+    const [row] = await query;
+    return row?.[marker];
+  },
+
   // Who can be given tickets: active admins whose role can update support, with their current load.
   assignees(adminIds: string[]) {
     return db("users as u")
