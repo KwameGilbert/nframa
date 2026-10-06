@@ -7,6 +7,7 @@ import { expect } from "vitest";
 import { api, auth, expectStatus } from "./api.js";
 import { signUpByPhone, signUpDriverWithProfile } from "./actors.js";
 import { trackForCleanup } from "./cleanup.js";
+import { postVehicle } from "./vehicles.js";
 import * as data from "./data.js";
 import { newVehicle } from "./unique.js";
 
@@ -162,10 +163,7 @@ export async function bookableCommute({
 }: CommuteFields & { autoAccept?: boolean; approved?: boolean } = {}) {
   const driver = withMoneyCleanup(await signUpDriverWithProfile());
   trackForCleanup("trips", { driverUserId: driver.userId });
-  const vehicle = await api
-    .post("/vehicles")
-    .set(auth(driver.token))
-    .send(await newVehicle(driver.userId));
+  const vehicle = await postVehicle(driver.token, await newVehicle(driver.userId));
   expectStatus(vehicle, 201);
   trackForCleanup("vehicles", { id: vehicle.body.data.id });
   await db("carOwnerProfiles")

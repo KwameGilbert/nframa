@@ -11,6 +11,7 @@ import * as data from "./helpers/data.js";
 import { newEmail, newPhone, newVehicle } from "./helpers/unique.js";
 import { trackForCleanup } from "./helpers/cleanup.js";
 import { seedCategory, seedTicket } from "./helpers/support.js";
+import { postVehicle } from "./helpers/vehicles.js";
 import { flushActivityLogs } from "../src/services/activityLog.service.js";
 import { hashPassword } from "../src/utils/password.js";
 import { userModel } from "../src/models/user.model.js";
@@ -153,10 +154,7 @@ describe("Re-registering a deleted account by phone", () => {
     const commute = await api.post("/commutes").set(auth(driver.token)).send(data.commute());
     expectStatus(commute, 201);
     trackForCleanup("driverCommutes", { id: commute.body.data.id });
-    const vehicle = await api
-      .post("/vehicles")
-      .set(auth(driver.token))
-      .send(await newVehicle(driver.userId));
+    const vehicle = await postVehicle(driver.token, await newVehicle(driver.userId));
     expectStatus(vehicle, 201);
     trackForCleanup("vehicles", { id: vehicle.body.data.id });
     // Approval through the API needs every required document verified; this driver's own row is set directly.

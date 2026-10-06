@@ -14,6 +14,8 @@ Uploaded files (currently: driver verification documents) go through `src/servic
 
 Uploads arrive as `multipart/form-data`, not JSON — `src/middlewares/upload.ts` wraps `multer` (memory storage, 10MB limit, JPEG/PNG/WEBP/PDF only) and converts its errors to `AppError` so they reach `errorHandler` like any other 400, instead of an unhandled 500. It runs before `validate()` on routes that accept a file, since `express.json()` skips multipart bodies entirely — multer is what parses them.
 
+Vehicle photos (`uploadImageFields(VEHICLE_PHOTO_SIDES)`, one image per side, all four required on `POST /vehicles`, one replaced with `PUT /vehicles/:id/photos/:side`) keep public URLs in `vehicles.photos` and storage keys in `vehicles.photoKeys`, which `vehicleModel` lists in `excludedColumns` so no response carries them. Uploads happen before the insert and are deleted if it fails; a replaced photo's old file is deleted after the commit (the row lock hands each replacement the key it replaced).
+
 Support attachments are different: `uploadAttachments()` writes to temp files (`multer.diskStorage`, removed when the response closes) because videos reach 50MB, and `storage.uploadAttachment` uploads with an explicit Cloudinary `resource_type` (`image`, `video` for video and audio, `raw` for documents). `destroy()` rejects `"auto"`, so `deleteFile(storageKey, resourceType)` must get the type the file was stored as (default `image`, which is how the older `auto` uploads of images and PDFs were stored). See `support.md`.
 
 Tests never hit Cloudinary: `tests/setup.ts` mocks `storage.service.js` the same way it mocks SMS/email, returning a fake-but-real-shaped URL built from the actual inputs.

@@ -193,7 +193,43 @@ export function uploadImages(fieldName: string, maxCount: number) {
   };
 }
 
-const LARGEST_ATTACHMENT = Math.max(...Object.values(ATTACHMENT_MAX_BYTES));
+// One image under each named field (e.g. a vehicle's front, back, left and right), same types and size as
+// uploadImages. Files land in req.files as { [field]: [file] }. JSON passes straight through with no files.
+export function uploadImageFields(fields: readonly string[]) {
+  const images = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_IMAGE_BYTES, files: fields.length },
+    fileFilter: (_req, file, cb) => {
+      if (!IMAGE_MIME_TYPES.includes(file.mimetype)) {
+        cb(AppError.badRequest(`Unsupported file type: ${file.mimetype}. Allowed: JPEG, PNG, WEBP`));
+        return;
+      }
+      cb(null, true);
+    },
+  }).fields(fields.map((name) => ({ name, maxCount: 1 })));
+
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.is("multipart/form-data")) {
+      next();
+      return;
+    }
+    images(req, res, (err: unknown) => {
+      if (err instanceof MulterError) {
+        const message =
+          err.code === "LIMIT_FILE_SIZE"
+            ? `Image too large. Maximum size is ${MAX_IMAGE_BYTES / (1024 * 1024)}MB each`
+            : err.code === "LIMIT_UNEXPECTED_FILE" || err.code === "LIMIT_FILE_COUNT"
+              ? `Send one image under each of ${fields.join(", ")}`
+              : err.message;
+        next(AppError.badRequest(message));
+        return;
+      }
+      next(err);
+    });
+  };
+}
+
+const LARGEST_ATTACHMENT =Math.max(...Object.values(ATTACHMENT_MAX_BYTES));
 const KIND_PLURAL = { image: "Images", video: "Videos", audio: "Audio files", document: "Documents" };
 
 // Support message attachments (images, video, voice notes, documents) in one multipart request, under the same

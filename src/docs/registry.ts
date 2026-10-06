@@ -164,7 +164,8 @@ function invalidMessage(schema: JsonSchema, missing: boolean): string | undefine
 // validate() parses body, then query, then params, so the first failure is the body's first required
 // field (sent missing), else the first constrained query param or path uuid (sent invalid).
 function validationExample(operation: Operation): string | undefined {
-  const body = operation.requestBody?.content?.["application/json"]?.schema;
+  const content = operation.requestBody?.content;
+  const body = (content?.["application/json"] ?? content?.["multipart/form-data"])?.schema;
   const field = body?.required?.[0];
   const missing = field && body.properties?.[field] && invalidMessage(body.properties[field], true);
   if (field && missing) return `${field}: ${missing}`;

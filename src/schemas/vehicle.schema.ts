@@ -21,6 +21,10 @@ const seatsSchema = z
     example: 4,
   });
 
+export const VEHICLE_PHOTO_SIDES = ["front", "back", "left", "right"] as const;
+export type VehiclePhotoSide = (typeof VEHICLE_PHOTO_SIDES)[number];
+
+// Sent as multipart form fields (the photos travel in the same request), so numbers arrive as text.
 export const createVehicleSchema = z.object({
   carOwnerUserId: z.uuid().meta({
     description:
@@ -28,11 +32,28 @@ export const createVehicleSchema = z.object({
   }),
   make: makeSchema,
   model: modelSchema,
-  year: yearSchema.optional(),
+  year: z.coerce.number().pipe(yearSchema.min(1900)).optional(),
   color: colorSchema,
   plate: plateSchema,
-  seats: seatsSchema,
+  seats: z.coerce.number().pipe(seatsSchema),
 });
+
+const photoFile = (side: string) =>
+  z.string().meta({ format: "binary", description: `A photo of the vehicle's ${side} (JPEG, PNG or WEBP, 5MB)` });
+
+export const createVehicleMultipartSchema = createVehicleSchema.extend({
+  front: photoFile("front"),
+  back: photoFile("back"),
+  left: photoFile("left side"),
+  right: photoFile("right side"),
+});
+
+export const vehiclePhotoParamsSchema = z.object({
+  id: z.uuid(),
+  side: z.enum(VEHICLE_PHOTO_SIDES),
+});
+
+export const replaceVehiclePhotoMultipartSchema = z.object({ photo: photoFile("chosen side") });
 
 export type CreateVehicleInput = z.infer<typeof createVehicleSchema>;
 
@@ -65,6 +86,10 @@ export const vehicleResponseSchema = z.object({
     description: "active: vehicle is in use; retired: vehicle is no longer registered for service",
     example: "active",
   }),
+  photos: z
+    .object({ front: z.url(), back: z.url(), left: z.url(), right: z.url() })
+    .partial()
+    .meta({ description: "Photo URLs by side; every vehicle registered now has all four (older ones may have none)" }),
   isVerified: z.boolean(),
   verificationDate: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),

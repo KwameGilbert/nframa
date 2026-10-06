@@ -1665,7 +1665,8 @@ Standard `RateLimit` / `RateLimit-Policy` response headers (draft-8 format) tell
 | POST   | `/driver`                                   | ✓          | Create driver profile                                |
 | GET    | `/driver/{userId}`                          | ✓          | Get driver profile (with vehicles/documents)         |
 | PATCH  | `/driver/{userId}`                          | ✓          | Update driver profile / go online                    |
-| POST   | `/vehicles`                                 | ✓          | Register a vehicle                                   |
+| POST   | `/vehicles`                                 | ✓          | Register a vehicle (multipart: details + `front`, `back`, `left`, `right` photos, all required) |
+| PUT    | `/vehicles/{id}/photos/{side}`              | ✓          | Replace one photo (multipart `photo`)                |
 | PATCH  | `/users/{id}`                               | ✓          | Update account details (fullName, dateOfBirth, etc)  |
 | GET    | `/trips/available`                          | ✓ (rider)  | Find commutes near a point on a date                 |
 | POST   | `/trips`                                    | ✓ (rider)  | Request a seat on a commute                          |

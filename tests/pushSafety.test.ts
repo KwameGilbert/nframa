@@ -9,6 +9,7 @@ import {
 } from "./helpers/actors.js";
 import { trackForCleanup } from "./helpers/cleanup.js";
 import { bookableCommute, bookingRider, insertTrip } from "./helpers/trips.js";
+import { addDays, today } from "../src/utils/tripTime.js";
 
 type Person = { userId: string; token: string };
 
@@ -18,6 +19,10 @@ let reportsAdmin: Awaited<ReturnType<typeof createSignedInAdmin>>; // reports: r
 let restrictedAdmin: Awaited<ReturnType<typeof createSignedInAdmin>>; // sos: read only (no update)
 let noAccessAdmin: Awaited<ReturnType<typeof createSignedInAdmin>>; // no safety/reports access
 let trip: Awaited<ReturnType<typeof insertTrip>>;
+
+// Accepted trips on distinct future days: one dated today would be settled (cancelled) once its departure passes.
+let dayOffset = 10;
+const accepted = () => ({ status: "accepted", tripDate: addDays(today(), ++dayOffset), acceptedAt: new Date() });
 let tripRider: Person;
 
 const point = () => ({
@@ -77,7 +82,7 @@ beforeAll(async () => {
   ]);
   [sosAdmin, reportsAdmin, restrictedAdmin, noAccessAdmin] = admins;
   tripRider = riderOnTrip;
-  trip = await insertTrip(shared.commute, riderOnTrip.userId, { status: "accepted" });
+  trip = await insertTrip(shared.commute, riderOnTrip.userId, accepted());
 });
 
 describe("Push notifications for SOS incidents", () => {
@@ -207,7 +212,7 @@ describe("Push notifications for trip reports", () => {
     const trip2 = await insertTrip(
       (await bookableCommute()).commute,
       tripRider.userId,
-      { status: "accepted" }
+      accepted()
     );
     const normalReport = await report(tripRider, trip2.id, {
       category: "harassment",
@@ -227,7 +232,7 @@ describe("Push notifications for trip reports", () => {
     const freshTrip = await insertTrip(
       (await bookableCommute()).commute,
       tripRider.userId,
-      { status: "accepted" }
+      accepted()
     );
     const filed = await report(tripRider, freshTrip.id);
     vi.clearAllMocks();
@@ -259,7 +264,7 @@ describe("Push notifications for trip reports", () => {
     const freshTrip = await insertTrip(
       (await bookableCommute()).commute,
       tripRider.userId,
-      { status: "accepted" }
+      accepted()
     );
     const filed = await report(tripRider, freshTrip.id);
     const resolutionStatuses = ["underReview", "resolved", "dismissed"];
@@ -353,7 +358,7 @@ describe("Sign-up scenario: ~5 sign-ups with various status transitions", () => 
     const trip2 = await insertTrip(
       (await bookableCommute()).commute,
       rider.userId,
-      { status: "accepted" }
+      accepted()
     );
 
     vi.clearAllMocks();
