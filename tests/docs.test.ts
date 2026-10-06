@@ -170,6 +170,11 @@ describe("OpenAPI HTTP verbs", () => {
     "read",
     "read-all",
     "unregister",
+    "resolve",
+    "rate",
+    "assign",
+    "unassign",
+    "notes",
   ];
 
   async function operations() {

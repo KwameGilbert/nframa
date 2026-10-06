@@ -3,6 +3,7 @@ import { BaseModel } from "./BaseModel.js";
 import { authSessionModel } from "./authSession.model.js";
 import { pushDeviceModel } from "./pushDevice.model.js";
 import { notificationModel } from "./notification.model.js";
+import { supportTicketModel } from "./supportTicket.model.js";
 import type { CreateUserInput, UpdateUserInput } from "../schemas/user.schema.js";
 
 export interface User {
@@ -102,6 +103,7 @@ class UserModel extends BaseModel<User> {
       await authSessionModel.revokeAllForUser(id, trx);
       await pushDeviceModel.removeAllForUser(id, trx);
       await notificationModel.removeAllForUser(id, trx);
+      await supportTicketModel.detachForUser(id, trx);
       await trx("carOwnerProfiles").where({ userId: id }).update({
         verificationStatus: "unverified",
         ghanaCardNumber: null,

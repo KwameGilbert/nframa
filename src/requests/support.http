@@ -10,6 +10,62 @@
 GET {{baseUrl}}/support/categories
 Authorization: Bearer {{userToken}}
 
+### Open a ticket: JSON, text only (pick categoryId from the list above)
+# @name openTicket
+POST {{baseUrl}}/support/tickets
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "categoryId": "PASTE_CATEGORY_ID_HERE",
+  "subject": "Charged twice for one trip",
+  "message": "I was charged GHS 25 twice for this morning's trip."
+}
+
+@ticketId = {{openTicket.response.body.data.id}}
+
+### Open a ticket with files (multipart: repeat attachments once per file, up to 5)
+POST {{baseUrl}}/support/tickets
+Authorization: Bearer {{userToken}}
+Content-Type: multipart/form-data; boundary=nframa
+
+--nframa
+Content-Disposition: form-data; name="categoryId"
+
+PASTE_CATEGORY_ID_HERE
+--nframa
+Content-Disposition: form-data; name="subject"
+
+Screenshot of the double charge
+--nframa
+Content-Disposition: form-data; name="attachments"; filename="charge.png"
+Content-Type: image/png
+
+< ./sample.png
+--nframa--
+
+### My tickets (repeat status for several)
+GET {{baseUrl}}/support/tickets?status=open&status=inProgress&status=awaitingUser
+Authorization: Bearer {{userToken}}
+
+### One of my tickets
+GET {{baseUrl}}/support/tickets/{{ticketId}}
+Authorization: Bearer {{userToken}}
+
+### Mark it resolved
+POST {{baseUrl}}/support/tickets/{{ticketId}}/resolve
+Authorization: Bearer {{userToken}}
+
+### Rate the help (once resolved)
+POST {{baseUrl}}/support/tickets/{{ticketId}}/rate
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "rating": 5,
+  "comment": "Sorted out quickly, thanks."
+}
+
 ### Every category, with ticket counts (support: read)
 GET {{baseUrl}}/admin/support/categories
 Authorization: Bearer {{adminToken}}

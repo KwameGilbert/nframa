@@ -10,6 +10,7 @@ import {
 import * as data from "./helpers/data.js";
 import { newEmail, newPhone, newVehicle } from "./helpers/unique.js";
 import { trackForCleanup } from "./helpers/cleanup.js";
+import { seedCategory, seedTicket } from "./helpers/support.js";
 import { flushActivityLogs } from "../src/services/activityLog.service.js";
 import { hashPassword } from "../src/utils/password.js";
 import { userModel } from "../src/models/user.model.js";
@@ -349,5 +350,25 @@ describe("Re-registering a deleted account by phone", () => {
     expect(row).toMatchObject({ role: "driver", deletedAt: null });
     const signups = await findLogs({ action: "auth.signup", targetId: rider.userId });
     expect(signups).toHaveLength(2); // the original sign-up and one re-registration
+  });
+
+  it("hides the old owner's support tickets from the number's new owner, and closes them", async () => {
+    const rider = await deletedRider();
+    const category = await seedCategory();
+    const ticket = await seedTicket(rider.userId, category.id, { status: "inProgress" });
+
+    const phone = phoneOf(rider);
+    const res = await verify(phone, await requestCode(phone, "rider"), "rider");
+    expectStatus(res, 200);
+    const token = res.body.data.accessToken;
+
+    const mine = await api.get("/support/tickets").set(auth(token));
+    expectStatus(mine, 200);
+    expect(mine.body.data.items).toEqual([]);
+    expectStatus(await api.get(`/support/tickets/${ticket.id}`).set(auth(token)), 404);
+    const row = await db("supportTickets").where({ id: ticket.id }).first();
+    expect(row).toMatchObject({ status: "closed", userId: rider.userId });
+    expect(row.detachedAt).not.toBeNull();
+    expect(row.closedAt).not.toBeNull();
   });
 });

@@ -19,6 +19,7 @@ import "./role.docs.js";
 import "./rolePermission.docs.js";
 import "./setting.docs.js";
 import "./sosIncident.docs.js";
+import "./support.docs.js";
 import "./supportCategory.docs.js";
 import "./trip.docs.js";
 import "./user.docs.js";

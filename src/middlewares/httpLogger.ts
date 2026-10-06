@@ -49,7 +49,15 @@ export function loggableBody(req: Pick<Request, "originalUrl" | "method" | "body
   if (req.originalUrl.startsWith("/trips/board")) {
     return { ...(req.body as object), code: "[REDACTED]" };
   }
+  if (isSupportPath(req.originalUrl) && req.body) {
+    return blank(req.body, ["subject", "message", "body", "comment"]);
+  }
   return req.body;
+}
+
+// A support conversation is between one person and staff: none of it goes in the request log.
+function isSupportPath(path: string) {
+  return path.startsWith("/support") || path.startsWith("/admin/support");
 }
 
 // Trip views carry the rider's boarding code (for the rider alone), and the auth routes that sign in (login,
@@ -58,6 +66,7 @@ export function loggableBody(req: Pick<Request, "originalUrl" | "method" | "body
 export function loggableResponse(body: unknown, path = "") {
   const data = (body as { data?: unknown } | undefined)?.data;
   if (typeof data !== "object" || data === null) return body;
+  if (isSupportPath(path)) return { ...(body as object), data: "[REDACTED]" };
 
   const secrets = ["boardingCode", ...(path.startsWith("/auth/") ? ["accessToken", "refreshToken"] : [])];
   if (!secrets.some((key) => key in data)) return body;

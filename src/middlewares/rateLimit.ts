@@ -79,3 +79,7 @@ export const deviceLimit = limitBy(byUser, 60);
 export const notificationLimit = limitBy(byUser, 300);
 // Per account. Reading support categories, tickets and messages only touches the database: a flood guard.
 export const supportBrowseLimit = limitBy(byUser, 300);
+// Per account. Opening a ticket can upload files; nobody needs more than a handful in 15 minutes.
+export const supportTicketLimit = limitBy(byUser, 10);
+// Per account. Chat messages (which can carry files), resolving and rating: well above a busy conversation.
+export const supportMessageLimit = limitBy(byUser, 120);
