@@ -3,6 +3,7 @@ import { adminUserModel } from "../models/adminUser.model.js";
 import { userModel } from "../models/user.model.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { sendAdminAccessEmail } from "../services/email.service.js";
+import { notifyAdminAccess } from "../services/notificationEvents.service.js";
 import { hashPassword } from "../utils/password.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
@@ -51,6 +52,7 @@ export async function createAdminUser(req: Request, res: Response) {
 
   sendCreated(res, "Admin user created successfully", result);
   void sendAdminAccessEmail(input.userId, "granted", result?.adminUser.role?.name ?? null);
+  void notifyAdminAccess(input.userId, "granted");
 
   logActivity(req, {
     ...ADMIN_ACTIVITY,
@@ -104,6 +106,7 @@ export async function updateAdminUser(req: Request, res: Response) {
       result.adminUser.role?.name ?? null,
       statusChanged ? result.adminUser.status : undefined,
     );
+    void notifyAdminAccess(userId, "changed");
   }
 
   logActivity(req, {

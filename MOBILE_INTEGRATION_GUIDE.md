@@ -17,8 +17,9 @@ Every response has the shape `{ "success": true, "message": "...", "data": ... }
 6. [Trips (Rider Booking)](#trips-rider-booking)
 7. [Trips (Driver Side)](#trips-driver-side)
 8. [Admin Document Review](#admin-document-review)
-9. [Error Codes & Handling](#error-codes--handling)
-10. [Rate Limiting](#rate-limiting)
+9. [Push Notifications & Inbox](#push-notifications--inbox)
+10. [Error Codes & Handling](#error-codes--handling)
+11. [Rate Limiting](#rate-limiting)
 
 ---
 
@@ -1243,6 +1244,279 @@ Requires `verification: update`. This is the **only** endpoint that can set a dr
   "error": "Cannot approve driver: missing required document(s): National ID, Driver's License"
 }
 ```
+
+---
+
+## Push Notifications & Inbox
+
+The app receives real-time updates via push notifications. All signed-in users (riders, drivers, admins) can register devices and manage their notification inbox.
+
+### Register a Device for Push Notifications
+
+Every device (phone or browser) must be registered to receive pushes. Register on every sign-in, cold start, return to the foreground, and token refresh. A device not seen for 45 days (server-side cleanup) stops getting pushes.
+
+**For phones (Expo):**
+
+```http
+POST /devices
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{
+  "platform": "ios",
+  "token": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]"
+}
+```
+
+Get the Expo push token from:
+
+```javascript
+import * as Notifications from 'expo-notifications';
+
+const token = await Notifications.getExpoPushTokenAsync({
+  projectId: 'your-expo-project-id'
+});
+```
+
+**For browsers (Web Push):**
+
+Get the VAPID key first:
+
+```http
+GET /push/vapid-key
+Authorization: Bearer <accessToken>
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "message": "Web push key retrieved successfully",
+  "data": {
+    "vapidPublicKey": "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM"
+  }
+}
+```
+
+Then subscribe to push notifications:
+
+```javascript
+const registration = await navigator.serviceWorker.register('service-worker.js');
+const subscription = await registration.pushManager.subscribe({
+  userVisibleOnly: true,
+  applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
+});
+```
+
+Finally, register the subscription:
+
+```http
+POST /devices
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{
+  "platform": "web",
+  "subscription": {
+    "endpoint": "https://fcm.googleapis.com/fcm/send/dQw4w9WgXcQ:APA91bHPRgkF3JUikC4ENAHEeMrd41Zxv3hVZjC9KtT8OvPVGJ",
+    "expirationTime": null,
+    "keys": {
+      "p256dh": "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM",
+      "auth": "tBHItJI5svbpez7KI4CCXg"
+    }
+  }
+}
+```
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "message": "Device registered successfully",
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "platform": "ios",
+    "createdAt": "2026-10-03T07:41:02.000Z",
+    "updatedAt": "2026-10-03T07:41:02.000Z"
+  }
+}
+```
+
+### Notification Types & Channels
+
+Notifications are categorized by channel (so Android users can mute or customize each):
+
+- **Trips:** `trip.requested`, `trip.accepted`, `trip.declined`, `trip.cancelled`, `trip.completed`, `trip.noShow`, `trip.driverArrived` (push-only, not in inbox)
+- **Safety:** `sos.statusChanged`, `report.created`, `report.statusChanged`, `sos.deskAlert` (desk only), `report.deskUrgent` (desk only)
+- **Account:** `account.suspended`, `account.reactivated`, `account.passwordChanged`, `account.contactChanged`, `account.adminAccess`, `driver.verification`, `review.received`
+- **Wallet:** `wallet.topUp`, `wallet.topUpFailed`, `paymentMethod.reviewed`
+
+Some pushes show only generic text on the lock screen (sensitive types like `sos.statusChanged`, `report.statusChanged`): the detailed message lives in the inbox.
+
+### Notification Inbox
+
+Every notification is stored in the inbox for 90 days (unless it's push-only, like `trip.driverArrived`). The inbox is the user's own — riders, drivers and admins see only their own notifications.
+
+### List My Notifications
+
+```http
+GET /notifications?page=1&limit=50&unread=true&type=trip.accepted
+Authorization: Bearer <accessToken>
+```
+
+**Query Parameters:**
+
+- `page` — page number (1-based), default 1
+- `limit` — results per page (1-50), default 50
+- `unread` — true (only unread), false (only read), omit (all)
+- `type` — filter by notification type (e.g., `trip.accepted`, `sos.statusChanged`)
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "message": "Notifications retrieved successfully",
+  "data": {
+    "notifications": [
+      {
+        "id": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+        "type": "trip.accepted",
+        "title": "Trip accepted",
+        "body": "Your driver accepted your trip for Mon 5 Oct, 07:30.",
+        "data": {
+          "tripId": "7c1e9a52-3b4d-4f6e-8a90-1b2c3d4e5f60",
+          "commuteId": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+          "tripDate": "2026-10-05"
+        },
+        "readAt": null,
+        "createdAt": "2026-10-03T07:41:02.000Z"
+      }
+    ],
+    "unreadCount": 3
+  }
+}
+```
+
+### Mark a Notification as Read
+
+When the user opens a notification from the push or inbox, mark it read (idempotent):
+
+```http
+POST /notifications/{id}/read
+Authorization: Bearer <accessToken>
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "message": "Notification marked as read",
+  "data": {
+    "id": "3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+    "readAt": "2026-10-03T07:42:15.000Z"
+  }
+}
+```
+
+### Mark All Notifications as Read
+
+Clear the unread badge:
+
+```http
+POST /notifications/read-all
+Authorization: Bearer <accessToken>
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "message": "All notifications marked as read",
+  "data": {
+    "updatedCount": 7,
+    "unreadCount": 0
+  }
+}
+```
+
+`updatedCount` is how many changed; `unreadCount` is the new badge count (use it to update the app's notification badge).
+
+### Delete a Notification
+
+Remove it from the inbox (doesn't affect the push that was already sent):
+
+```http
+DELETE /notifications/{id}
+Authorization: Bearer <accessToken>
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "message": "Notification deleted successfully",
+  "data": null
+}
+```
+
+### Unregister a Device
+
+To stop receiving pushes to a specific device (turn off notifications or switching apps):
+
+```http
+POST /devices/unregister
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{
+  "token": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]"
+}
+```
+
+Or for web:
+
+```http
+POST /devices/unregister
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{
+  "endpoint": "https://fcm.googleapis.com/fcm/send/dQw4w9WgXcQ:APA91bHPRgkF3JUikC4ENAHEeMrd41Zxv3hVZjC9KtT8OvPVGJ"
+}
+```
+
+Always 200, whether the device was registered or not (security: don't leak whether a token belongs to an account).
+
+### Live Updates via Socket.IO
+
+New notifications arrive in real-time via the `notification:new` event on the user's socket connection. Connect to Socket.IO (see Real-Time Events in SOCKET_KEYS.md) and listen:
+
+```javascript
+socket.on('notification:new', ({ notification, unreadCount }) => {
+  // Update the app's notification badge with unreadCount
+  // Display the notification in the inbox
+  console.log('New notification:', notification);
+});
+```
+
+### Rate Limits
+
+Push and inbox endpoints are rate-limited per account: **300 requests per 15 minutes** (shared by all device and notification routes). Hitting the limit returns **429** with `RateLimit` headers showing when to retry.
+
+### Best Practices
+
+- **Register on launch:** Call `POST /devices` on app start and after any auth state change (sign-in, password change, suspension recovery).
+- **Unregister on logout:** Call `POST /devices/unregister` with the device token before clearing tokens.
+- **Mark read on open:** When the user opens a notification from the push or inbox, call `POST /notifications/{id}/read` so the app knows it's been seen.
+- **Handle notification data:** The `data` field in a notification/push payload contains IDs (tripId, incidentId, etc.) — use them to navigate to the relevant screen.
+- **Listen to socket events:** Connect to Socket.IO and listen for `notification:new` to show badges and live updates without polling.
+- **Respect lock-screen privacy:** Some notifications show only generic text on the lock screen; fetch the inbox to read the full message.
 
 ---
 

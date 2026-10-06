@@ -8,7 +8,7 @@ Package manager is **pnpm** (`devEngines.packageManager` enforces it); scripts a
 
 All variables must be in camelCase, never snake_case.
 
-Don't execute prompts/plans just like that, break it into parts. As much as possible, always rewrite prompt and optimized to use as minimum usage tokens as possible while doing the best work possible. Between all available models and its version From Fable, Opus, Haiku, to Sonnet and any other avaiable one to always make sure usage lasts as long as possible switch between models and version depending on the difficulty, complexity, and demand of the work for the best results while optmizing to save usage while giving the best results without compromising quality of work.
+Don't execute prompts/plans in one go: break them into phases. Follow the usage-efficiency rules in `~/.claude/CLAUDE.md` (inline by default, cheapest capable `model` on every subagent, tight prompts, minimal context).
 
 **KISS (Keep It Simple, Stupid)**: Avoid over-engineering. A simple solution that works is better than a complex one. When adding features, make sure they are necessary and don't add unnecessary layers of abstraction.
 
@@ -18,7 +18,10 @@ Don't execute prompts/plans just like that, break it into parts. As much as poss
 
 All commits must first be tested and stagged and requires confirmation from usr first.
 
-Spawn one agent to plan if there already isnt a plan yet, one to execute the plan and another to review what has been done and compare to the plan that was initially done, if there is anything wrong about the execution take it back to the executor to work on or fix.
+Workflow: plan, execute, then review against the plan, and fix anything that doesn't match. Scale it to the task:
+
+- **Small/medium changes** (a few files, clear scope): plan, execute and self-review inline, with no subagents.
+- **Large or risky changes** (many modules, auth/payments/wallet/migrations): execute inline, then spawn one `sonnet` review agent with the plan and the changed files listed, asking for file:line findings only. Fix what it finds myself. Use a `Plan` agent only when no plan exists and the design is genuinely unclear.
 
 `.husky/pre-commit` runs `pnpm build` only (a type build): it does **not** run the tests, so run the affected tests yourself before committing. `lint-staged` is installed but not wired into the hook.
 
@@ -26,7 +29,7 @@ Run tests for the modules you are working on. Test your changes thoroughly and m
 
 Never co author claude in git commits, just make the commit directly.
 
-**Run `pnpm migrate` / `pnpm migrate:rollback` automatically only when necessary.** Write and edit migration files as needed, but leave running them to the user — they run migrations themselves.
+**Never run `pnpm migrate` / `pnpm migrate:rollback` without asking.** Write and edit migration files as needed, then say which migrations need running (and against which DB) and ask whether the user runs them or I do.
 
 The app does **not** migrate on boot — a new migration's table doesn't exist until the user runs `pnpm migrate`, so routes that need it 500 until then. If a migration file's **content** changes after Knex already recorded it as applied (tracked by filename, not content), `migrate:latest` won't pick up the change — that still needs an explicit `migrate:rollback` + `migrate` from the user.
 
@@ -36,7 +39,7 @@ Postgres must be reachable at the host/port/credentials in `.env.development` fo
 
 ## Architecture
 
-Module notes (trips and fares, trip reports, wallet and payments, payment methods and payouts, email, real-time, file storage, settings, tests) live in `.claude/rules/` and load only when you work on matching files. When you change one of those areas, update its rules file the same way you would this one.
+Module notes (trips and fares, trip reports, wallet and payments, payment methods and payouts, email, real-time, file storage, settings, tests, push notifications) live in `.claude/rules/` and load only when you work on matching files. When you change one of those areas, update its rules file the same way you would this one.
 
 Express 5 + TypeScript (strict, ESM/`NodeNext`) + Knex/Postgres + Zod, with `"type": "module"` — all relative imports need explicit `.js` extensions even though source files are `.ts`.
 

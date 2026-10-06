@@ -151,7 +151,7 @@ async function push(
     }
   }
 
-  if (receipts.length > 0) enqueueExpoReceipts(receipts);
+  if (receipts.length > 0) void enqueueExpoReceipts(receipts);
   // The query error would quote the tokens, so only its code is logged.
   await pushDeviceModel
     .removeByTokens(gone)

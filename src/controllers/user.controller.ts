@@ -2,10 +2,12 @@ import type { Request, Response } from "express";
 import { userModel, type User } from "../models/user.model.js";
 import { roleModel } from "../models/role.model.js";
 import { authSessionModel } from "../models/authSession.model.js";
+import { pushDeviceModel } from "../models/pushDevice.model.js";
 import { driverProfileModel } from "../models/driverProfile.model.js";
 import { emergencyContactModel } from "../models/emergencyContact.model.js";
 import { userStatusHistoryModel } from "../models/userStatusHistory.model.js";
 import { activityLogModel } from "../models/activityLog.model.js";
+import db from "../database/knex.js";
 import { assertPermission, assertSelfOrPermission } from "../middlewares/authorize.js";
 import { logActivity } from "../services/activityLog.service.js";
 import {
@@ -71,7 +73,10 @@ export async function softDeleteAccount(req: Request, target: User) {
 
   await userModel.softDelete(target.id);
   // Existing access tokens die within 15 minutes; this makes sure none of them can be refreshed.
-  await authSessionModel.revokeAllForUser(target.id);
+  await db.transaction(async (trx) => {
+    await authSessionModel.revokeAllForUser(target.id, trx);
+    await pushDeviceModel.removeAllForUser(target.id, trx);
+  });
   void sendAccountDeletedEmail(target.id);
 }
 
@@ -220,7 +225,10 @@ export async function updateUserStatus(req: Request, res: Response) {
 
   if (status === "suspended") {
     // Existing access tokens die within 15 minutes; this makes sure none of them can be refreshed.
-    await authSessionModel.revokeAllForUser(id);
+    await db.transaction(async (trx) => {
+      await authSessionModel.revokeAllForUser(id, trx);
+      await pushDeviceModel.removeAllForUser(id, trx);
+    });
   }
 
   // The full reason/notes live here, not on the users row itself — GET /users/:id/status-history is

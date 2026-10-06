@@ -7,6 +7,7 @@ import { userModel } from "../models/user.model.js";
 import { assertPaymentsConfigured, initializeTransaction } from "../services/paystack.service.js";
 import { confirmTopUp, type TopUpOutcome } from "../services/wallet.service.js";
 import { logActivity } from "../services/activityLog.service.js";
+import { notifyWallet } from "../services/notificationEvents.service.js";
 import { AppError } from "../utils/AppError.js";
 import { CURRENCY, toPesewas } from "../utils/money.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
@@ -39,6 +40,7 @@ function logOutcome(req: Request, before: Transaction, outcome: TopUpOutcome) {
       action: "wallet.topup_settled",
       description: `Wallet topped up with ${after.currency} ${after.amount.toFixed(2)}`,
     });
+    void notifyWallet(after.userId, "topUp", { id: after.id, amount: after.amount, currency: after.currency });
   } else if (failedNow) {
     logActivity(req, {
       ...activity,
@@ -46,6 +48,7 @@ function logOutcome(req: Request, before: Transaction, outcome: TopUpOutcome) {
       description: `A ${after.currency} ${after.amount.toFixed(2)} wallet top-up failed`,
       error: failedNow,
     });
+    void notifyWallet(after.userId, "topUpFailed", { id: after.id, amount: after.amount, currency: after.currency });
   }
 }
 

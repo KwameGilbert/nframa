@@ -620,8 +620,14 @@ describe("deliverToDesk", () => {
       .mock.calls.find(([messages]) => messages.some((m) => m.to === readerDevice.token));
     expect(call?.[0].map((message) => message.to)).toEqual([readerDevice.token]);
 
-    expect(await inboxOf(reader.userId)).toEqual([]);
-    expect(inboxEvents(reader.userId)).toEqual([]);
+    // Creating the admins sends account.adminAccess notices; only the desk alert must leave no trace.
+    const deskRows = (await inboxOf(reader.userId)).filter((row) => row.type === "sos.deskAlert");
+    const deskEvents = inboxEvents(reader.userId).filter(
+      ([, , payload]) =>
+        (payload as { notification: { type: string } }).notification.type === "sos.deskAlert",
+    );
+    expect(deskRows).toEqual([]);
+    expect(deskEvents).toEqual([]);
   });
 
   it("follows a role edit on the very next alert", async () => {

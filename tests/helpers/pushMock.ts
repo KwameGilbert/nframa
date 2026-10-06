@@ -126,3 +126,10 @@ export function expoPushesTo(token: string) {
 export function webPushesTo(endpoint: string) {
   return webSent.filter((call) => call.subscription.endpoint === endpoint);
 }
+
+// Issue a receipt id without sending a push (for testing receipt processing in isolation).
+export function issueExpoReceipt(): string {
+  const id = randomUUID();
+  issuedReceipts.add(id);
+  return id;
+}

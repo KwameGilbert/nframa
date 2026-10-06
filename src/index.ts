@@ -5,6 +5,7 @@ import { createLogger } from "./config/logger.js";
 import { app } from "./app.js";
 import { socketAuthenticate, type SocketData } from "./middlewares/socketAuthenticate.js";
 import { initSocketService, joinSocketRooms } from "./services/socket.service.js";
+import { startPushReceiptSweep } from "./services/pushReceipts.service.js";
 
 config();
 
@@ -55,6 +56,9 @@ io.on("connection", async (socket) => {
 });
 
 initSocketService(io);
+
+// Start the push receipt sweep (non-blocking).
+startPushReceiptSweep();
 
 const PORT = Number(process.env.PORT) || 3000;
 

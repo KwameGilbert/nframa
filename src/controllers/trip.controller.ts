@@ -20,6 +20,7 @@ import {
 import { commuteRoute, getRoute } from "../services/maps.service.js";
 import { sendTripEmail } from "../services/email.service.js";
 import { emitToUser } from "../services/socket.service.js";
+import { notifyTrip } from "../services/notificationEvents.service.js";
 import { AppError } from "../utils/AppError.js";
 import { roundMoney } from "../utils/money.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
@@ -451,6 +452,7 @@ export async function cancelTrip(req: Request, res: Response) {
 
   sendSuccess(res, "Trip cancelled successfully", tripView(after, callerId ?? null));
 
+  void notifyTrip(by === "rider" ? driverUserId : riderUserId, "cancelled", after.trip, by);
   emitToUser(by === "rider" ? driverUserId : riderUserId, "trip:cancelled", {
     ...tripEvent(after),
     cancelledBy: by,
@@ -593,6 +595,7 @@ export async function markArrived(req: Request, res: Response) {
   sendSuccess(res, "Arrival marked successfully", tripView(after, before.trip.driverUserId));
   if (!changed) return;
 
+  void notifyTrip(after.trip.riderUserId, "driverArrived", after.trip);
   emitToUser(after.trip.riderUserId, "trip:driver_arrived", {
     ...tripEvent(after),
     arrivedAt: after.trip.arrivedAt,
@@ -664,6 +667,8 @@ export async function completeTrip(req: Request, res: Response) {
 
   sendSuccess(res, "Trip completed successfully", tripView(after, before.trip.driverUserId));
 
+  void notifyTrip(after.trip.riderUserId, "completed", after.trip);
+  void notifyTrip(after.trip.driverUserId, "completed", after.trip);
   emitToUser(after.trip.riderUserId, "trip:completed", {
     ...tripEvent(after),
     completedAt: after.trip.completedAt,
@@ -884,6 +889,8 @@ export async function adminCancelTrip(req: Request, res: Response) {
 
     sendSuccess(res, "Trip cancelled successfully", tripView(after, null));
 
+    void notifyTrip(riderUserId, "cancelled", after.trip, "admin");
+    void notifyTrip(driverUserId, "cancelled", after.trip, "admin");
     emitToUser(riderUserId, "trip:cancelled", {
       ...tripEvent(after),
       cancelledBy: "admin",

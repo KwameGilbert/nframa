@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { paymentMethodModel, type PaymentMethod } from "../models/paymentMethod.model.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { sendPaymentMethodReviewEmail } from "../services/email.service.js";
+import { notifyPaymentMethod } from "../services/notificationEvents.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 import type {
@@ -231,6 +232,7 @@ export async function adminUpdatePaymentMethod(req: Request, res: Response) {
 
   if (verificationStatus !== "pending" && existing.verificationStatus !== verificationStatus) {
     void sendPaymentMethodReviewEmail(updated.userId, updated.displayName, verificationStatus);
+    void notifyPaymentMethod(updated.userId, verificationStatus === "verified" ? "verified" : "failed");
   }
 
   logActivity(req, {

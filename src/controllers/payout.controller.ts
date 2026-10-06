@@ -3,6 +3,7 @@ import { paymentMethodModel } from "../models/paymentMethod.model.js";
 import { payoutMethodModel, type PayoutMethodWithPayment } from "../models/payoutMethod.model.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { sendPayoutMethodEmail } from "../services/email.service.js";
+import { notifyPayout } from "../services/notificationEvents.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 import type {
@@ -87,6 +88,7 @@ export async function createPayoutMethod(req: Request, res: Response) {
 
   sendCreated(res, "Payout method added successfully", payoutMethodView(method));
   void sendPayoutMethodEmail(driverUserId, method.paymentDisplayName, "added");
+  void notifyPayout(driverUserId, "added");
 
   logActivity(req, {
     ...PAYOUT_ACTIVITY,
@@ -140,6 +142,7 @@ export async function deletePayoutMethod(req: Request, res: Response) {
 
   sendSuccess(res, "Payout method removed successfully");
   void sendPayoutMethodEmail(existing.driverUserId, existing.paymentDisplayName, "removed");
+  void notifyPayout(existing.driverUserId, "removed");
 
   logActivity(req, {
     ...PAYOUT_ACTIVITY,

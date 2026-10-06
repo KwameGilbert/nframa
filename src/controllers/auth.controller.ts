@@ -7,6 +7,8 @@ import { driverProfileModel } from "../models/driverProfile.model.js";
 import { riderProfileModel } from "../models/riderProfile.model.js";
 import { otpCodeModel, OTP_EXPIRY_MINUTES, OTP_MAX_ATTEMPTS } from "../models/otpCode.model.js";
 import { authSessionModel } from "../models/authSession.model.js";
+import { pushDeviceModel } from "../models/pushDevice.model.js";
+import db from "../database/knex.js";
 import { sendSms } from "../services/sms.service.js";
 import { sendOtpEmail, sendPasswordChangedEmail } from "../services/email.service.js";
 import { generateOtpCode, hashOtpCode } from "../utils/otp.js";
@@ -490,7 +492,10 @@ export async function resetPassword(req: Request, res: Response) {
   }
 
   await userModel.setPassword(user.id, await hashPassword(newPassword));
-  await authSessionModel.revokeAllForUser(user.id);
+  await db.transaction(async (trx) => {
+    await authSessionModel.revokeAllForUser(user.id, trx);
+    await pushDeviceModel.removeAllForUser(user.id, trx);
+  });
 
   sendSuccess(res, "Password reset successfully. Sign in with your new password.");
   void sendPasswordChangedEmail(user.id);
@@ -523,7 +528,10 @@ export async function changePassword(req: Request, res: Response) {
   await userModel.setPassword(credentials.id, await hashPassword(newPassword));
 
   // Signs out every other device; the caller gets a fresh token pair so it stays signed in.
-  await authSessionModel.revokeAllForUser(credentials.id);
+  await db.transaction(async (trx) => {
+    await authSessionModel.revokeAllForUser(credentials.id, trx);
+    await pushDeviceModel.removeAllForUser(credentials.id, trx);
+  });
   const tokens = await issueTokens(credentials.id, req.auth.userType, credentials.role, req);
 
   sendSuccess(res, "Password changed successfully", tokens);

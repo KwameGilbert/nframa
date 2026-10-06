@@ -8,6 +8,7 @@ import { tripModel } from "../models/trip.model.js";
 import { assertPermission, assertSelfOrPermission } from "../middlewares/authorize.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { sendReviewEmail } from "../services/email.service.js";
+import { notifyReview } from "../services/notificationEvents.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 import { findUserOrThrow } from "./user.controller.js";
@@ -97,6 +98,7 @@ export async function createTripReview(req: Request, res: Response) {
 
   sendCreated(res, "Review created successfully", review);
   void sendReviewEmail(review.revieweeUserId, review.rating, review.tip);
+  void notifyReview(review.revieweeUserId, { rating: review.rating, tip: review.tip });
 
   logActivity(req, {
     ...REVIEW_ACTIVITY,
