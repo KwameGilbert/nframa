@@ -71,21 +71,9 @@ vi.mock("../src/services/socket.service.js", () => ({
 // This allows tests to assert on what was called while still testing the actual behavior.
 vi.mock("../src/services/notificationEvents.service.js", async (importActual) => {
   const actual = await importActual<typeof import("../src/services/notificationEvents.service.js")>();
-  return {
-    notifyTrip: vi.fn(actual.notifyTrip),
-    notifySos: vi.fn(actual.notifySos),
-    notifySafetyDesk: vi.fn(actual.notifySafetyDesk),
-    notifyReport: vi.fn(actual.notifyReport),
-    notifyReportCreated: vi.fn(actual.notifyReportCreated),
-    notifyReportsDesk: vi.fn(actual.notifyReportsDesk),
-    notifyAccount: vi.fn(actual.notifyAccount),
-    notifyAdminAccess: vi.fn(actual.notifyAdminAccess),
-    notifyDriverVerification: vi.fn(actual.notifyDriverVerification),
-    notifyWallet: vi.fn(actual.notifyWallet),
-    notifyReview: vi.fn(actual.notifyReview),
-    notifyPayout: vi.fn(actual.notifyPayout),
-    notifyPaymentMethod: vi.fn(actual.notifyPaymentMethod),
-  };
+  return Object.fromEntries(
+    Object.entries(actual).map(([name, value]) => [name, typeof value === "function" ? vi.fn(value) : value]),
+  );
 });
 
 // No test calls Google: getGoogleRoute returns a deterministic route (1.3x the straight line, 10 m/s) and the

@@ -109,7 +109,7 @@ export function registerSupportSocket(socket: SupportSocket) {
       const kind = side === "staff" && input.internal ? "note" : "message";
       const posted = await postTicketMessage(ticket, { side, userId, userName, kind }, input, []);
 
-      announceMessage(posted.ticket, posted.message, posted.events);
+      announceMessage(posted);
       return side === "staff"
         ? { message: staffMessageView(posted.message), ticket: staffTicketView(posted.ticket) }
         : { message: userMessageView(posted.message), ticket: userTicketView(posted.ticket) };

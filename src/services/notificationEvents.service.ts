@@ -322,3 +322,49 @@ export function notifyPaymentMethod(userId: string, status: "verified" | "failed
         },
   );
 }
+
+// --- Support
+
+const SUPPORT_NOTICES = {
+  reply: { title: "Nframa Support replied", body: "Open the app to read their message." },
+  openedForYou: {
+    title: "Nframa Support opened a ticket for you",
+    body: "Open the app to see their message.",
+  },
+  assigned: { title: "A support ticket was assigned to you", body: "Open the support desk to pick it up." },
+  userReplied: { title: "A user replied on your support ticket", body: "Open the support desk to read it." },
+};
+
+const SUPPORT_STATUS_NOTICES: Record<string, Notice> = {
+  resolved: {
+    title: "Your support ticket was resolved",
+    body: "Support marked your ticket as resolved. Reply in the app if you still need help.",
+  },
+  closed: { title: "Your support ticket was closed", body: "Open a new ticket in the app if you need more help." },
+};
+
+// The raiser (reply, statusChanged, openedForYou) or an agent (assigned, userReplied). Only the ticket's id travels.
+export function notifySupport(
+  userId: string,
+  event: keyof typeof SUPPORT_NOTICES | "statusChanged",
+  ticket: { id: string; status: string },
+) {
+  const notice = event === "statusChanged" ? SUPPORT_STATUS_NOTICES[ticket.status] : SUPPORT_NOTICES[event];
+  if (!notice) return Promise.resolve();
+
+  return deliverNotification(userId, `support.${event}` as const, {
+    ...notice,
+    data: { ticketId: ticket.id, ...(event === "statusChanged" && { status: ticket.status }) },
+  });
+}
+
+// Every admin who can read support, for a new high or urgent ticket only.
+export function notifySupportDesk(ticket: { id: string; priority: string }) {
+  if (ticket.priority !== "high" && ticket.priority !== "urgent") return Promise.resolve();
+
+  return deliverToDesk("support", "support.deskAlert", {
+    title: ticket.priority === "urgent" ? "New urgent support ticket" : "New high-priority support ticket",
+    body: "A ticket needs attention. Open the support queue.",
+    data: { ticketId: ticket.id },
+  });
+}

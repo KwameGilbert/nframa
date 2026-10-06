@@ -38,6 +38,13 @@ export const NOTIFICATION_TYPES = {
   "review.received": { channel: "account", priority: "normal", ttl: 24 * HOUR, inbox: true, lockScreen: "full" },
   "payout.methodChanged": { channel: "account", priority: "high", ttl: 24 * HOUR, inbox: true, lockScreen: "full" },
   "paymentMethod.reviewed": { channel: "wallet", priority: "normal", ttl: 24 * HOUR, inbox: true, lockScreen: "full" },
+  // Support: never the subject, a message, the code or a name, only that something happened.
+  "support.reply": { channel: "account", priority: "high", ttl: 24 * HOUR, inbox: false, lockScreen: "full" },
+  "support.statusChanged": { channel: "account", priority: "normal", ttl: 24 * HOUR, inbox: true, lockScreen: "full" },
+  "support.openedForYou": { channel: "account", priority: "normal", ttl: 24 * HOUR, inbox: true, lockScreen: "full" },
+  "support.assigned": { channel: "account", priority: "normal", ttl: 6 * HOUR, inbox: false, lockScreen: "full" },
+  "support.userReplied": { channel: "account", priority: "normal", ttl: 6 * HOUR, inbox: false, lockScreen: "full" },
+  "support.deskAlert": { channel: "account", priority: "high", ttl: HOUR, inbox: false, lockScreen: "full" },
 } as const satisfies Record<string, NotificationTypeSpec>;
 
 export type NotificationType = keyof typeof NOTIFICATION_TYPES;
@@ -51,6 +58,7 @@ export const PUSH_DATA_KEYS = [
   "incidentId",
   "reportId",
   "transactionId",
+  "ticketId",
   "status",
 ] as const;
 

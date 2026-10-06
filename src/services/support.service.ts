@@ -16,6 +16,7 @@ import {
 } from "../models/supportMessage.model.js";
 import type { PostMessageInput } from "../schemas/support.schema.js";
 import { AppError } from "../utils/AppError.js";
+import { notifySupport } from "./notificationEvents.service.js";
 
 // After a change commits: the desk gets the staff view and every event, the raiser's devices the user view and only
 // the public events. Nothing is sent to the raiser of a detached ticket (the number has a new owner).
@@ -98,7 +99,12 @@ export async function postTicketMessage(
     throw (REFUSALS[outcome.reason] ?? (() => ticketNotFound(ticket.id)))();
   }
   const senderName = post.side === "staff" ? post.userName : outcome.ticket.raiserName;
-  return { ticket: outcome.ticket, events: outcome.events, message: { ...outcome.message!, senderName } };
+  return {
+    ticket: outcome.ticket,
+    events: outcome.events,
+    message: { ...outcome.message!, senderName } as MessageRow,
+    firstUnread: outcome.firstUnread ?? false,
+  };
 }
 
 // The raiser hears about public messages only, and nothing once the ticket is detached.
@@ -106,7 +112,11 @@ function toRaiser(ticket: SupportTicket, message: SupportMessage) {
   return !message.internal && !ticket.detachedAt;
 }
 
-export function announceMessage(ticket: SupportTicket, message: MessageRow, events: SupportMessage[]) {
+export type PostedMessage = Awaited<ReturnType<typeof postTicketMessage>>;
+
+// After a post commits: live events to both sides, and a push for the first unread message of a run (to the raiser
+// for a staff reply, to the assignee for a user reply). Never to the raiser of a detached ticket.
+export function announceMessage({ ticket, message, events, firstUnread }: PostedMessage) {
   emitToSupportDesk("support:message", {
     ticketId: ticket.id,
     message: staffMessageView(message),
@@ -120,6 +130,9 @@ export function announceMessage(ticket: SupportTicket, message: MessageRow, even
     });
   }
   if (events.length > 0) announceTicket(ticket, events);
+  if (!firstUnread || message.kind !== "message" || ticket.detachedAt) return;
+  if (message.senderSide === "staff") void notifySupport(ticket.userId, "reply", ticket);
+  else if (ticket.assignedAdminId) void notifySupport(ticket.assignedAdminId, "userReplied", ticket);
 }
 
 export async function deleteTicketMessage(

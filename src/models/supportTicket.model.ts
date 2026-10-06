@@ -106,6 +106,8 @@ type Locked = {
   priority: SupportPriority;
   categoryId: string;
   subject: string;
+  userLastReadSeq: number | null;
+  staffLastReadSeq: number | null;
 };
 
 // Locks the ticket for the rest of the transaction: every message and event insert on a ticket holds this lock,
@@ -637,7 +639,7 @@ export const supportTicketModel = {
     body: string | null;
     attachments: StoredAttachment[];
     replyToMessageId?: string;
-  }): Promise<Outcome<SupportTicket> & { message?: SupportMessage }> {
+  }): Promise<Outcome<SupportTicket> & { message?: SupportMessage; firstUnread?: boolean }> {
     const { ticketId: id, side, userId, kind } = post;
     return db.transaction(async (trx) => {
       await supportTicketModel.sweep({ id }, trx);
@@ -676,6 +678,17 @@ export const supportTicketModel = {
         update.firstResponseAt = trx.raw(`coalesce("firstResponseAt", now())`);
       }
 
+      // Whether the other side had already read everything from this side: only then is this message worth a push
+      // (one per unread run, like a chat app).
+      const otherMarker = side === "user" ? locked.staffLastReadSeq : locked.userLastReadSeq;
+      const pending =
+        kind === "message" &&
+        (await trx("supportTicketMessages")
+          .where({ ticketId: id, kind: "message", internal: false, senderSide: side })
+          .whereNull("deletedAt")
+          .where("seq", ">", otherMarker ?? 0)
+          .first("id"));
+
       const message = await supportMessageModel.insertMessageIn(trx, { ...post, ticketId: id });
       // A note is staff talking among themselves: it doesn't make the ticket active or reset its idle clock.
       if (kind === "message") Object.assign(update, { lastMessageAt: message.createdAt, lastMessageSide: side });
@@ -686,7 +699,7 @@ export const supportTicketModel = {
           [side === "user" ? "userLastReadSeq" : "staffLastReadSeq"]: message.seq,
           updatedAt: trx.fn.now(),
         });
-      return { ok: true, ticket: await reload(trx, id), events, message };
+      return { ok: true, ticket: await reload(trx, id), events, message, firstUnread: kind === "message" && !pending };
     });
   },
 

@@ -6,6 +6,7 @@ import { supportMessageModel } from "../models/supportMessage.model.js";
 import { supportTicketModel, type Outcome, type SupportTicket } from "../models/supportTicket.model.js";
 import { userModel } from "../models/user.model.js";
 import { logActivity } from "../services/activityLog.service.js";
+import { notifySupport } from "../services/notificationEvents.service.js";
 import { emitToSupportDesk, emitToUser } from "../services/socket.service.js";
 import {
   announceMessage,
@@ -142,6 +143,7 @@ export async function adminCreateTicket(req: Request, res: Response) {
 
   emitToSupportDesk("support:ticketCreated", { ticket: staffTicketView(ticket) });
   emitToUser(ticket.userId, "support:ticketCreated", { ticket: userTicketView(ticket) });
+  void notifySupport(ticket.userId, "openedForYou", ticket);
   logActivity(req, {
     ...TICKET_ACTIVITY,
     action: "support.ticket.createOnBehalf",
@@ -165,6 +167,7 @@ export async function adminUpdateTicket(req: Request, res: Response) {
 
   if (events.length === 0) return;
   announceTicket(ticket, events);
+  if (before.status !== ticket.status && !ticket.detachedAt) void notifySupport(ticket.userId, "statusChanged", ticket);
   logActivity(req, {
     ...TICKET_ACTIVITY,
     action: "support.ticket.update",
@@ -200,6 +203,7 @@ export async function assignTicket(req: Request, res: Response) {
 
   if (events.length === 0) return;
   announceTicket(ticket, events);
+  if (targetId !== adminId) void notifySupport(targetId, "assigned", ticket);
   logActivity(req, {
     ...TICKET_ACTIVITY,
     action: "support.ticket.assign",
@@ -273,7 +277,7 @@ function staffPost(kind: "message" | "note") {
       ticket: staffTicketView(posted.ticket),
     });
 
-    announceMessage(posted.ticket, posted.message, posted.events);
+    announceMessage(posted);
   };
 }
 

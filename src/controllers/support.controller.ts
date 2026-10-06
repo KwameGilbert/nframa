@@ -5,6 +5,7 @@ import { supportCategoryModel } from "../models/supportCategory.model.js";
 import { LINKS, supportTicketModel } from "../models/supportTicket.model.js";
 import { supportMessageModel } from "../models/supportMessage.model.js";
 import { logActivity } from "../services/activityLog.service.js";
+import { notifySupportDesk } from "../services/notificationEvents.service.js";
 import { emitToSupportDesk } from "../services/socket.service.js";
 import {
   announceMessage,
@@ -104,6 +105,7 @@ export async function createTicket(req: Request, res: Response) {
   sendCreated(res, "Support ticket created successfully", userTicketView(ticket, activity.get(ticket.id)));
 
   emitToSupportDesk("support:ticketCreated", { ticket: staffTicketView(ticket) });
+  void notifySupportDesk(ticket);
   logActivity(req, {
     ...TICKET_ACTIVITY,
     action: "support.ticket.create",
@@ -247,7 +249,7 @@ export async function postMyMessage(req: Request, res: Response) {
     ticket: userTicketView(posted.ticket),
   });
 
-  announceMessage(posted.ticket, posted.message, posted.events);
+  announceMessage(posted);
 }
 
 export async function deleteMyMessage(req: Request, res: Response) {
