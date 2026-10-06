@@ -66,6 +66,47 @@ Content-Type: application/json
   "comment": "Sorted out quickly, thanks."
 }
 
+### Staff: the queue (support: read). Active first, then priority, then longest waiting
+GET {{baseUrl}}/admin/support/tickets?assignedTo=unassigned&status=open&priority=urgent&priority=high
+Authorization: Bearer {{adminToken}}
+
+### Staff: a ticket's full detail (audited)
+GET {{baseUrl}}/admin/support/tickets/{{ticketId}}
+Authorization: Bearer {{adminToken}}
+
+### Staff: take it yourself (no body), or give it to an agent with { "adminId": "..." } (support: update)
+POST {{baseUrl}}/admin/support/tickets/{{ticketId}}/assign
+Authorization: Bearer {{adminToken}}
+
+### Staff: put it back in the queue
+POST {{baseUrl}}/admin/support/tickets/{{ticketId}}/unassign
+Authorization: Bearer {{adminToken}}
+
+### Staff: change status, priority, category or subject
+PATCH {{baseUrl}}/admin/support/tickets/{{ticketId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "priority": "urgent"
+}
+
+### Staff: agents a ticket can go to
+GET {{baseUrl}}/admin/support/assignees
+Authorization: Bearer {{adminToken}}
+
+### Staff: open a ticket on a user's behalf (support: create)
+POST {{baseUrl}}/admin/support/tickets
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "userId": "PASTE_RIDER_OR_DRIVER_ID_HERE",
+  "categoryId": "PASTE_CATEGORY_ID_HERE",
+  "subject": "Following up on your call",
+  "message": "As discussed, we're refunding the second charge."
+}
+
 ### Every category, with ticket counts (support: read)
 GET {{baseUrl}}/admin/support/categories
 Authorization: Bearer {{adminToken}}

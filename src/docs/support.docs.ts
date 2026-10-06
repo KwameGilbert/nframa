@@ -1,5 +1,14 @@
 import { errorResponse, rateLimitedResponse, registry, successResponse } from "./registry.js";
 import {
+  adminCreateTicketMultipartSchema,
+  adminCreateTicketSchema,
+  adminListTicketsQuerySchema,
+  assigneeResponseSchema,
+  assignTicketSchema,
+  staffTicketDetailResponseSchema,
+  staffTicketListResponseSchema,
+  staffTicketResponseSchema,
+  updateTicketSchema,
   createTicketMultipartSchema,
   createTicketSchema,
   listMyTicketsQuerySchema,
@@ -132,5 +141,156 @@ registry.registerPath({
       "You have already rated this ticket",
     ),
     429: rateLimitedResponse,
+  },
+});
+
+// Staff.
+
+const STAFF_NOT_FOUND = errorResponse(
+  "No such ticket",
+  "Support ticket not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+);
+const CLOSED = errorResponse("The ticket is closed", "This ticket is closed");
+const LIVE =
+  "Staff with support: read and the raiser's devices are told live (support:ticketUpdated); the raiser only gets public changes, never notes, assignment or who did it.";
+
+registry.registerPath({
+  method: "get",
+  path: "/admin/support/tickets",
+  tags: [TAG],
+  summary: "The support queue (needs support: read)",
+  description:
+    "Every ticket, including those of deleted accounts and recycled phone numbers (detachedAt). Filters combine with AND; status, priority, categoryId and rating can be repeated for several values. assignedTo takes me, unassigned or an admin's id; needsReply=true keeps tickets whose last message is the user's. The default sort, queue, puts active tickets first, then the most urgent, then the longest waiting. Each item carries unreadCount (user messages no agent has read) and lastMessage (notes included). stats counts the whole queue regardless of filters (per status, unassigned, mine, needsReply) for tabs. Before answering, idle and expired tickets are resolved or closed. Needs support: read.",
+  security: [{ bearerAuth: [] }],
+  request: { query: adminListTicketsQuerySchema },
+  responses: {
+    200: successResponse("Support tickets retrieved successfully", staffTicketListResponseSchema),
+    400: errorResponse("Validation error"),
+    401: unauthorized,
+    403: errorResponse("Missing permission: read on support"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/admin/support/tickets",
+  tags: [TAG],
+  summary: "Open a ticket on a user's behalf (needs support: create)",
+  description:
+    "For a rider or driver who reached support another way (a call, an email). The ticket starts in progress and assigned to you, with your message first; it appears in their app and they are told live (support:ticketCreated). The category must be one they could pick, and linked records must be theirs. priority defaults to the category's. Files as in POST /support/tickets (multipart, attachments field). Recorded in the audit trail (support.ticket.createOnBehalf). Needs support: create.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: {
+        "application/json": { schema: adminCreateTicketSchema },
+        "multipart/form-data": { schema: adminCreateTicketMultipartSchema },
+      },
+    },
+  },
+  responses: {
+    201: successResponse("Support ticket created successfully", staffTicketResponseSchema),
+    400: errorResponse(
+      "Validation error, no message or file, an unavailable category, or the user isn't a rider or driver",
+      "Support tickets can only be opened for riders and drivers",
+    ),
+    401: unauthorized,
+    403: errorResponse("Missing permission: create on support"),
+    404: errorResponse(
+      "No such user, or a linked record isn't theirs",
+      "User not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+    ),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/admin/support/assignees",
+  tags: [TAG],
+  summary: "Agents a ticket can be assigned to (needs support: read)",
+  description:
+    "Active admins whose role can update support, by name, with their department and how many active tickets they have. Needs support: read.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: successResponse("Support agents retrieved successfully", assigneeResponseSchema.array()),
+    401: unauthorized,
+    403: errorResponse("Missing permission: read on support"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/admin/support/tickets/{id}",
+  tags: [TAG],
+  summary: "A ticket's full detail (needs support: read)",
+  description:
+    "The ticket with the raiser's contact details and account status, the linked trip, transaction or payout, the related ticket, and how many tickets this person has raised. Because it shows contact details, each view is recorded in the audit trail (support.ticket.view). Needs support: read.",
+  security: [{ bearerAuth: [] }],
+  request: { params: ticketParamsSchema },
+  responses: {
+    200: successResponse("Support ticket retrieved successfully", staffTicketDetailResponseSchema),
+    400: errorResponse("Validation error"),
+    401: unauthorized,
+    403: errorResponse("Missing permission: read on support"),
+    404: STAFF_NOT_FOUND,
+  },
+});
+
+registry.registerPath({
+  method: "patch",
+  path: "/admin/support/tickets/{id}",
+  tags: [TAG],
+  summary: "Change a ticket's status, priority, category or subject (needs support: update)",
+  description: `Send at least one field. Moving to resolved starts the reopen window; moving a resolved ticket back to an active status clears its resolution and rating; closed is final (a later status change is 409, though the priority, category and subject can still be corrected). A status change is a public timeline event; priority, category and subject changes are one internal event. ${LIVE} Recorded in the audit trail (support.ticket.update). Needs support: update.`,
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: ticketParamsSchema,
+    body: { content: { "application/json": { schema: updateTicketSchema } } },
+  },
+  responses: {
+    200: successResponse("Support ticket updated successfully", staffTicketResponseSchema),
+    400: errorResponse("Validation error, or an inactive category", "That support category isn't available"),
+    401: unauthorized,
+    403: errorResponse("Missing permission: update on support"),
+    404: STAFF_NOT_FOUND,
+    409: CLOSED,
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/admin/support/tickets/{id}/assign",
+  tags: [TAG],
+  summary: "Take a ticket, give it to an agent, or take it over (needs support: update)",
+  description: `With no body (or no adminId), assigns it to you; with adminId, to that agent, who must be an active admin whose role can update support (else 400). Works on a ticket someone else has (taking it over). An open ticket moves to in progress. Assigning it to whoever already has it changes nothing. Writes an internal assigned event naming the new and previous agent. ${LIVE} Recorded in the audit trail (support.ticket.assign). Needs support: update.`,
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: ticketParamsSchema,
+    body: { required: false, content: { "application/json": { schema: assignTicketSchema } } },
+  },
+  responses: {
+    200: successResponse("Support ticket assigned successfully", staffTicketResponseSchema),
+    400: errorResponse("Validation error, or the agent can't take tickets", "That admin can't take support tickets"),
+    401: unauthorized,
+    403: errorResponse("Missing permission: update on support"),
+    404: STAFF_NOT_FOUND,
+    409: CLOSED,
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/admin/support/tickets/{id}/unassign",
+  tags: [TAG],
+  summary: "Put a ticket back in the queue (needs support: update)",
+  description: `Removes whoever has it; an in-progress ticket goes back to open. Already unassigned changes nothing. Writes an internal unassigned event. ${LIVE} Recorded in the audit trail (support.ticket.unassign). Needs support: update.`,
+  security: [{ bearerAuth: [] }],
+  request: { params: ticketParamsSchema },
+  responses: {
+    200: successResponse("Support ticket unassigned successfully", staffTicketResponseSchema),
+    400: errorResponse("Validation error"),
+    401: unauthorized,
+    403: errorResponse("Missing permission: update on support"),
+    404: STAFF_NOT_FOUND,
+    409: CLOSED,
   },
 });

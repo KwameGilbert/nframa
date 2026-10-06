@@ -1,5 +1,5 @@
 import type { StoredAttachment } from "./storage.service.js";
-import type { SupportTicket, TicketActivity } from "../models/supportTicket.model.js";
+import type { supportTicketModel, SupportTicket, TicketActivity } from "../models/supportTicket.model.js";
 
 const PREVIEW_LENGTH = 120;
 const DAY = 86_400_000;
@@ -85,4 +85,62 @@ export function userEventView(event: { id: string; seq: number; eventType: strin
     ["from", "to", "reason", "rating"].filter((key) => key in data).map((key) => [key, data[key]]),
   );
   return { id: event.id, seq: event.seq, type: event.eventType, data: visible, createdAt: event.createdAt };
+}
+
+const person = (id: string | null, fullName: string | null) => (id ? { id, fullName } : null);
+
+// Staff see everything about a ticket except where its files are stored.
+export function staffTicketView(ticket: SupportTicket, activity?: TicketActivity) {
+  return {
+    id: ticket.id,
+    code: ticket.code,
+    subject: ticket.subject,
+    status: ticket.status,
+    priority: ticket.priority,
+    category: { id: ticket.categoryId, name: ticket.categoryName },
+    raiser: { id: ticket.userId, fullName: ticket.raiserName, role: ticket.raiserRole },
+    assignee: person(ticket.assignedAdminId, ticket.assigneeName),
+    assignedAt: ticket.assignedAt,
+    createdBy: person(ticket.createdByAdminId, ticket.createdByName),
+    tripId: ticket.tripId,
+    transactionId: ticket.transactionId,
+    payoutId: ticket.payoutId,
+    relatedTicketId: ticket.relatedTicketId,
+    firstResponseAt: ticket.firstResponseAt,
+    lastMessageAt: ticket.lastMessageAt,
+    lastMessageSide: ticket.lastMessageSide,
+    unreadCount: activity?.unreadCount ?? 0,
+    lastMessage: lastMessageView(activity?.lastMessage ?? null),
+    rating: ticket.rating,
+    ratingComment: ticket.ratingComment,
+    ratedAt: ticket.ratedAt,
+    resolvedAt: ticket.resolvedAt,
+    closedAt: ticket.closedAt,
+    detachedAt: ticket.detachedAt,
+    createdAt: ticket.createdAt,
+    updatedAt: ticket.updatedAt,
+  };
+}
+
+type StaffDetail = Awaited<ReturnType<typeof supportTicketModel.staffDetail>>;
+
+export function staffTicketDetailView(ticket: SupportTicket, activity: TicketActivity | undefined, detail: StaffDetail) {
+  const { raiser, trip, transaction, payout, relatedTicket, history } = detail;
+  return {
+    ...staffTicketView(ticket, activity),
+    raiser: {
+      id: ticket.userId,
+      fullName: raiser?.fullName ?? null,
+      role: ticket.raiserRole,
+      phoneNumber: raiser?.phoneNumber ? `${raiser.phoneCountryCode ?? ""}${raiser.phoneNumber}` : null,
+      email: raiser?.email ?? null,
+      status: raiser?.status ?? "unknown",
+      deleted: Boolean(raiser?.deletedAt),
+    },
+    trip: trip ? { ...trip, totalAmount: Number(trip.totalAmount) } : null,
+    transaction: transaction ? { ...transaction, amount: Number(transaction.amount) } : null,
+    payout: payout ? { ...payout, amount: Number(payout.amount) } : null,
+    relatedTicket: relatedTicket ?? null,
+    history,
+  };
 }

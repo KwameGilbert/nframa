@@ -16,6 +16,19 @@ import {
   resolveMyTicket,
 } from "../controllers/support.controller.js";
 import {
+  adminCreateTicket,
+  adminGetTicket,
+  adminListTickets,
+  adminUpdateTicket,
+  assignTicket,
+  listAssignees,
+  unassignTicket,
+} from "../controllers/supportAdmin.controller.js";
+import {
+  adminCreateTicketSchema,
+  adminListTicketsQuerySchema,
+  assignTicketSchema,
+  updateTicketSchema,
   createTicketSchema,
   listMyTicketsQuerySchema,
   rateTicketSchema,
@@ -82,7 +95,63 @@ supportRouter.post(
   rateMyTicket,
 );
 
-// Staff.
+// Staff. No limiter, like the other admin desks.
+supportRouter.get(
+  "/admin/support/tickets",
+  authenticate,
+  requirePermission("support", "read"),
+  validate({ query: adminListTicketsQuerySchema }),
+  adminListTickets,
+);
+
+supportRouter.post(
+  "/admin/support/tickets",
+  authenticate,
+  requirePermission("support", "create"),
+  uploadAttachments(),
+  validate({ body: adminCreateTicketSchema }),
+  adminCreateTicket,
+);
+
+supportRouter.get(
+  "/admin/support/assignees",
+  authenticate,
+  requirePermission("support", "read"),
+  listAssignees,
+);
+
+supportRouter.get(
+  "/admin/support/tickets/:id",
+  authenticate,
+  requirePermission("support", "read"),
+  validate({ params: ticketParamsSchema }),
+  adminGetTicket,
+);
+
+supportRouter.patch(
+  "/admin/support/tickets/:id",
+  authenticate,
+  requirePermission("support", "update"),
+  validate({ params: ticketParamsSchema, body: updateTicketSchema }),
+  adminUpdateTicket,
+);
+
+supportRouter.post(
+  "/admin/support/tickets/:id/assign",
+  authenticate,
+  requirePermission("support", "update"),
+  validate({ params: ticketParamsSchema, body: assignTicketSchema }),
+  assignTicket,
+);
+
+supportRouter.post(
+  "/admin/support/tickets/:id/unassign",
+  authenticate,
+  requirePermission("support", "update"),
+  validate({ params: ticketParamsSchema }),
+  unassignTicket,
+);
+
 supportRouter.get(
   "/admin/support/categories",
   authenticate,

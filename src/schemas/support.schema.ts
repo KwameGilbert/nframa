@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MAX_ATTACHMENTS } from "../config/supportAttachments.js";
+import { SUPPORT_PRIORITIES } from "./supportCategory.schema.js";
 
 export const SUPPORT_STATUSES = ["open", "inProgress", "awaitingUser", "resolved", "closed"] as const;
 export type SupportStatus = (typeof SUPPORT_STATUSES)[number];
@@ -74,6 +75,80 @@ export const rateTicketSchema = z.object({
 
 export type RateTicketInput = z.infer<typeof rateTicketSchema>;
 
+// Staff.
+
+export const SUPPORT_SORTS = ["queue", "newest", "oldest", "lastActivity"] as const;
+
+export const adminListTicketsQuerySchema = z.object({
+  status: oneOrMany(z.enum(SUPPORT_STATUSES)).optional(),
+  priority: oneOrMany(z.enum(SUPPORT_PRIORITIES)).optional(),
+  categoryId: oneOrMany(z.uuid()).optional(),
+  rating: oneOrMany(z.coerce.number().int().min(1).max(5)).optional(),
+  assignedTo: z
+    .union([z.enum(["me", "unassigned"]), z.uuid()])
+    .optional()
+    .meta({ description: "me, unassigned, or an admin's user id" }),
+  raiserRole: z.enum(["rider", "driver"]).optional(),
+  userId: z.uuid().optional().meta({ description: "Only this rider's or driver's tickets" }),
+  tripId: z.uuid().optional(),
+  needsReply: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional()
+    .meta({ description: "true: the last message came from the user (they are waiting on support)" }),
+  from: z.iso.date().optional().meta({ description: "Opened on or after this day (YYYY-MM-DD, UTC)" }),
+  to: z.iso.date().optional().meta({ description: "Opened on or before this day (YYYY-MM-DD, UTC)" }),
+  sort: z.enum(SUPPORT_SORTS).default("queue").meta({
+    description:
+      "queue (default): active tickets first, then by priority, then the longest waiting. newest / oldest: by when opened. lastActivity: latest message first",
+  }),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export type AdminListTicketsQuery = z.infer<typeof adminListTicketsQuerySchema>;
+
+export const updateTicketSchema = z
+  .object({
+    status: z.enum(SUPPORT_STATUSES),
+    priority: z.enum(SUPPORT_PRIORITIES),
+    categoryId: z.uuid(),
+    subject: subjectSchema,
+  })
+  .partial()
+  .refine((data) => Object.keys(data).length > 0, { message: "At least one field must be provided" });
+
+export type UpdateTicketInput = z.infer<typeof updateTicketSchema>;
+
+export const assignTicketSchema = z
+  .object({
+    adminId: z
+      .uuid()
+      .optional()
+      .meta({ description: "The admin to give it to (their user id); leave out to take it yourself" }),
+  })
+  .optional()
+  .default({});
+
+export type AssignTicketInput = z.infer<typeof assignTicketSchema>;
+
+export const adminCreateTicketSchema = createTicketSchema.extend({
+  userId: z.uuid().meta({ description: "The rider or driver the ticket is for" }),
+  message: messageSchema
+    .optional()
+    .meta({ description: "Your first message to them. Required unless at least one file is attached" }),
+  priority: z
+    .enum(SUPPORT_PRIORITIES)
+    .optional()
+    .meta({ description: "Defaults to the category's priority" }),
+});
+
+export type AdminCreateTicketInput = z.infer<typeof adminCreateTicketSchema>;
+
+export const adminCreateTicketMultipartSchema = adminCreateTicketSchema.extend({
+  attachments: createTicketMultipartSchema.shape.attachments,
+});
+
 export const attachmentSchema = z.object({
   id: z.uuid(),
   kind: z.enum(["image", "video", "audio", "document"]),
@@ -137,3 +212,99 @@ export const userTicketListResponseSchema = z.object({
     totalPages: z.number().int(),
   }),
 });
+
+const personSchema = z.object({ id: z.uuid(), fullName: z.string().nullable() }).nullable();
+
+export const staffTicketResponseSchema = z.object({
+  id: z.uuid(),
+  code: z.string().meta({ example: "ST-7KQ2MX" }),
+  subject: z.string(),
+  status: supportStatusSchema,
+  priority: z.enum(SUPPORT_PRIORITIES),
+  category: z.object({ id: z.uuid(), name: z.string() }),
+  raiser: z.object({ id: z.uuid(), fullName: z.string().nullable(), role: z.enum(["rider", "driver"]) }),
+  assignee: personSchema.meta({ description: "The agent on it; null while unassigned" }),
+  assignedAt: z.iso.datetime().nullable(),
+  createdBy: personSchema.meta({ description: "The agent who opened it on the user's behalf, if any" }),
+  tripId: z.uuid().nullable(),
+  transactionId: z.uuid().nullable(),
+  payoutId: z.uuid().nullable(),
+  relatedTicketId: z.uuid().nullable(),
+  firstResponseAt: z.iso.datetime().nullable(),
+  lastMessageAt: z.iso.datetime(),
+  lastMessageSide: z.enum(["user", "staff"]).nullable().meta({
+    description: "user: they are waiting on support",
+  }),
+  unreadCount: z.number().int().meta({ description: "User messages no agent has read yet" }),
+  lastMessage: lastMessageSchema,
+  rating: z.number().int().nullable(),
+  ratingComment: z.string().nullable(),
+  ratedAt: z.iso.datetime().nullable(),
+  resolvedAt: z.iso.datetime().nullable(),
+  closedAt: z.iso.datetime().nullable(),
+  detachedAt: z.iso.datetime().nullable().meta({
+    description: "Set when the raiser's phone number went to a new person: they no longer see this ticket",
+  }),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+const countsSchema = z.object({
+  open: z.number().int(),
+  inProgress: z.number().int(),
+  awaitingUser: z.number().int(),
+  resolved: z.number().int(),
+  closed: z.number().int(),
+  unassigned: z.number().int().meta({ description: "Active tickets nobody has" }),
+  mine: z.number().int().meta({ description: "Active tickets assigned to the caller" }),
+  needsReply: z.number().int().meta({ description: "Active tickets whose last message is the user's" }),
+});
+
+export const staffTicketListResponseSchema = userTicketListResponseSchema.extend({
+  items: z.array(staffTicketResponseSchema),
+  stats: countsSchema.meta({ description: "Counts over the whole queue (not the filters), for tabs" }),
+});
+
+export const staffTicketDetailResponseSchema = staffTicketResponseSchema.extend({
+  raiser: z.object({
+    id: z.uuid(),
+    fullName: z.string().nullable(),
+    role: z.enum(["rider", "driver"]),
+    phoneNumber: z.string().nullable().meta({ example: "+233241234567" }),
+    email: z.string().nullable(),
+    status: z.string().meta({ description: "The account's status (active, suspended)" }),
+    deleted: z.boolean(),
+  }),
+  trip: z
+    .object({
+      id: z.uuid(),
+      status: z.string(),
+      tripDate: z.string(),
+      pickupAddress: z.string(),
+      dropoffAddress: z.string(),
+      totalAmount: z.number(),
+    })
+    .nullable(),
+  transaction: z
+    .object({ id: z.uuid(), type: z.string(), direction: z.string(), amount: z.number(), status: z.string(), createdAt: z.iso.datetime() })
+    .nullable(),
+  payout: z
+    .object({ id: z.uuid(), amount: z.number(), status: z.string(), createdAt: z.iso.datetime() })
+    .nullable(),
+  relatedTicket: z
+    .object({ id: z.uuid(), code: z.string(), subject: z.string(), status: supportStatusSchema })
+    .nullable(),
+  history: z.object({
+    totalTickets: z.number().int().meta({ description: "Every ticket this person has raised" }),
+    activeTickets: z.number().int(),
+  }),
+});
+
+export const assigneeResponseSchema = z.object({
+  id: z.uuid(),
+  fullName: z.string().nullable(),
+  department: z.string().nullable(),
+  openTickets: z.number().int().meta({ description: "Active tickets assigned to them" }),
+});
+
+export const staffTicketChangeResponseSchema = staffTicketResponseSchema;

@@ -2,14 +2,18 @@ import { randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
 import { settingModel } from "../models/setting.model.js";
 import { supportCategoryModel } from "../models/supportCategory.model.js";
-import { LINKS, supportTicketModel, type SupportTicket } from "../models/supportTicket.model.js";
-import type { SupportMessage } from "../models/supportMessage.model.js";
+import { LINKS, supportTicketModel } from "../models/supportTicket.model.js";
 import { logActivity } from "../services/activityLog.service.js";
-import { emitToSupportDesk, emitToUser } from "../services/socket.service.js";
-import { discardAttachments, filesOf, storeAttachments } from "../services/support.service.js";
+import { emitToSupportDesk } from "../services/socket.service.js";
 import {
+  announceTicket,
+  discardAttachments,
+  filesOf,
+  storeAttachments,
+} from "../services/support.service.js";
+import {
+  staffTicketView,
   ticketAuditView,
-  userEventView,
   userTicketDetailView,
   userTicketView,
 } from "../services/supportViews.js";
@@ -21,8 +25,8 @@ import type {
   RateTicketInput,
 } from "../schemas/support.schema.js";
 
-const TICKET_ACTIVITY = { module: "support", targetType: "supportTicket" } as const;
-const REDACT = ["subject", "message", "body", "comment"];
+export const TICKET_ACTIVITY = { module: "support", targetType: "supportTicket" } as const;
+export const REDACT = ["subject", "message", "body", "comment"];
 
 function raiser(req: Request): { userId: string; role: "rider" | "driver" } {
   const role = req.auth?.role;
@@ -34,20 +38,13 @@ function raiser(req: Request): { userId: string; role: "rider" | "driver" } {
 
 export const ticketNotFound = (id: string) => AppError.notFound(`Support ticket not found: ${id}`);
 
-// What every staff screen and the raiser's other devices learn when a ticket changes.
-function announce(ticket: SupportTicket, events: SupportMessage[]) {
-  emitToSupportDesk("support:ticketUpdated", { ticket, events });
-  emitToUser(ticket.userId, "support:ticketUpdated", {
-    ticket: userTicketView(ticket),
-    events: events.filter((e) => !e.internal).map(userEventView),
-  });
-}
-
-export async function createTicket(req: Request, res: Response) {
-  const { userId, role } = raiser(req);
-  const input = req.validated.body as CreateTicketInput;
-  const files = filesOf(req);
-
+// A new ticket needs a message or a file, a category the raiser can use, and only the raiser's own linked records.
+export async function checkNewTicket(
+  input: CreateTicketInput,
+  files: Express.Multer.File[],
+  userId: string,
+  role: "rider" | "driver",
+) {
   if (!input.message && files.length === 0) {
     throw AppError.badRequest("Write a message or attach a file");
   }
@@ -61,6 +58,15 @@ export async function createTicket(req: Request, res: Response) {
       throw AppError.notFound(`${LINKS[link].label} not found: ${id}`);
     }
   }
+  return category;
+}
+
+export async function createTicket(req: Request, res: Response) {
+  const { userId, role } = raiser(req);
+  const input = req.validated.body as CreateTicketInput;
+  const files = filesOf(req);
+
+  const category = await checkNewTicket(input, files, userId, role);
 
   const id = randomUUID();
   const attachments = await storeAttachments(files, id);
@@ -85,11 +91,11 @@ export async function createTicket(req: Request, res: Response) {
     throw err;
   }
   const { ticket } = created;
-  const activity = await supportTicketModel.userActivity([ticket]);
+  const activity = await supportTicketModel.activity([ticket], "user");
 
   sendCreated(res, "Support ticket created successfully", userTicketView(ticket, activity.get(ticket.id)));
 
-  emitToSupportDesk("support:ticketCreated", { ticket });
+  emitToSupportDesk("support:ticketCreated", { ticket: staffTicketView(ticket) });
   logActivity(req, {
     ...TICKET_ACTIVITY,
     action: "support.ticket.create",
@@ -106,7 +112,7 @@ export async function listMyTickets(req: Request, res: Response) {
 
   await supportTicketModel.sweep({ userId });
   const { items, totalItems } = await supportTicketModel.listForUser(userId, query);
-  const activity = await supportTicketModel.userActivity(items);
+  const activity = await supportTicketModel.activity(items, "user");
 
   sendSuccess(res, "Support tickets retrieved successfully", {
     items: items.map((ticket) => userTicketView(ticket, activity.get(ticket.id))),
@@ -127,7 +133,7 @@ export async function getMyTicket(req: Request, res: Response) {
   const ticket = await supportTicketModel.findOwned(id, userId);
   if (!ticket) throw ticketNotFound(id);
   const [activity, windowDays] = await Promise.all([
-    supportTicketModel.userActivity([ticket]),
+    supportTicketModel.activity([ticket], "user"),
     settingModel.getValue("support.reopenWindowDays"),
   ]);
 
@@ -152,7 +158,7 @@ export async function resolveMyTicket(req: Request, res: Response) {
 
   sendSuccess(res, "Support ticket resolved successfully", userTicketView(ticket));
 
-  announce(ticket, events);
+  announceTicket(ticket, events);
   logActivity(req, {
     ...TICKET_ACTIVITY,
     action: "support.ticket.resolve",
@@ -181,7 +187,7 @@ export async function rateMyTicket(req: Request, res: Response) {
 
   sendSuccess(res, "Support ticket rated successfully", userTicketView(ticket));
 
-  announce(ticket, events);
+  announceTicket(ticket, events);
   logActivity(req, {
     ...TICKET_ACTIVITY,
     action: "support.ticket.rate",
