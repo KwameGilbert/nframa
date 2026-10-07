@@ -117,6 +117,7 @@ Content-Type: application/json
 @refreshToken = {{verifyPhoneOtp.response.body.data.refreshToken}}
 
 ### Sign up / sign in with Google (paste the ID token from Google Sign-In; role only needed for a new account)
+# @name googleLogin
 POST {{baseUrl}}/auth/social-login
 Content-Type: application/json
 
@@ -135,6 +136,29 @@ Content-Type: application/json
   "providerToken": "<apple id token>",
   "role": "rider",
   "fullName": "Ama Mensah"
+}
+
+### Add a phone to an account that signed up with Google/Apple (step 1: texts a code; signed in, no phone yet)
+POST {{baseUrl}}/auth/phone/otp
+Authorization: Bearer {{googleLogin.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "541436414"
+}
+
+### Add the phone (step 2: the texted code plus a current ID token from the account's Google/Apple sign-in)
+POST {{baseUrl}}/auth/phone/verify
+Authorization: Bearer {{googleLogin.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "541436414",
+  "code": "123456",
+  "provider": "google",
+  "providerToken": "<google id token>"
 }
 
 ### Social login with a garbage token (expect 401)

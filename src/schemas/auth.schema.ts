@@ -68,6 +68,22 @@ export const socialLoginSchema = z.object({
 
 export type SocialLoginInput = z.infer<typeof socialLoginSchema>;
 
+export const addPhoneSchema = phoneIdentifier.pick({ phoneCountryCode: true, phoneNumber: true });
+
+export type AddPhoneInput = z.infer<typeof addPhoneSchema>;
+
+export const verifyPhoneSchema = addPhoneSchema.extend({
+  code: otpCodeSchema,
+  provider: socialLoginSchema.shape.provider,
+  providerToken: z.string().min(1).meta({
+    description:
+      "A current ID token from the Google/Apple sign-in linked to this account: proof that whoever adds the number owns the account, not just its access token. The one from the sign-up works while it's valid (about an hour)",
+    example: "eyJhbGciOiJSUzI1NiIsImtpZCI6IjFlOWdkazcifQ.eyJzdWIiOiIxMDk4NzY1NDMyMSJ9.sig",
+  }),
+});
+
+export type VerifyPhoneInput = z.infer<typeof verifyPhoneSchema>;
+
 export const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1).meta({
     description: "The refresh token from the latest login or refresh — each one works once",

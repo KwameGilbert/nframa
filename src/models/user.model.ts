@@ -70,6 +70,27 @@ class UserModel extends BaseModel<User> {
     return this.updateById(id, { ...input, updatedAt: new Date() } as unknown as Partial<User>);
   }
 
+  // Only onto an account with none — adding, never changing (that stays with users: update) — and verified,
+  // since the caller has just used a code sent to it. undefined when the account got a number meanwhile.
+  async addPhone(
+    id: string,
+    phone: Pick<User, "phoneCountryCode" | "phoneNumber">,
+  ): Promise<User | undefined> {
+    try {
+      const [row] = await this.table
+        .where({ id })
+        .whereNull("phoneNumber")
+        .update({ ...phone, isPhoneVerified: true, updatedAt: new Date() })
+        .returning("*");
+      return row && this.sanitize(row);
+    } catch (err) {
+      if ((err as { code?: string }).code === "23505") {
+        throw AppError.conflict("This phone number is already in use");
+      }
+      throw err;
+    }
+  }
+
   markVerified(id: string, flags: VerifiedFlags) {
     return this.updateById(id, { ...flags, updatedAt: new Date() });
   }

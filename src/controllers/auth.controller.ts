@@ -30,6 +30,8 @@ import type {
   RequestOtpInput,
   VerifyOtpInput,
   SocialLoginInput,
+  AddPhoneInput,
+  VerifyPhoneInput,
   RefreshTokenInput,
   LogoutInput,
   ForgotPasswordInput,
@@ -40,6 +42,7 @@ import type {
 const logger = createLogger("app");
 const REFRESH_TOKEN_EXPIRES_IN_DAYS =Number(process.env.REFRESH_TOKEN_EXPIRES_IN_DAYS ?? 30);
 const PASSWORD_RESET_PURPOSE = "passwordReset";
+const ADD_PHONE_PURPOSE = "addPhone";
 
 type Identifier =
   { phoneCountryCode: string; phoneNumber: string; role?: "rider" | "driver" } | { email: string };
@@ -325,6 +328,12 @@ export async function login(req: Request, res: Response) {
   });
 }
 
+// In development the code comes back in the response, so the apps can be tried without a real SMS.
+function sendCodeSent(res: Response, code: string) {
+  const isDev = process.env.NODE_ENV === "development";
+  sendSuccess(res, "Verification code sent", isDev ? { code } : null);
+}
+
 export async function requestLoginOtp(req: Request, res: Response) {
   const input = req.validated.body as RequestOtpInput;
   const { user, identifier, channel, role } = await resolveOtpTarget(input);
@@ -339,8 +348,7 @@ export async function requestLoginOtp(req: Request, res: Response) {
     user && !user.deletedAt ? user.email : null,
   );
 
-  const isDev = process.env.NODE_ENV === "development";
-  sendSuccess(res, "Verification code sent", isDev ? { code } : null);
+  sendCodeSent(res, code);
   // Nobody has proven who they are yet, so there's no actor — only the account the code is for.
   logAuthActivity(req, {
     action: "auth.otp.request",
@@ -469,6 +477,79 @@ export async function socialLogin(req: Request, res: Response) {
     actorId: account.id,
     targetId: account.id,
     after: account,
+  });
+}
+
+// The signed-in rider or driver, if their account has no phone number yet (it signed up with Google or Apple).
+async function phonelessAccount(req: Request) {
+  const account = req.auth && (await userModel.findById(req.auth.id));
+  if (!account) {
+    throw AppError.unauthorized("User no longer exists");
+  }
+  await assertAccountActive(account);
+  if (account.role === "admin") {
+    throw AppError.forbidden("An admin's phone number is set by an admin with users: update");
+  }
+  if (account.phoneNumber) {
+    throw AppError.conflict("This account already has a phone number");
+  }
+  return account;
+}
+
+export async function requestPhoneOtp(req: Request, res: Response) {
+  const phone = req.validated.body as AddPhoneInput;
+  const account = await phonelessAccount(req);
+  // Deleted accounts included: their number stays reserved for them to sign up again.
+  if (await userModel.findOne(phone)) {
+    throw AppError.conflict("This phone number is already in use");
+  }
+
+  const { identifier, channel } = toDbIdentifier(phone);
+  sendCodeSent(res, await sendOtp(identifier, channel, ADD_PHONE_PURPOSE, "verification code"));
+  logAuthActivity(req, {
+    action: "auth.phone.otp",
+    description: "Requested a code to add a phone number",
+    actorId: account.id,
+    targetId: account.id,
+  });
+}
+
+export async function verifyPhone(req: Request, res: Response) {
+  const { code, provider, providerToken, ...phone } = req.validated.body as VerifyPhoneInput;
+  const account = await phonelessAccount(req);
+
+  // A code only proves the number is theirs. Without the account's own Google/Apple sign-in too, a stolen access
+  // token could add the thief's number and sign in with it for good. Checked first, so a refusal keeps the code.
+  const identity = await verifySocialToken(provider, providerToken);
+  const link = await socialAccountModel.findByIdentity(identity);
+  if (link?.userId !== account.id) {
+    throw AppError.forbidden(
+      `This ${providerLabel(provider)} sign-in isn't linked to your account`,
+    );
+  }
+
+  const { identifier } = toDbIdentifier(phone);
+  await consumeOtp(identifier, ADD_PHONE_PURPOSE, code).catch(
+    recordRefusal(req, {
+      action: "auth.phone.add",
+      description: "Failed to add a phone number with a verification code",
+      targetId: account.id,
+    }),
+  );
+
+  const updated = await userModel.addPhone(account.id, phone);
+  if (!updated) {
+    throw AppError.conflict("This account already has a phone number");
+  }
+
+  sendSuccess(res, "Phone number added", await buildAccount(updated));
+  logAuthActivity(req, {
+    action: "auth.phone.add",
+    description: "Added a verified phone number",
+    actorId: account.id,
+    targetId: account.id,
+    before: account,
+    after: updated,
   });
 }
 

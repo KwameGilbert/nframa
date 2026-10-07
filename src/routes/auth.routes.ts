@@ -16,6 +16,8 @@ import {
   requestOtpSchema,
   verifyOtpSchema,
   socialLoginSchema,
+  addPhoneSchema,
+  verifyPhoneSchema,
   refreshTokenSchema,
   logoutSchema,
   forgotPasswordSchema,
@@ -27,6 +29,8 @@ import {
   requestLoginOtp,
   verifyLoginOtp,
   socialLogin,
+  requestPhoneOtp,
+  verifyPhone,
   refreshSession,
   logout,
   forgotPassword,
@@ -58,6 +62,24 @@ authRouter.post(
   authIpLimit,
   validate({ body: socialLoginSchema }),
   socialLogin,
+);
+// Adding a phone to an account that signed up with Google or Apple (it has none). The per-number limiters, like
+// sign-in's, read the validated body.
+authRouter.post(
+  "/auth/phone/otp",
+  authIpLimit,
+  authenticate,
+  validate({ body: addPhoneSchema }),
+  otpSendLimit,
+  requestPhoneOtp,
+);
+authRouter.post(
+  "/auth/phone/verify",
+  authIpLimit,
+  authenticate,
+  validate({ body: verifyPhoneSchema }),
+  otpVerifyLimit,
+  verifyPhone,
 );
 authRouter.post(
   "/auth/refresh",

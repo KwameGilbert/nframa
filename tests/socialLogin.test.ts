@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { SignJWT, exportJWK, generateKeyPair, type JWK } from "jose";
 import { api, auth, expectError, expectStatus } from "./helpers/api.js";
@@ -13,11 +12,11 @@ import {
 import * as data from "./helpers/data.js";
 import { newEmail } from "./helpers/unique.js";
 import { trackForCleanup } from "./helpers/cleanup.js";
+import { newIdentity, socialLogin } from "./helpers/social.js";
 import db from "../src/database/knex.js";
 import { loggableBody } from "../src/middlewares/httpLogger.js";
-import type { SocialIdentity, SocialProvider } from "../src/services/socialAuth.service.js";
+import type { SocialProvider } from "../src/services/socialAuth.service.js";
 
-type Identity = Omit<SocialIdentity, "provider">;
 type SigningKey = Awaited<ReturnType<typeof generateKeyPair>>["privateKey"];
 
 let superAdmin: Awaited<ReturnType<typeof loginAsSuperAdmin>>;
@@ -25,35 +24,6 @@ let superAdmin: Awaited<ReturnType<typeof loginAsSuperAdmin>>;
 beforeAll(async () => {
   superAdmin = await loginAsSuperAdmin();
 });
-
-// A Google/Apple person no account knows yet, with a verified email unless told otherwise.
-async function newIdentity(overrides: Partial<Identity> = {}): Promise<Identity> {
-  const person = data.person();
-  return {
-    providerUserId: `test-${randomUUID()}`,
-    email: await newEmail(person),
-    fullName: person.fullName,
-    picture: "https://lh3.googleusercontent.com/a/test-avatar",
-    ...overrides,
-  };
-}
-
-async function socialLogin(
-  identity: Identity,
-  body: { provider?: SocialProvider; role?: "rider" | "driver"; fullName?: string } = {},
-) {
-  const { provider = "google", ...rest } = body;
-  const res = await api
-    .post("/auth/social-login")
-    .send({ provider, providerToken: JSON.stringify(identity), ...rest });
-  const userId: string | undefined = res.body.data?.user?.id;
-  if (userId) {
-    trackForCleanup("users", { id: userId });
-    trackForCleanup("authSessions", { userId });
-    trackForCleanup("socialAccounts", { userId });
-  }
-  return res;
-}
 
 function linksOf(userId: string) {
   return db("socialAccounts").where({ userId }).select("provider", "providerUserId", "email");

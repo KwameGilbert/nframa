@@ -4,6 +4,8 @@ import {
   requestOtpSchema,
   verifyOtpSchema,
   socialLoginSchema,
+  addPhoneSchema,
+  verifyPhoneSchema,
   refreshTokenSchema,
   logoutSchema,
   forgotPasswordSchema,
@@ -143,7 +145,7 @@ registry.registerPath({
   path: "/auth/social-login",
   tags: ["Auth"],
   summary: "Sign in or sign up with Google or Apple",
-  description: `Send the ID token the Google or Apple SDK gave the app. It's checked against the provider's keys and this app's client ids (GOOGLE_CLIENT_IDS / APPLE_CLIENT_IDS). It signs in to the account this Google/Apple sign-in is linked to; failing that, to the rider or driver account with the email the provider verified, which links it from then on (and marks that email verified). Otherwise it signs up a new account (role required) with the name, verified email and picture from the token, and no phone number: phoneCountryCode/phoneNumber are null until the app adds one. Admin accounts can't sign in this way (403). Rate limited to 100 requests per IP per 15 minutes. ${loginResponseDescription}`,
+  description: `Send the ID token the Google or Apple SDK gave the app. It's checked against the provider's keys and this app's client ids (GOOGLE_CLIENT_IDS / APPLE_CLIENT_IDS). It signs in to the account this Google/Apple sign-in is linked to; failing that, to the rider or driver account with the email the provider verified, which links it from then on (and marks that email verified). Otherwise it signs up a new account (role required) with the name, verified email and picture from the token, and no phone number: phoneCountryCode/phoneNumber are null until the app adds one (POST /auth/phone/otp, then /auth/phone/verify). Admin accounts can't sign in this way (403). Rate limited to 100 requests per IP per 15 minutes. ${loginResponseDescription}`,
   request: {
     body: {
       content: {
@@ -200,6 +202,97 @@ registry.registerPath({
       "The same Google/Apple account is signing up in a concurrent request",
       "This account is already being set up, try signing in again",
     ),
+    429: rateLimitedResponse,
+    502: errorResponse(
+      "Google or Apple couldn't be reached to check the token",
+      "Couldn't reach Google to check the sign-in, try again",
+    ),
+    503: errorResponse(
+      "Sign-in with this provider isn't configured on the server",
+      "Google sign-in is not configured",
+    ),
+  },
+});
+
+const phoneless =
+  "Only for a rider or driver account with no phone number yet (one that signed up with Google or Apple): changing a number someone already has stays with an admin (PATCH /users/:id, users: update).";
+
+const phonelessRefused = {
+  403: errorResponse(
+    "Account is suspended or deleted, or it's an admin account",
+    "Account is not active",
+  ),
+  409: errorResponse(
+    "The account already has a phone number, or another account (deleted ones included) has this one",
+    "This phone number is already in use",
+  ),
+};
+
+registry.registerPath({
+  method: "post",
+  path: "/auth/phone/otp",
+  tags: ["Auth"],
+  summary: "Text a code to the phone number being added (step 1 of adding a phone)",
+  description: `${phoneless} The code expires after 5 minutes and only works with POST /auth/phone/verify (a sign-in code won't). Rate limited to 5 codes per phone number per 15 minutes.`,
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: addPhoneSchema,
+          example: { phoneCountryCode: "+233", phoneNumber: "541436414" },
+        },
+      },
+    },
+  },
+  responses: {
+    200: successResponse("Verification code sent"),
+    400: errorResponse("Validation error"),
+    401: errorResponse("Missing or invalid access token, or the user no longer exists"),
+    ...phonelessRefused,
+    429: rateLimitedResponse,
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/auth/phone/verify",
+  tags: ["Auth"],
+  summary: "Add the phone number with the texted code (step 2 of adding a phone)",
+  description: `${phoneless} Send the number and code from step 1, plus a current ID token from the Google/Apple sign-in linked to the account: the code proves the number is theirs, the token that the account is (an access token alone could have been stolen). The token is checked first, so a refused one doesn't use up the code. On success the number is saved as verified, and the account signs in with it from then on too. Returns the account as GET /auth/me does. Each code allows 5 wrong attempts; rate limited to 10 failed attempts per phone number per 15 minutes.`,
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: verifyPhoneSchema,
+          example: {
+            phoneCountryCode: "+233",
+            phoneNumber: "541436414",
+            code: "123456",
+            provider: "google",
+            providerToken:
+              "eyJhbGciOiJSUzI1NiIsImtpZCI6IjFlOWdkazcifQ.eyJzdWIiOiIxMDk4NzY1NDMyMSJ9.sig",
+          },
+        },
+      },
+    },
+  },
+  responses: {
+    200: successResponse("Phone number added", accountResponseSchema),
+    400: errorResponse(
+      "Validation error, or the code is missing, expired, wrong, already used, or out of attempts",
+      "Invalid verification code",
+    ),
+    401: errorResponse(
+      "Missing or invalid access token, the user no longer exists, or the Google/Apple token is invalid",
+      "Invalid Google token",
+    ),
+    403: errorResponse(
+      "Account is suspended or deleted, it's an admin account, or the Google/Apple sign-in isn't linked to it",
+      "This Google sign-in isn't linked to your account",
+    ),
+    409: phonelessRefused[409],
     429: rateLimitedResponse,
     502: errorResponse(
       "Google or Apple couldn't be reached to check the token",
