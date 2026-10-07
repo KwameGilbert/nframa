@@ -5,6 +5,8 @@ export const MODULES = [
   "admin",
   "broadcasts",
   "commutes",
+  "finance",
+  "overview",
   "payouts",
   "reports",
   "roles",

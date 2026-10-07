@@ -71,6 +71,7 @@ const RESOURCES: Record<string, { table?: string; module?: string }> = {
   "/admin/activity-logs": { module: "activityLogs" },
   "/admin/broadcasts": { table: "broadcasts", module: "broadcasts" },
   "/admin/driver": { module: "verification" },
+  "/admin/overview": { module: "overview" },
   "/admin/safety": { table: "sosIncidents", module: "sos" },
   "/admin/verification": { module: "verification" },
   "/commutes": { table: "driverCommutes", module: "commutes" },

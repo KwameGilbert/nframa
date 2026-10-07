@@ -11,6 +11,7 @@ import "./driverProfile.docs.js";
 import "./emergencyContact.docs.js";
 import "./fare.docs.js";
 import "./notification.docs.js";
+import "./overview.docs.js";
 import "./paymentMethod.docs.js";
 import "./payout.docs.js";
 import "./report.docs.js";
