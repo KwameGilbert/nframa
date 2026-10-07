@@ -38,8 +38,11 @@ ENV NODE_ENV=production PORT=3000
 COPY package.json ./
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-# The logger writes daily files under logs/; the server runs as the unprivileged node user.
-RUN mkdir logs && chown node:node logs
+# The logger writes daily files under logs/; the server runs as the unprivileged node user. The server only needs
+# node, so the npm and corepack bundled with the base image go: they are unused here and carry their own CVEs.
+RUN mkdir logs && chown node:node logs \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+    /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 # The commit this image was built from, reported by /health and tagged on Sentry events. Set late so a new
 # commit doesn't invalidate the cached layers above.
 ARG GIT_SHA=dev
