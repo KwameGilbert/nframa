@@ -39,7 +39,7 @@
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.11.0",
     "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.5",
     "expo-server-sdk": "^7.2.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
