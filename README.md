@@ -1,102 +1,76 @@
 # Nframa Backend API
 
-Production-grade NestJS backend for Nframa, a fixed-route ride platform (like Bolt, but trips run on admin-defined corridors with set origins/destinations).
+The API behind Nframa, a fixed-route ride platform: riders book seats on drivers' commutes along set corridors. It
+serves the rider and driver apps and the admin system.
+
+Express 5 + TypeScript (ESM) + Knex/PostgreSQL + Zod, with Socket.IO for live events. Architecture notes and
+conventions are in [CLAUDE.md](CLAUDE.md) and `.claude/rules/`.
 
 ## Prerequisites
 
-- **Node 24+** (check `engines` in `package.json`)
-- **pnpm** (specified in `packageManager`)
-- **PostgreSQL 17** + **Redis 7** (local or via `docker-compose`)
+- **Node 24** (CI and the Docker image use 24)
+- **pnpm 11** (`devEngines` in `package.json` enforces it)
+- **PostgreSQL 17**: local, or `docker compose up -d`
 
-## Quick Start
+## Quick start
 
 ```bash
-# Install dependencies
 pnpm install
-
-# Start Postgres + Redis locally
-docker compose up -d
-
-# Create and seed the database
-cp .env.example .env
-pnpm db:migrate
-
-# Run the dev server
-pnpm start:dev
+docker compose up -d        # Postgres on localhost:5432 (nframa / nframa / nframa)
+cp .env.example .env        # then fill in the database and secrets
+pnpm migrate                # migrations never run on boot
+pnpm seed                   # bootstrap super admin + default settings
+pnpm dev                    # http://localhost:3000, API docs at /docs
 ```
 
-Server listens on `http://localhost:3000` (configurable via `PORT` in `.env`).
+## Commands
 
-## Key Commands
+| Command                                  | What it does                                                               |
+| ---------------------------------------- | -------------------------------------------------------------------------- |
+| `pnpm dev`                               | Watch mode (tsx)                                                           |
+| `pnpm build` / `pnpm start`              | Compile to `dist/` / run the compiled server                               |
+| `pnpm lint` / `pnpm lint:fix`            | ESLint                                                                     |
+| `pnpm format` / `pnpm format:check`      | Prettier (applied migrations are excluded)                                 |
+| `pnpm typecheck`                         | `tsc` for `src/` and `tests/`                                              |
+| `pnpm test` / `pnpm test <text>`         | Vitest against a real database (`.env.test`); a filter runs matching files |
+| `pnpm migrate` / `pnpm migrate:rollback` | Run pending migrations / undo the last batch                               |
+| `pnpm migrate:make <name>` / `pnpm seed` | New migration / run seeds                                                  |
 
-```bash
-# Development
-pnpm start:dev          # Watch mode
-pnpm start:debug        # Debug mode
-pnpm build              # Compile to dist/
+## API docs
 
-# Quality
-pnpm lint               # Run oxlint
-pnpm lint:fix           # Auto-fix
-pnpm typecheck          # TypeScript check
-pnpm test               # Unit tests
-pnpm test:watch         # Watch mode
-pnpm test:cov           # Coverage report
-
-# Database
-pnpm db:migrate         # Run all pending migrations
-pnpm db:rollback        # Undo the last batch
-pnpm db:migrate:make    # Create a new migration
-pnpm db:seed            # Run seeders
-
-# API
-pnpm openapi:export     # Write openapi.json (requires Postgres + Redis running)
-
-# e2e
-pnpm test:e2e           # Run e2e tests against real app (requires Postgres + Redis)
-```
-
-## Architecture
-
-- **Config**: Environment validation via Zod, namespaced config factories (`src/config/`)
-- **Database**: Knex query builder (explicit SQL, no ORM) + migrations under `database/`
-- **Queues**: BullMQ + Redis (wired but no jobs yet)
-- **HTTP**: Global error filter (consistent `{ error: { code, message, details } }` envelope), URI versioning `/v1`, health checks at `/health/live` and `/health/ready`
-- **Logging**: pino + nestjs-pino (structured JSON, pretty-printed in dev)
-- **Rate Limiting**: @nestjs/throttler
-- **Docs**: Swagger at `/docs` (gated by `SWAGGER_ENABLED`)
-
-See `docs/backend-plan.md` for the full architecture decision record.
-
-## Development
-
-- **Migrations**: Run explicitly (`pnpm db:migrate`), never on boot
-- **Commits**: Conventional commits enforced by commitlint
-- **Linting**: eslint replaced with oxlint (faster), prettier for formatting
-- **Tests**: Vitest for unit tests (`*.spec.ts`), vitest e2e config for `*.e2e-spec.ts`
+OpenAPI is generated from the Zod schemas: Swagger UI at `/docs`, the raw spec at `/openapi.json`.
 
 ## Docker
 
+The image runs the compiled server as an unprivileged user, with a healthcheck on `/health`. Migrations are a separate
+target, run on purpose before a deploy:
+
 ```bash
-# Build production image
+# Migrate (and seed, first time only)
+docker build --target migrate -t nframa-api-migrate .
+docker run --rm --env-file .env nframa-api-migrate
+docker run --rm --env-file .env nframa-api-migrate pnpm seed
+
+# Run the server
 docker build -t nframa-api .
-
-# Run it (migrations are manual, never on boot)
-docker run \
-  -e DATABASE_URL=postgres://... \
-  -e REDIS_URL=redis://... \
-  -p 3000:3000 \
-  nframa-api
-
-# Or, before the first run, migrate:
-docker run --rm \
-  -e DATABASE_URL=postgres://... \
-  nframa-api \
-  tsx node_modules/knex/bin/cli.js migrate:latest
+docker run -d --env-file .env -p 3000:3000 nframa-api
 ```
 
-## References
+The env file uses the same `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` (and `DB_SSL=true` for a
+hosted database) as local development. See `.env.example` for everything else.
 
-- **API Contract**: See `docs/api-spec.md` (frontend-facing spec; real contract is OpenAPI generated at runtime)
-- **Architecture**: See `docs/backend-plan.md`
-- **Swagger**: Navigate to `/docs` when the app is running
+## CI
+
+Every push to `main` and every pull request runs [.github/workflows/ci.yml](.github/workflows/ci.yml):
+
+- **Lint, format and typecheck**
+- **Migrations and tests**: every migration up, all the way down and up again on a fresh Postgres 17, then the seed
+  and the full test suite (providers are mocked, nothing is sent)
+- **Docker image boots**: builds both images, migrates and seeds with one, starts the other, waits for its
+  healthcheck and signs in as the seeded admin
+- **Dependency and secret scan**: `pnpm audit` on production dependencies and gitleaks over the whole history
+- **Dependency review** (pull requests): refuses new dependencies with high or critical vulnerabilities
+
+[CodeQL](.github/workflows/codeql.yml) scans the code on every push, pull request and weekly; Dependabot opens weekly
+update pull requests for npm packages, Actions and the Docker base image. The pre-commit hook only runs `pnpm build`,
+so run the affected tests before pushing.

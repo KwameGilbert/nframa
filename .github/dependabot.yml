@@ -1,0 +1,35 @@
+version: 2
+updates:
+  # Minor and patch updates arrive as one weekly pull request; majors one each, since they can break things.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # typescript-eslint doesn't support TypeScript 7 yet (CLAUDE.md "Known gaps").
+      - dependency-name: typescript
+        versions: [">=7"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    ignore:
+      # Stay on the Node LTS line CI uses (NODE_VERSION in ci.yml); move both together by hand.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]

@@ -1,0 +1,17 @@
+# Only package files, tsconfig, knexfile and src go into an image.
+node_modules
+dist
+logs
+coverage
+.git
+.github
+.husky
+.claude
+tests
+plans
+requests
+*.md
+.env
+.env.*
+client_*.json
+client_*.plist

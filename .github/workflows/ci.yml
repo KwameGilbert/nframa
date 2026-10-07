@@ -5,10 +5,44 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+# A newer push to the same branch or pull request replaces a run that's still going.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "24"
+  # package.json declares pnpm through devEngines, not a packageManager field, so name the version here.
+  PNPM_VERSION: "11"
 
 jobs:
-  lint-typecheck-and-test:
+  quality:
+    name: Lint, format and typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm typecheck
+
+  test:
+    name: Migrations and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     services:
       postgres:
@@ -25,7 +59,8 @@ jobs:
         ports:
           - 5432:5432
 
-    # A throwaway database that only exists for this run. No SMS or email is sent: the tests mock both services.
+    # A throwaway database that only exists for this run. Nothing reaches SMS, email, push, Google or Paystack: the
+    # tests mock every provider.
     env:
       DB_HOST: localhost
       DB_PORT: 5432
@@ -38,19 +73,162 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-      # package.json declares pnpm through devEngines, not a packageManager field, so name the version here.
       - uses: pnpm/action-setup@v6
         with:
-          version: 11
+          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
-          cache: "pnpm"
-
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm build
-      - run: pnpm migrate
+
+      # Every migration's down() runs too, so a rollback in production is known to work before it's needed.
+      - name: Migrate, roll everything back, migrate again
+        run: |
+          pnpm migrate
+          pnpm migrate:rollback --all
+          pnpm migrate
       - run: pnpm seed
       - run: pnpm test
+
+      - name: Upload server logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-logs
+          path: logs/
+          retention-days: 7
+
+  docker:
+    name: Docker image boots
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: nframa
+          POSTGRES_PASSWORD: nframa
+          POSTGRES_DB: nframa
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      BOOTSTRAP_ADMIN_EMAIL: admin@nframa.com
+      BOOTSTRAP_ADMIN_PASSWORD: Ci-Sankofa-Accra-2026!
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build the migration image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: migrate
+          tags: nframa-api-migrate:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build the server image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: runtime
+          tags: nframa-api:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Host networking: the containers reach the Postgres service on localhost, as the app would reach its database.
+      - name: Write the container environment
+        run: |
+          cat > ci.env <<EOF
+          DB_HOST=localhost
+          DB_PORT=5432
+          DB_USER=nframa
+          DB_PASSWORD=nframa
+          DB_NAME=nframa
+          JWT_ACCESS_SECRET=ci-only-jwt-secret-not-used-anywhere-else
+          BOOTSTRAP_ADMIN_EMAIL=${BOOTSTRAP_ADMIN_EMAIL}
+          BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_ADMIN_PASSWORD}
+          EOF
+
+      - name: Migrate and seed with the migration image
+        run: |
+          docker run --rm --network host --env-file ci.env nframa-api-migrate:ci
+          docker run --rm --network host --env-file ci.env nframa-api-migrate:ci pnpm seed
+
+      - name: Start the server image
+        run: docker run -d --name api --network host --env-file ci.env nframa-api:ci
+
+      - name: Wait until the container reports healthy
+        run: |
+          for _ in $(seq 1 30); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' api)
+            [ "$status" = healthy ] && exit 0
+            [ "$(docker inspect --format '{{.State.Running}}' api)" = true ] || break
+            sleep 2
+          done
+          echo "Container never became healthy (last status: $status)"
+          exit 1
+
+      # Signing in touches the database, bcrypt and token signing: the built server works end to end, not just /health.
+      - name: Smoke test
+        run: |
+          curl --fail --silent http://localhost:3000/health
+          curl --fail --silent --output /dev/null http://localhost:3000/openapi.json
+          curl --fail --silent --output login.json -H "Content-Type: application/json" \
+            -d "{\"email\":\"${BOOTSTRAP_ADMIN_EMAIL}\",\"password\":\"${BOOTSTRAP_ADMIN_PASSWORD}\"}" \
+            http://localhost:3000/auth/login
+          jq -e '.data.accessToken | length > 0' login.json > /dev/null
+
+      - name: Server logs
+        if: always()
+        run: docker logs api 2>&1 | tail -100 || true
+
+  security:
+    name: Dependency and secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # gitleaks scans the whole history, not just this commit.
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Known vulnerabilities in production dependencies
+        run: pnpm audit --prod --audit-level high
+      - name: Committed secrets
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+      # Fails a pull request that adds a dependency with a high or critical vulnerability.
+      - uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
