@@ -39,7 +39,7 @@ Postgres must be reachable at the host/port/credentials in `.env.development` fo
 
 ## Architecture
 
-Module notes (trips and fares, trip reports, wallet and payments, payment methods and payouts, email, real-time, file storage, settings, tests, push notifications, support tickets and chat) live in `.claude/rules/` and load only when you work on matching files. When you change one of those areas, update its rules file the same way you would this one.
+Module notes (trips and fares, trip reports, wallet and payments, payment methods and payouts, email, real-time, file storage, settings, tests, push notifications, support tickets and chat, broadcasts) live in `.claude/rules/` and load only when you work on matching files. When you change one of those areas, update its rules file the same way you would this one.
 
 Express 5 + TypeScript (strict, ESM/`NodeNext`) + Knex/Postgres + Zod, with `"type": "module"` — all relative imports need explicit `.js` extensions even though source files are `.ts`.
 

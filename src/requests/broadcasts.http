@@ -1,0 +1,58 @@
+@baseUrl = http://localhost:3000
+@token = <access token of an admin with broadcasts permissions>
+
+### Broadcast history (filters: status, audience, channel, search, from, to, page, limit)
+GET {{baseUrl}}/admin/broadcasts?status=scheduled&page=1&limit=20
+Authorization: Bearer {{token}}
+
+### Who would a broadcast to drivers reach, per channel
+GET {{baseUrl}}/admin/broadcasts/audience-preview?audience=drivers
+Authorization: Bearer {{token}}
+
+### SMS units left on the provider account (a broadcast costs about reachable.sms x smsSegments)
+GET {{baseUrl}}/admin/broadcasts/sms-balance
+Authorization: Bearer {{token}}
+
+### Draft a broadcast (always a draft; then send or schedule it)
+# @name draft
+POST {{baseUrl}}/admin/broadcasts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Accra-Tema route diversion on Monday",
+  "body": "Because of road works on the motorway, Monday's morning commutes between Accra and Tema will use the Spintex Road. Expect pickups up to 10 minutes later than usual.",
+  "smsText": "Nframa: Mon commutes Accra-Tema use Spintex Rd due to road works. Pickups up to 10 min later.",
+  "audience": "drivers",
+  "channels": ["inApp", "push", "sms"]
+}
+
+### One broadcast
+GET {{baseUrl}}/admin/broadcasts/{{draft.response.body.data.id}}
+Authorization: Bearer {{token}}
+
+### Edit it (draft or scheduled only)
+PATCH {{baseUrl}}/admin/broadcasts/{{draft.response.body.data.id}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "audience": "all"
+}
+
+### Schedule it (or move a scheduled one): 1 minute to 90 days ahead, with a timezone
+POST {{baseUrl}}/admin/broadcasts/{{draft.response.body.data.id}}/schedule
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "scheduledFor": "2026-10-12T05:30:00Z"
+}
+
+### Cancel it (scheduled only)
+POST {{baseUrl}}/admin/broadcasts/{{draft.response.body.data.id}}/cancel
+Authorization: Bearer {{token}}
+
+### Delete a draft (expect 409 for anything else)
+DELETE {{baseUrl}}/admin/broadcasts/{{draft.response.body.data.id}}
+Authorization: Bearer {{token}}

@@ -8,7 +8,10 @@ import { seed as defaultSettingsSeed } from "../src/database/seeds/002_default_s
 
 // No test ever sends a real SMS or email: every message lands in these mocks instead, which is also how
 // tests read OTP and reset codes (see helpers/outbox.ts).
-vi.mock("../src/services/sms.service.js", () => ({ sendSms: vi.fn(async () => undefined) }));
+vi.mock("../src/services/sms.service.js", () => ({
+  sendSms: vi.fn(async () => undefined),
+  getSmsBalance: vi.fn(async () => ({ smsUnits: 4820, mainBalance: "GHS 120.50" })),
+}));
 vi.mock("../src/services/resend.service.js", () => ({
   sendViaResend: vi.fn(async () => undefined),
 }));

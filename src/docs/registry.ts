@@ -69,6 +69,7 @@ const DEFAULT_ERROR_EXAMPLES: Record<number, string> = {
 const RESOURCES: Record<string, { table?: string; module?: string }> = {
   "/admin": { table: "adminUsers", module: "admin" },
   "/admin/activity-logs": { module: "activityLogs" },
+  "/admin/broadcasts": { table: "broadcasts", module: "broadcasts" },
   "/admin/driver": { module: "verification" },
   "/admin/safety": { table: "sosIncidents", module: "sos" },
   "/admin/verification": { module: "verification" },

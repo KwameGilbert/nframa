@@ -3,6 +3,7 @@
 export const MODULES = [
   "activityLogs",
   "admin",
+  "broadcasts",
   "commutes",
   "payouts",
   "reports",
