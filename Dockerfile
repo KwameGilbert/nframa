@@ -40,8 +40,12 @@ COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 # The logger writes daily files under logs/; the server runs as the unprivileged node user.
 RUN mkdir logs && chown node:node logs
+# The commit this image was built from, reported by /health and tagged on Sentry events. Set late so a new
+# commit doesn't invalidate the cached layers above.
+ARG GIT_SHA=dev
+ENV GIT_SHA=$GIT_SHA
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD wget -qO- "http://127.0.0.1:${PORT}/health" > /dev/null || exit 1
-CMD ["node", "dist/index.js"]
+CMD ["node", "--import", "./dist/instrument.js", "dist/index.js"]

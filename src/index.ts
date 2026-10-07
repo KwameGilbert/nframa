@@ -1,7 +1,7 @@
-import { config } from "dotenv";
 import { createServer } from "node:http";
 import { Server } from "socket.io";
 import { createLogger } from "./config/logger.js";
+import { captureError, flushSentry } from "./config/sentry.js";
 import { app } from "./app.js";
 import { socketAuthenticate, type SocketData } from "./middlewares/socketAuthenticate.js";
 import { initSocketService, joinSocketRooms } from "./services/socket.service.js";
@@ -11,19 +11,19 @@ import {
   type ClientToServerEvents,
 } from "./services/supportSocket.service.js";
 
-config();
-
-// Initialize process-level error handling
+// Initialize process-level error handling. Crashes are reported to Sentry (when configured) before exiting.
 const processLogger = createLogger("process");
 
 process.on("uncaughtException", (err) => {
   processLogger.fatal({ err }, "Uncaught exception");
-  process.exit(1);
+  captureError(err);
+  void flushSentry().finally(() => process.exit(1));
 });
 
 process.on("unhandledRejection", (reason) => {
   processLogger.fatal({ err: reason }, "Unhandled rejection");
-  process.exit(1);
+  captureError(reason);
+  void flushSentry().finally(() => process.exit(1));
 });
 
 // Create HTTP server and Socket.IO server

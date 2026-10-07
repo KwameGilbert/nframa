@@ -28,7 +28,7 @@ pnpm dev                    # http://localhost:3000, API docs at /docs
 | Command                                  | What it does                                                               |
 | ---------------------------------------- | -------------------------------------------------------------------------- |
 | `pnpm dev`                               | Watch mode (tsx)                                                           |
-| `pnpm build` / `pnpm start`              | Compile to `dist/` / run the compiled server                               |
+| `pnpm build` / `pnpm start`              | Compile to `dist/` / run the compiled server (Sentry preloaded)            |
 | `pnpm lint` / `pnpm lint:fix`            | ESLint                                                                     |
 | `pnpm format` / `pnpm format:check`      | Prettier (applied migrations are excluded)                                 |
 | `pnpm typecheck`                         | `tsc` for `src/` and `tests/`                                              |
@@ -65,12 +65,24 @@ Every push to `main` and every pull request runs [.github/workflows/ci.yml](.git
 
 - **Lint, format and typecheck**
 - **Migrations and tests**: every migration up, all the way down and up again on a fresh Postgres 17, then the seed
-  and the full test suite (providers are mocked, nothing is sent)
-- **Docker image boots**: builds both images, migrates and seeds with one, starts the other, waits for its
-  healthcheck and signs in as the seeded admin
+  and the full test suite with coverage (providers are mocked, nothing is sent). Coverage totals appear in the run's
+  summary; no threshold fails the build. Locally: `pnpm test:coverage`
+- **Docker image boots**: builds both images, scans the server image with Trivy (fails on fixable high or critical
+  vulnerabilities), migrates and seeds with one, starts the other, waits for its healthcheck, checks `/health`
+  reports the commit, and signs in as the seeded admin
 - **Dependency and secret scan**: `pnpm audit` on production dependencies and gitleaks over the whole history
 - **Dependency review** (pull requests): refuses new dependencies with high or critical vulnerabilities
+- **Publish image** (pushes to `main`, after everything above passes): pushes `ghcr.io/kwamegilbert/nframa-api` and
+  `ghcr.io/kwamegilbert/nframa-api-migrate`, each tagged with the full commit sha and `latest`. Deploy a sha tag
+  (migration image first); roll back by deploying an earlier one
 
 [CodeQL](.github/workflows/codeql.yml) scans the code on every push, pull request and weekly; Dependabot opens weekly
-update pull requests for npm packages, Actions and the Docker base image. The pre-commit hook only runs `pnpm build`,
-so run the affected tests before pushing.
+update pull requests for npm packages, Actions and the Docker base image, and
+[patch and minor updates merge themselves](.github/workflows/dependabot-auto-merge.yml) once the checks pass. The
+pre-commit hook only runs `pnpm build`, so run the affected tests before pushing.
+
+## Monitoring
+
+- `GET /health` answers 200 with the running commit (`data.version`) when the server and its database are up, and
+  503 when the database doesn't answer. Point an uptime monitor (UptimeRobot, Better Stack) at it.
+- Set `SENTRY_DSN` to report crashes and 500 errors to Sentry, tagged with the commit. Without it nothing is sent.
