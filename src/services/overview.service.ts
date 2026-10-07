@@ -54,9 +54,16 @@ async function getCounts(): Promise<CountsRow> {
       WHERE "status" = 'active' AND "deletedAt" IS NULL AND "role" IN ('rider', 'driver')
     ),
     completed AS (
-      SELECT ${DAY_OF("completedAt")} AS day, "platformFee" + "bookingFee" AS revenue
+      SELECT ${DAY_OF("completedAt")} AS day
       FROM "trips"
       WHERE "status" = 'completed' AND "completedAt" >= ((${TODAY} - 1)::timestamp AT TIME ZONE 'UTC')
+    ),
+    -- Revenue is what the ledger recorded for the platform (platform fee plus booking fee, per completed trip).
+    revenue AS (
+      SELECT ${DAY_OF("createdAt")} AS day, "amount"
+      FROM "transactions"
+      WHERE "account" = 'platform' AND "type" = 'platformFee' AND "status" = 'success'
+        AND "createdAt" >= ((${TODAY} - 1)::timestamp AT TIME ZONE 'UTC')
     )
     SELECT
       (SELECT count(*) FROM active_users WHERE "role" = 'rider')::int AS "activeRiders",
@@ -65,8 +72,8 @@ async function getCounts(): Promise<CountsRow> {
       (SELECT count(*) FROM active_users WHERE "role" = 'driver' AND "createdAt" < ${TODAY})::int AS "activeCarOwnersBefore",
       (SELECT count(*) FROM completed WHERE day = ${TODAY})::int AS "tripsToday",
       (SELECT count(*) FROM completed WHERE day = ${TODAY} - 1)::int AS "tripsYesterday",
-      (SELECT coalesce(sum(revenue), 0) FROM completed WHERE day = ${TODAY})::float8 AS "revenueToday",
-      (SELECT coalesce(sum(revenue), 0) FROM completed WHERE day = ${TODAY} - 1)::float8 AS "revenueYesterday",
+      (SELECT coalesce(sum("amount"), 0) FROM revenue WHERE day = ${TODAY})::float8 AS "revenueToday",
+      (SELECT coalesce(sum("amount"), 0) FROM revenue WHERE day = ${TODAY} - 1)::float8 AS "revenueYesterday",
       (SELECT count(*) FROM "sosIncidents" WHERE "status" = ANY(?))::int AS "openIncidents",
       (SELECT count(*) FROM "verificationDocuments" WHERE "status" = ANY(?) AND "deletedAt" IS NULL)::int AS "pendingVerification",
       (SELECT count(*) FROM "supportTickets" WHERE "status" = ANY(?))::int AS "openTickets"

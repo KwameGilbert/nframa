@@ -9,7 +9,9 @@ import type {
 
 export interface Transaction {
   id: string;
-  userId: string;
+  // null only on platform rows (account "platform"): the platform's fee for a trip.
+  userId: string | null;
+  account: "user" | "platform";
   type: TransactionType;
   direction: TransactionDirection;
   amount: number;
@@ -19,6 +21,11 @@ export interface Transaction {
   providerReference: string | null;
   tripId: string | null;
   balanceAfter: number | null;
+  // When a held driver credit (earning or tip) is released into the balance; null on everything else.
+  availableAt: Date | null;
+  // Who made an admin change, and why. Both null on everything else.
+  actorId: string | null;
+  note: string | null;
   metadata: Record<string, unknown> | null;
   createdAt: Date;
   updatedAt: Date;

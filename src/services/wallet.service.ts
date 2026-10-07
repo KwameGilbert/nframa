@@ -51,7 +51,11 @@ export async function confirmTopUp(topUp: Transaction): Promise<TopUpOutcome> {
   const settled = await walletModel.settleTopUp(topUp.providerReference);
   // Only the call that credited it sends the receipt, so repeated or simultaneous deliveries send one.
   if (settled?.credited) {
-    void sendTopUpEmail(topUp.userId, settled.transaction.amount, settled.transaction.currency);
+    void sendTopUpEmail(
+      topUp.userId as string,
+      settled.transaction.amount,
+      settled.transaction.currency,
+    );
   }
   return settled ?? unchanged;
 }
@@ -59,7 +63,7 @@ export async function confirmTopUp(topUp: Transaction): Promise<TopUpOutcome> {
 async function failed(topUp: Transaction, reason: string): Promise<TopUpOutcome> {
   const marked = await transactionModel.markFailed(topUp.id, reason);
   if (marked) {
-    void sendTopUpFailedEmail(topUp.userId, topUp.amount, topUp.currency);
+    void sendTopUpFailedEmail(topUp.userId as string, topUp.amount, topUp.currency);
     return { transaction: marked, credited: false, failedNow: reason };
   }
   // Settled or failed meanwhile by another call: report what it is now.

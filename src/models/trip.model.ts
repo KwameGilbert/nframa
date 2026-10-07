@@ -3,7 +3,7 @@ import db from "../database/knex.js";
 import { BaseModel } from "./BaseModel.js";
 import { settingModel } from "./setting.model.js";
 import { transactionModel } from "./transaction.model.js";
-import { walletModel } from "./wallet.model.js";
+import { heldUntil, walletModel } from "./wallet.model.js";
 import { calculateWait, type WaitSettings } from "../services/fare.service.js";
 import { EARTH_RADIUS_METERS, type Point } from "../services/geo.js";
 import { AppError } from "../utils/AppError.js";
@@ -640,7 +640,7 @@ class TripModel extends BaseModel<Trip> {
   }
 
   // The boarding scan, in one transaction taking the trip row, then the rider's wallet: the hold becomes the trip's
-  // charge, and wait past the grace is debited on top (it may take the wallet below zero). The status re-check
+  // charge, and wait past the grace is debited on top, capped at what the rider can still spend. The status re-check
   // under the lock, with transactions_one_per_trip_type as the backstop, makes two simultaneous scans charge once.
   boardTrip(tripId: string, at: Point, wait: WaitSettings): Promise<Trip> {
     return db.transaction(async (trx) => {
@@ -655,13 +655,16 @@ class TripModel extends BaseModel<Trip> {
         );
       }
       const boardedAt = new Date();
-      const { waitMinutes, waitCharge } = calculateWait({ ...trip, boardedAt }, wait);
+      const { waitMinutes, waitCharge: waitOwed } = calculateWait({ ...trip, boardedAt }, wait);
       const rider = { userId: trip.riderUserId, tripId };
       await walletModel.capture(trx, { ...rider, amount: trip.heldAmount });
+      // The wallet stays locked from the capture, so this is what the rider can still spend.
+      const spendable = await walletModel.spendableIn(trx, trip.riderUserId);
+      const waitCharge = roundMoney(Math.min(waitOwed, spendable));
       if (waitCharge > 0) {
         await walletModel.recordIn(trx, {
           ...rider,
-          type: "wait_charge",
+          type: "waitCharge",
           direction: "debit",
           amount: waitCharge,
         });
@@ -680,23 +683,39 @@ class TripModel extends BaseModel<Trip> {
   }
 
   // Pays the driver for a boarded trip (fare plus any wait charge), once: the status is re-checked under the trip
-  // lock, with transactions_one_per_trip_type as the backstop.
+  // lock, with transactions_one_per_trip_type as the backstop. The earning is held (pending, in pendingBalance) until
+  // heldUntil(completedAt), then the earnings release sweep moves it into the balance. The platform's cut (platform
+  // fee plus booking fee) is recorded on the platform account.
   completeTrip(tripId: string): Promise<Trip> {
     return db.transaction(async (trx) => {
       const trip = await this.lockIn(trx, tripId);
       if (trip.status !== "boarded") {
         throw AppError.conflict(`Can't complete a trip that is ${trip.status}`);
       }
+      const completedAt = new Date();
       if (trip.driverEarnings > 0) {
-        await walletModel.recordIn(trx, {
+        await walletModel.move(trx, {
           userId: trip.driverUserId,
-          tripId,
-          type: "driver_earning",
-          direction: "credit",
-          amount: trip.driverEarnings,
+          delta: { pendingBalance: trip.driverEarnings },
+          row: {
+            tripId,
+            type: "driverEarning",
+            direction: "credit",
+            amount: trip.driverEarnings,
+            status: "pending",
+            availableAt: await heldUntil(completedAt),
+          },
         });
       }
-      return this.updateIn(trx, tripId, { status: "completed", completedAt: new Date() });
+      const platformFee = roundMoney(Number(trip.platformFee) + Number(trip.bookingFee));
+      if (platformFee > 0) {
+        await walletModel.recordPlatformIn(trx, {
+          tripId,
+          type: "platformFee",
+          amount: platformFee,
+        });
+      }
+      return this.updateIn(trx, tripId, { status: "completed", completedAt });
     });
   }
 

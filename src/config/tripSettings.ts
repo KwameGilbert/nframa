@@ -186,6 +186,14 @@ export const TRIP_SETTINGS = {
     default: 5000,
     description: "Largest amount, in GHS, a rider can add to their wallet in one top-up",
   },
+  "finance.earningsHoldHours": {
+    type: "number",
+    min: 0,
+    max: 720,
+    default: 24,
+    description:
+      "Hours a driver's trip earning or tip is held as pending before it can be withdrawn",
+  },
 } as const satisfies Record<string, TripSettingSpec>;
 
 export type TripSettingKey = keyof typeof TRIP_SETTINGS;

@@ -5,15 +5,21 @@ import { requirePermission } from "../middlewares/authorize.js";
 import {
   adminListPayoutMethodsQuerySchema,
   createPayoutMethodSchema,
+  listPayoutsQuerySchema,
   payoutMethodParamsSchema,
+  payoutParamsSchema,
+  requestPayoutSchema,
   updatePayoutMethodSchema,
 } from "../schemas/payout.schema.js";
 import {
   adminListPayoutMethods,
   adminUpdatePayoutMethod,
+  cancelPayout,
   createPayoutMethod,
   deletePayoutMethod,
   listPayoutMethods,
+  listPayouts,
+  requestPayout,
   updatePayoutMethod,
 } from "../controllers/payout.controller.js";
 
@@ -41,6 +47,28 @@ payoutRouter.delete(
   authenticate,
   validate({ params: payoutMethodParamsSchema }),
   deletePayoutMethod,
+);
+
+// A driver's own payouts.
+payoutRouter.post(
+  "/drivers/me/payouts",
+  authenticate,
+  validate({ body: requestPayoutSchema }),
+  requestPayout,
+);
+
+payoutRouter.get(
+  "/drivers/me/payouts",
+  authenticate,
+  validate({ query: listPayoutsQuerySchema }),
+  listPayouts,
+);
+
+payoutRouter.post(
+  "/drivers/me/payouts/:id/cancel",
+  authenticate,
+  validate({ params: payoutParamsSchema }),
+  cancelPayout,
 );
 
 // Staff.

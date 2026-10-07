@@ -2,10 +2,15 @@ import { registry, errorResponse, successResponse } from "./registry.js";
 import {
   adminListPayoutMethodsQuerySchema,
   createPayoutMethodSchema,
+  listPayoutsQuerySchema,
   payoutMethodListResponseSchema,
   payoutMethodPageResponseSchema,
   payoutMethodParamsSchema,
   payoutMethodResponseSchema,
+  payoutPageResponseSchema,
+  payoutParamsSchema,
+  payoutResponseSchema,
+  requestPayoutSchema,
   updatePayoutMethodSchema,
 } from "../schemas/payout.schema.js";
 
@@ -113,6 +118,61 @@ registry.registerPath({
     409: errorResponse(
       "Its payment method isn't verified",
       "Only a verified payment method can be the primary payout method",
+    ),
+  },
+});
+
+const PAYOUTS_TAG = "Payouts";
+
+registry.registerPath({
+  method: "post",
+  path: "/drivers/me/payouts",
+  tags: [PAYOUTS_TAG],
+  summary: "Ask to be paid out",
+  description:
+    "Drivers only. Held earnings and tips that are due are released first, then the amount leaves the wallet balance at once as a pending payout transaction, so it can't be spent or requested twice. An admin then pays it (it becomes paid) or rejects it (the amount comes back). Only one payout can be waiting at a time. The amount must be at least the payout method's minimumThreshold and at most balance minus heldAmount.",
+  request: { body: { content: { "application/json": { schema: requestPayoutSchema } } } },
+  responses: {
+    201: successResponse("Payout requested successfully", payoutResponseSchema),
+    403: errorResponse("Not a driver", "Only drivers can request payouts"),
+    404: NOT_FOUND,
+    409: errorResponse(
+      "Not enough balance, below the method's minimum, method not verified, or a payout already waiting",
+      "Insufficient wallet balance",
+    ),
+    423: errorResponse("The wallet is frozen", "This wallet is frozen"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/drivers/me/payouts",
+  tags: [PAYOUTS_TAG],
+  summary: "List my payouts",
+  description: "Newest first.",
+  request: { query: listPayoutsQuerySchema },
+  responses: {
+    200: successResponse("Payouts retrieved successfully", payoutPageResponseSchema),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/drivers/me/payouts/{id}/cancel",
+  tags: [PAYOUTS_TAG],
+  summary: "Cancel a payout I asked for",
+  description:
+    "Only while it's still pending (no admin has approved it). The amount goes back to the wallet balance and the payout transaction becomes failed.",
+  request: { params: payoutParamsSchema },
+  responses: {
+    200: successResponse("Payout cancelled successfully", payoutResponseSchema),
+    404: errorResponse(
+      "Not one of the driver's payouts",
+      "Payout not found: 5f0c9c1e-8d3a-4b7e-9a52-6a1f0f3b2c11",
+    ),
+    409: errorResponse(
+      "Already approved or settled",
+      "Can't change to cancelled: it is no longer pending",
     ),
   },
 });

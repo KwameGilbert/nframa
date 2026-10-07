@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import db from "../src/database/knex.js";
+import { walletModel } from "../src/models/wallet.model.js";
 import { addDays, today } from "../src/utils/tripTime.js";
 import { api, auth, expectStatus } from "./helpers/api.js";
 import { createSignedInAdmin, loginAsSuperAdmin } from "./helpers/actors.js";
@@ -133,7 +134,9 @@ describe("POST /trips/:tripId/reviews", () => {
     await addReview(tipper, trip.id, { rating: 5, tip: 10 });
 
     expect(await walletOf(tipper.userId)).toEqual({ balance: 90, heldAmount: 0 });
-    expect(await walletOf(tipped.driver.userId)).toEqual({ balance: 10, heldAmount: 0 });
+    // The driver's tip is held until released.
+    expect(await walletOf(tipped.driver.userId)).toEqual({ balance: 0, heldAmount: 0 });
+    expect((await walletModel.getWallet(tipped.driver.userId)).pendingBalance).toBe(10);
     const rows = await db("transactions").where({ tripId: trip.id, type: "tip" });
     expect(rows.map((row) => [row.userId, row.direction, Number(row.amount)]).sort()).toEqual(
       [

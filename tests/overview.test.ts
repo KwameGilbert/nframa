@@ -1,4 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
+import db from "../src/database/knex.js";
+import { walletModel } from "../src/models/wallet.model.js";
 import { api, auth, expectStatus } from "./helpers/api.js";
 import { createSignedInAdmin, loginAsSuperAdmin } from "./helpers/actors.js";
 import { insertTrip, newCommute, newRider } from "./helpers/trips.js";
@@ -82,11 +84,14 @@ describe("GET /admin/overview", () => {
     const rider = await newRider();
     const before = (await getOverview(viewer.token)).body.data;
 
-    await insertTrip(commute, rider.userId, { status: "completed", completedAt: new Date() });
+    const trip = await insertTrip(commute, rider.userId, { status: "completed", completedAt: new Date() });
+    // Revenue comes from the ledger: completing a trip records platformFee 2.64 + bookingFee 1 for the platform.
+    await db.transaction((trx) =>
+      walletModel.recordPlatformIn(trx, { tripId: trip.id, type: "platformFee", amount: 3.64 }),
+    );
 
     const after = (await getOverview(viewer.token)).body.data;
     expect(after.stats.tripsToday).toBeGreaterThanOrEqual(before.stats.tripsToday + 1);
-    // platformFee 2.64 + bookingFee 1
     expect(after.stats.revenue).toBeGreaterThanOrEqual(before.stats.revenue + 3.64 - 0.001);
     expect(after.tripActivity.at(-1).completed).toBeGreaterThanOrEqual(before.tripActivity.at(-1).completed + 1);
   });

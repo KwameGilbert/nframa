@@ -2,11 +2,15 @@ import { z } from "zod";
 
 export const TRANSACTION_TYPES = [
   "topup",
-  "trip_charge",
-  "wait_charge",
-  "driver_earning",
+  "tripCharge",
+  "waitCharge",
+  "driverEarning",
   "refund",
   "tip",
+  "platformFee",
+  "payout",
+  "adjustmentCredit",
+  "adjustmentDebit",
 ] as const;
 export const TRANSACTION_DIRECTIONS = ["credit", "debit"] as const;
 export const TRANSACTION_STATUSES = ["pending", "success", "failed"] as const;
@@ -17,13 +21,13 @@ export type TransactionStatus = (typeof TRANSACTION_STATUSES)[number];
 
 const transactionTypeSchema = z.enum(TRANSACTION_TYPES).meta({
   description:
-    "topup: money added through Paystack; trip_charge / wait_charge: a trip's fare and wait time; driver_earning: a driver's share of a trip; refund: money returned; tip: a rider's tip to a driver (a debit on the rider's wallet and a credit on the driver's)",
+    "topup: money added through Paystack; tripCharge / waitCharge: a trip's fare and wait time; driverEarning: a driver's share of a trip; refund: money returned; tip: a rider's tip to a driver (a debit on the rider's wallet and a credit on the driver's); platformFee: the platform's cut of a trip (platform account only); payout: money paid out to a driver's payout method; adjustmentCredit / adjustmentDebit: a correction made by an admin",
   example: "topup",
 });
 
 const transactionStatusSchema = z.enum(TRANSACTION_STATUSES).meta({
   description:
-    "pending: waiting for the payment to go through (top-ups only); success: the wallet balance changed; failed: the payment didn't go through, nothing changed",
+    "pending: not settled yet (a top-up waiting for Paystack, a driver's earning or tip on hold, or a payout waiting to be paid); success: the wallet balance changed; failed: the payment didn't go through, nothing changed",
   example: "success",
 });
 
@@ -86,8 +90,21 @@ export const walletResponseSchema = z.object({
     example: 20,
   }),
   availableBalance: moneySchema.meta({
-    description: "What can be spent: balance minus heldAmount (can be negative)",
+    description: "What can be spent: balance minus heldAmount (never negative)",
     example: 100.5,
+  }),
+  pendingBalance: moneySchema.meta({
+    description:
+      "Driver earnings and tips still on hold (finance.earningsHoldHours): not in balance and not withdrawable until released",
+    example: 45,
+  }),
+  status: z.enum(["active", "frozen"]).meta({
+    description:
+      "frozen: an admin froze the wallet; money still comes in and held credits still release, but nothing goes out (423)",
+    example: "active",
+  }),
+  nextReleaseAt: z.iso.datetime().nullable().meta({
+    description: "When the earliest held credit is due for release; null when nothing is on hold",
   }),
   currency: z.literal("GHS"),
 });
@@ -115,6 +132,10 @@ export const transactionResponseSchema = z.object({
   }),
   metadata: z.record(z.string(), z.unknown()).nullable().meta({
     description: "Extra detail, e.g. failureReason when a top-up failed",
+  }),
+  availableAt: z.iso.datetime().nullable().meta({
+    description:
+      "For a held driver earning or tip: when it's released into the balance; null otherwise",
   }),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),

@@ -29,6 +29,11 @@ export class AppError extends Error {
     return new AppError(message, 409);
   }
 
+  // The resource is frozen (e.g. a wallet an admin froze): reads still work, changes are refused.
+  static locked(message: string) {
+    return new AppError(message, 423);
+  }
+
   static tooManyRequests(message = "Too many requests, try again later") {
     return new AppError(message, 429);
   }
