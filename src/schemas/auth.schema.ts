@@ -47,6 +47,27 @@ export const verifyOtpSchema = z.union([
 
 export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;
 
+export const socialLoginSchema = z.object({
+  provider: z.enum(["google", "apple"]).meta({ example: "google" }),
+  providerToken: z.string().min(1).meta({
+    description:
+      "The ID token (a JWT) from Google Sign-In or Sign in with Apple, issued to one of this app's client ids — not an access token",
+    example: "eyJhbGciOiJSUzI1NiIsImtpZCI6IjFlOWdkazcifQ.eyJzdWIiOiIxMDk4NzY1NDMyMSJ9.sig",
+  }),
+  role: z.enum(["rider", "driver"]).optional().meta({
+    description:
+      "Required only when signing up: no account is linked to this Google/Apple sign-in and none has its email. Ignored for existing accounts. Valid values: rider (customer), driver (service provider)",
+    example: "rider",
+  }),
+  fullName: z.string().trim().min(1).optional().meta({
+    description:
+      "The name the app received from Apple on the first sign-in (Apple never puts it in the token). Used only when signing up, and only if the token has no name",
+    example: "Ama Mensah",
+  }),
+});
+
+export type SocialLoginInput = z.infer<typeof socialLoginSchema>;
+
 export const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1).meta({
     description: "The refresh token from the latest login or refresh — each one works once",
@@ -131,6 +152,6 @@ export const loginResponseSchema = authTokensResponseSchema.extend({
   user: accountResponseSchema,
   isNewUser: z.boolean().meta({
     description:
-      "True only when this call just signed up the account (phone OTP signup, including a deleted rider/driver re-registering the same number with a clean profile). Always false for password login and email-OTP login.",
+      "True only when this call just signed up the account (phone OTP signup, including a deleted rider/driver re-registering the same number with a clean profile, or a Google/Apple signup). Always false for password login and email-OTP login.",
   }),
 });

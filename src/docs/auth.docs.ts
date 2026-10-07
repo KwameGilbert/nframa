@@ -3,6 +3,7 @@ import {
   loginSchema,
   requestOtpSchema,
   verifyOtpSchema,
+  socialLoginSchema,
   refreshTokenSchema,
   logoutSchema,
   forgotPasswordSchema,
@@ -14,10 +15,10 @@ import {
 } from "../schemas/auth.schema.js";
 
 const loginResponseDescription =
-  "Returns the token pair along with the account, including its role-specific profile at user.profile (driver/rider/admin extension record). user.profile is null if the account hasn't completed that step yet (e.g. a brand-new signup with no driver profile created yet). For admins, user.adminRole and user.permissions say what they can access. isNewUser is true only when this call just signed up the account (phone OTP signup, including a deleted account re-registering); it's always false for password login and email-OTP login.";
+  "Returns the token pair along with the account, including its role-specific profile at user.profile (driver/rider/admin extension record). user.profile is null if the account hasn't completed that step yet (e.g. a brand-new signup with no driver profile created yet). For admins, user.adminRole and user.permissions say what they can access. isNewUser is true only when this call just signed up the account (phone OTP signup, including a deleted account re-registering, or a Google/Apple signup); it's always false for password login and email-OTP login.";
 
 const reRegistration =
-  "A deleted rider or driver account can sign up again with the same phone number: role is required as for a new number, and on verify the same account (same id, since the number is unique) is reactivated with the role chosen now and a clean profile (name, email, date of birth, picture and password cleared), every old session is revoked, and the driver side is reset (driver profile back to unverified with no Ghana card number, address or terms acceptance; verification documents deleted; commutes paused; vehicles retired). The wallet balance, transactions and trips stay with the account. A suspended account stays suspended (403) even if it was deleted, and deleted admin accounts or email identifiers are never reactivated (403).";
+  "A deleted rider or driver account can sign up again with the same phone number: role is required as for a new number, and on verify the same account (same id, since the number is unique) is reactivated with the role chosen now and a clean profile (name, email, date of birth, picture and password cleared), every old session and linked Google/Apple sign-in is revoked, and the driver side is reset (driver profile back to unverified with no Ghana card number, address or terms acceptance; verification documents deleted; commutes paused; vehicles retired). The wallet balance, transactions and trips stay with the account. A suspended account stays suspended (403) even if it was deleted, and deleted admin accounts or email identifiers are never reactivated (403).";
 
 const accountBlocked = errorResponse(
   "Account is suspended or deleted, or the admin account is not active",
@@ -134,6 +135,80 @@ registry.registerPath({
       "No account found for this identifier",
     ),
     429: rateLimitedResponse,
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/auth/social-login",
+  tags: ["Auth"],
+  summary: "Sign in or sign up with Google or Apple",
+  description: `Send the ID token the Google or Apple SDK gave the app. It's checked against the provider's keys and this app's client ids (GOOGLE_CLIENT_IDS / APPLE_CLIENT_IDS). It signs in to the account this Google/Apple sign-in is linked to; failing that, to the rider or driver account with the email the provider verified, which links it from then on (and marks that email verified). Otherwise it signs up a new account (role required) with the name, verified email and picture from the token, and no phone number: phoneCountryCode/phoneNumber are null until the app adds one. Admin accounts can't sign in this way (403). Rate limited to 100 requests per IP per 15 minutes. ${loginResponseDescription}`,
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: socialLoginSchema,
+          examples: {
+            googleSignup: {
+              summary: "Google — new account (role required)",
+              value: {
+                provider: "google",
+                providerToken:
+                  "eyJhbGciOiJSUzI1NiIsImtpZCI6IjFlOWdkazcifQ.eyJzdWIiOiIxMDk4NzY1NDMyMSJ9.sig",
+                role: "rider",
+              },
+            },
+            appleFirstSignIn: {
+              summary: "Apple — first sign-in, with the name Apple gave the app",
+              value: {
+                provider: "apple",
+                providerToken:
+                  "eyJhbGciOiJSUzI1NiIsImtpZCI6IllxN0w0In0.eyJzdWIiOiIwMDE0MjMuYWJjIn0.sig",
+                role: "rider",
+                fullName: "Ama Mensah",
+              },
+            },
+            signIn: {
+              summary: "Existing account",
+              value: {
+                provider: "google",
+                providerToken:
+                  "eyJhbGciOiJSUzI1NiIsImtpZCI6IjFlOWdkazcifQ.eyJzdWIiOiIxMDk4NzY1NDMyMSJ9.sig",
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  responses: {
+    200: successResponse("Login successful", loginResponseSchema),
+    400: errorResponse(
+      "Validation error, or role missing when signing up",
+      "role is required to sign up",
+    ),
+    401: errorResponse(
+      "The token is malformed, expired, not signed by the provider, or issued to another app",
+      "Invalid Google token",
+    ),
+    403: errorResponse(
+      "Account is suspended or deleted, or it's an admin account",
+      "Account is not active",
+    ),
+    409: errorResponse(
+      "The same Google/Apple account is signing up in a concurrent request",
+      "This account is already being set up, try signing in again",
+    ),
+    429: rateLimitedResponse,
+    502: errorResponse(
+      "Google or Apple couldn't be reached to check the token",
+      "Couldn't reach Google to check the sign-in, try again",
+    ),
+    503: errorResponse(
+      "Sign-in with this provider isn't configured on the server",
+      "Google sign-in is not configured",
+    ),
   },
 });
 

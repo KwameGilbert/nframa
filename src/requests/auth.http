@@ -116,6 +116,36 @@ Content-Type: application/json
 
 @refreshToken = {{verifyPhoneOtp.response.body.data.refreshToken}}
 
+### Sign up / sign in with Google (paste the ID token from Google Sign-In; role only needed for a new account)
+POST {{baseUrl}}/auth/social-login
+Content-Type: application/json
+
+{
+  "provider": "google",
+  "providerToken": "<google id token>",
+  "role": "rider"
+}
+
+### Sign in with Apple, first time (pass the name Apple gave the app; it is never in the token)
+POST {{baseUrl}}/auth/social-login
+Content-Type: application/json
+
+{
+  "provider": "apple",
+  "providerToken": "<apple id token>",
+  "role": "rider",
+  "fullName": "Ama Mensah"
+}
+
+### Social login with a garbage token (expect 401)
+POST {{baseUrl}}/auth/social-login
+Content-Type: application/json
+
+{
+  "provider": "google",
+  "providerToken": "not-a-jwt"
+}
+
 ### Refresh the token pair
 # @name refreshed
 POST {{baseUrl}}/auth/refresh

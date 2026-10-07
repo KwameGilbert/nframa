@@ -102,15 +102,14 @@ export const userResponseSchema = z.object({
   id: z.uuid(),
   fullName: z.string().nullable().meta({ example: "Ama Mensah" }),
   email: z.string().nullable().meta({ example: "admin@nframa.com" }),
-  phoneCountryCode: z.string().nullable().meta({ example: "+233" }),
+  phoneCountryCode: z.string().nullable().meta({
+    description: "null until an account that signed up with Google or Apple adds a phone number",
+    example: "+233",
+  }),
   phoneNumber: z.string().nullable().meta({ example: "541436414" }),
   dateOfBirth: z.iso.date().nullable().meta({ example: "1995-04-12" }),
   status: userStatusSchema,
   profilePicture: z.string().nullable().meta({ example: "https://cdn.nframa.com/avatars/ama.jpg" }),
-  oauthProvider: z.enum(["google", "facebook", "apple"]).nullable().meta({
-    description: "OAuth provider if the account was created via social login",
-    example: "google",
-  }),
   role: z.enum(["rider", "driver", "admin"]).meta({
     description: "rider: customer; driver: service provider; admin: platform staff",
     example: "rider",

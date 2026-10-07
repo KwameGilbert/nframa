@@ -8,9 +8,15 @@ import { riderProfileModel } from "../models/riderProfile.model.js";
 import { otpCodeModel, OTP_EXPIRY_MINUTES, OTP_MAX_ATTEMPTS } from "../models/otpCode.model.js";
 import { authSessionModel } from "../models/authSession.model.js";
 import { pushDeviceModel } from "../models/pushDevice.model.js";
+import { socialAccountModel } from "../models/socialAccount.model.js";
 import db from "../database/knex.js";
 import { sendSms } from "../services/sms.service.js";
 import { sendOtpEmail, sendPasswordChangedEmail } from "../services/email.service.js";
+import {
+  providerLabel,
+  verifySocialToken,
+  type SocialIdentity,
+} from "../services/socialAuth.service.js";
 import { generateOtpCode, hashOtpCode } from "../utils/otp.js";
 import { hashPassword, verifyPassword } from "../utils/password.js";
 import { generateRefreshToken, hashRefreshToken } from "../utils/refreshToken.js";
@@ -23,6 +29,7 @@ import type {
   LoginInput,
   RequestOtpInput,
   VerifyOtpInput,
+  SocialLoginInput,
   RefreshTokenInput,
   LogoutInput,
   ForgotPasswordInput,
@@ -401,6 +408,68 @@ export async function verifyLoginOtp(req: Request, res: Response) {
           targetId: account.id,
         },
   );
+}
+
+// The account a Google/Apple sign-in reaches: the one it's linked to, else the one with the email the provider
+// verified — which is no more than email-OTP sign-in already allows whoever controls that address.
+async function findSocialAccount(identity: SocialIdentity) {
+  const linked = await socialAccountModel.findByIdentity(identity);
+  if (linked) {
+    return { user: await userModel.findById(linked.userId), linked: true };
+  }
+  const user = identity.email ? await userModel.findOne({ email: identity.email }) : undefined;
+  return { user, linked: false };
+}
+
+export async function socialLogin(req: Request, res: Response) {
+  const { provider, providerToken, role, fullName } = req.validated.body as SocialLoginInput;
+  const identity = await verifySocialToken(provider, providerToken);
+  const label = providerLabel(provider);
+  const { user, linked } = await findSocialAccount(identity);
+
+  if (user) {
+    if (user.role === "admin") {
+      throw AppError.forbidden("Admin accounts sign in with email and password");
+    }
+    await assertAccountActive(user);
+
+    let account = user;
+    if (!linked) {
+      await socialAccountModel.linkIfMissing(user.id, identity);
+      // The provider just proved this address belongs to the person signing in.
+      if (!user.isEmailVerified) {
+        account = (await userModel.markVerified(user.id, { isEmailVerified: true })) ?? user;
+      }
+    }
+
+    await completeLogin(account, req, res);
+    logAuthActivity(req, {
+      action: "auth.social.login",
+      description: linked
+        ? `Signed in with ${label}`
+        : `Signed in with ${label}, linked to the account by its email`,
+      actorId: account.id,
+      targetId: account.id,
+    });
+    return;
+  }
+
+  if (!role) {
+    throw AppError.badRequest("role is required to sign up");
+  }
+  const account = await userModel.createSocialUser(
+    { role, fullName: identity.fullName ?? fullName ?? null, profilePicture: identity.picture },
+    identity,
+  );
+
+  await completeLogin(account, req, res, true);
+  logAuthActivity(req, {
+    action: "auth.signup",
+    description: `Signed up as a ${role} with ${label}`,
+    actorId: account.id,
+    targetId: account.id,
+    after: account,
+  });
 }
 
 export async function refreshSession(req: Request, res: Response) {

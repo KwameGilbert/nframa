@@ -29,6 +29,7 @@ const DELETE_ORDER = [
   "supportCategories", // RESTRICT from supportTickets
   "notifications", // cascades with its user; listed first so the order stays self-documenting
   "pushDevices", // cascades with its user; listed first so the order stays self-documenting
+  "socialAccounts", // cascades with its user; listed first so the order stays self-documenting
   "tripReports", // cascades with its trip or users; listed first so the order stays self-documenting
   "tripReviews", // cascades with its trip or user; listed first so the order stays self-documenting
   "payoutHistory", // FK on payoutMethods and users

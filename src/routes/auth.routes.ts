@@ -15,6 +15,7 @@ import {
   loginSchema,
   requestOtpSchema,
   verifyOtpSchema,
+  socialLoginSchema,
   refreshTokenSchema,
   logoutSchema,
   forgotPasswordSchema,
@@ -25,6 +26,7 @@ import {
   login,
   requestLoginOtp,
   verifyLoginOtp,
+  socialLogin,
   refreshSession,
   logout,
   forgotPassword,
@@ -50,6 +52,12 @@ authRouter.post(
   validate({ body: verifyOtpSchema }),
   otpVerifyLimit,
   verifyLoginOtp,
+);
+authRouter.post(
+  "/auth/social-login",
+  authIpLimit,
+  validate({ body: socialLoginSchema }),
+  socialLogin,
 );
 authRouter.post(
   "/auth/refresh",

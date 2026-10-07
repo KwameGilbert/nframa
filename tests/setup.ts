@@ -9,7 +9,9 @@ import { seed as defaultSettingsSeed } from "../src/database/seeds/002_default_s
 // No test ever sends a real SMS or email: every message lands in these mocks instead, which is also how
 // tests read OTP and reset codes (see helpers/outbox.ts).
 vi.mock("../src/services/sms.service.js", () => ({ sendSms: vi.fn(async () => undefined) }));
-vi.mock("../src/services/resend.service.js", () => ({ sendViaResend: vi.fn(async () => undefined) }));
+vi.mock("../src/services/resend.service.js", () => ({
+  sendViaResend: vi.fn(async () => undefined),
+}));
 
 // No test ever calls Cloudinary: uploadFile returns a plausible-looking fake URL
 // (still shaped by the real inputs) instead. deleteFile is a no-op.
@@ -70,9 +72,13 @@ vi.mock("../src/services/socket.service.js", () => ({
 // Spy on notificationEvents functions but use the real implementation, which calls deliverNotification.
 // This allows tests to assert on what was called while still testing the actual behavior.
 vi.mock("../src/services/notificationEvents.service.js", async (importActual) => {
-  const actual = await importActual<typeof import("../src/services/notificationEvents.service.js")>();
+  const actual =
+    await importActual<typeof import("../src/services/notificationEvents.service.js")>();
   return Object.fromEntries(
-    Object.entries(actual).map(([name, value]) => [name, typeof value === "function" ? vi.fn(value) : value]),
+    Object.entries(actual).map(([name, value]) => [
+      name,
+      typeof value === "function" ? vi.fn(value) : value,
+    ]),
   );
 });
 
@@ -89,6 +95,23 @@ vi.mock("../src/services/google.service.js", async () => {
         return { distanceMeters, durationSeconds: Math.round(distanceMeters / 10) };
       },
     ),
+  };
+});
+
+// No test calls Google or Apple: a sign-in token is the identity it stands for, as JSON ({ providerUserId, email,
+// fullName, picture }), and "forged" is refused like a token the provider never signed. socialLogin.test.ts runs
+// the real check against tokens signed with a local key.
+vi.mock("../src/services/socialAuth.service.js", async (importActual) => {
+  const actual = await importActual<typeof import("../src/services/socialAuth.service.js")>();
+  const { AppError } = await import("../src/utils/AppError.js");
+  return {
+    ...actual,
+    verifySocialToken: vi.fn(async (provider: "google" | "apple", token: string) => {
+      if (token === "forged") {
+        throw AppError.unauthorized(`Invalid ${actual.providerLabel(provider)} token`);
+      }
+      return { provider, email: null, fullName: null, picture: null, ...JSON.parse(token) };
+    }),
   };
 });
 

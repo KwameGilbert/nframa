@@ -1,9 +1,12 @@
 import db from "../database/knex.js";
 import { BaseModel } from "./BaseModel.js";
+import { AppError } from "../utils/AppError.js";
 import { authSessionModel } from "./authSession.model.js";
 import { pushDeviceModel } from "./pushDevice.model.js";
 import { notificationModel } from "./notification.model.js";
 import { supportTicketModel } from "./supportTicket.model.js";
+import { socialAccountModel } from "./socialAccount.model.js";
+import type { SocialIdentity } from "../services/socialAuth.service.js";
 import type { CreateUserInput, UpdateUserInput } from "../schemas/user.schema.js";
 
 export interface User {
@@ -17,7 +20,6 @@ export interface User {
   passwordSalt: string | null;
   status: string;
   profilePicture: string | null;
-  oauthProvider: string | null;
   role: string;
   isPhoneVerified: boolean;
   isEmailVerified: boolean;
@@ -38,6 +40,30 @@ class UserModel extends BaseModel<User> {
   // OTP is created verified, and changing an identifier resets its flag.
   createUser(input: CreateUserInput & VerifiedFlags) {
     return this.insert(input as unknown as Partial<User>);
+  }
+
+  // Google/Apple sign-up: no phone yet (the account adds one later), the email only if the provider verified
+  // it, and the sign-in linked in the same transaction — a concurrent sign-up of the same person fails on the
+  // link and leaves no account behind.
+  createSocialUser(
+    input: Pick<User, "fullName" | "profilePicture"> & { role: "rider" | "driver" },
+    identity: SocialIdentity,
+  ): Promise<User> {
+    return db
+      .transaction(async (trx) => {
+        const [row] = await trx(this.tableName)
+          .insert({ ...input, email: identity.email, isEmailVerified: identity.email !== null })
+          .returning("*");
+        await socialAccountModel.link(row.id, identity, trx);
+        return this.sanitize(row);
+      })
+      .catch((err: unknown) => {
+        // The email was free when the controller looked, so a clash is the same person signing up concurrently.
+        if ((err as { code?: string }).code === "23505") {
+          throw AppError.conflict("This account is already being set up, try signing in again");
+        }
+        throw err;
+      });
   }
 
   updateUser(id: string, input: UpdateUserInput & VerifiedFlags) {
@@ -69,7 +95,8 @@ class UserModel extends BaseModel<User> {
   // A deleted rider or driver signing up again by phone: the same row (the number is unique) comes back as a
   // fresh account with the role they chose now. status is never touched — only an active row matches, so a
   // suspension can't be shed by deleting and re-registering. Every old session is revoked in the same
-  // transaction, or a refresh token issued before the delete would work again. A recycled number may now
+  // transaction, or a refresh token issued before the delete would work again; so is every linked Google/Apple
+  // sign-in, which the previous holder could otherwise still use. A recycled number may now
   // belong to someone else, so the driver side is reset too: no previous holder's Ghana card, address or
   // approval, documents that can't count towards a new approval, and no live commutes or vehicles. Wallet,
   // ledger and trips stay attached — the money belongs to the account.
@@ -89,7 +116,6 @@ class UserModel extends BaseModel<User> {
           profilePicture: null,
           passwordHash: null,
           passwordSalt: null,
-          oauthProvider: null,
           isPhoneVerified: true,
           isEmailVerified: false,
           isProfileComplete: false,
@@ -104,6 +130,7 @@ class UserModel extends BaseModel<User> {
       await pushDeviceModel.removeAllForUser(id, trx);
       await notificationModel.removeAllForUser(id, trx);
       await supportTicketModel.detachForUser(id, trx);
+      await socialAccountModel.removeAllForUser(id, trx);
       await trx("carOwnerProfiles").where({ userId: id }).update({
         verificationStatus: "unverified",
         ghanaCardNumber: null,

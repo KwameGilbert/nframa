@@ -106,7 +106,6 @@ describe("Re-registering a deleted account by phone", () => {
       email: null,
       dateOfBirth: null,
       profilePicture: null,
-      oauthProvider: null,
       isPhoneVerified: true,
       isEmailVerified: false,
       isProfileComplete: false,

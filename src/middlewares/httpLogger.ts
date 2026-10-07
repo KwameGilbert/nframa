@@ -24,13 +24,17 @@ function blank(body: unknown, keys: string[]) {
 // Payment webhooks carry the payer's email, phone and card details: log only which event it was. A boarding
 // scan carries the rider's boarding code, which is theirs alone. A trip report carries one person's account of
 // another. A saved payment method carries a full phone or account number. A push token or web-push subscription
-// lets whoever holds it push to that device, and a refresh token is a live session.
+// lets whoever holds it push to that device, a refresh token is a live session, and a Google/Apple ID token
+// signs in until it expires.
 export function loggableBody(req: Pick<Request, "originalUrl" | "method" | "body">) {
   if (req.originalUrl.startsWith("/devices")) {
     return blank(req.body, ["token", "subscription"]);
   }
   if (req.originalUrl.startsWith("/auth/logout")) {
     return blank(req.body, ["refreshToken", "pushToken"]);
+  }
+  if (req.originalUrl.startsWith("/auth/social-login")) {
+    return blank(req.body, ["providerToken"]);
   }
   if (req.originalUrl.startsWith("/auth/refresh")) {
     return blank(req.body, ["refreshToken"]);
