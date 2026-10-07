@@ -232,7 +232,10 @@ export async function adminUpdatePaymentMethod(req: Request, res: Response) {
 
   if (verificationStatus !== "pending" && existing.verificationStatus !== verificationStatus) {
     void sendPaymentMethodReviewEmail(updated.userId, updated.displayName, verificationStatus);
-    void notifyPaymentMethod(updated.userId, verificationStatus === "verified" ? "verified" : "failed");
+    void notifyPaymentMethod(
+      updated.userId,
+      verificationStatus === "verified" ? "verified" : "failed",
+    );
   }
 
   logActivity(req, {

@@ -34,7 +34,8 @@ function connect(who: Session, userType: "user" | "admin") {
   registerSupportSocket({
     id: randomUUID(),
     data: { userId: who.userId, userType, role: userType === "admin" ? "admin" : "rider" },
-    on: (event: string, handler: (payload: unknown, ack?: Ack) => void) => (handlers[event] = handler),
+    on: (event: string, handler: (payload: unknown, ack?: Ack) => void) =>
+      (handlers[event] = handler),
   } as never);
   const call = (event: string, payload: unknown) =>
     new Promise<Reply>((resolve) => handlers[event](payload, resolve));
@@ -47,8 +48,16 @@ function connect(who: Session, userType: "user" | "admin") {
 }
 
 const typingCalls = (ticketId: string) => [
-  ...vi.mocked(emitToSupportDesk).mock.calls.filter(([e, p]) => e === "support:typing" && (p as { ticketId: string }).ticketId === ticketId),
-  ...vi.mocked(emitToUser).mock.calls.filter(([, e, p]) => e === "support:typing" && (p as { ticketId: string }).ticketId === ticketId),
+  ...vi
+    .mocked(emitToSupportDesk)
+    .mock.calls.filter(
+      ([e, p]) => e === "support:typing" && (p as { ticketId: string }).ticketId === ticketId,
+    ),
+  ...vi
+    .mocked(emitToUser)
+    .mock.calls.filter(
+      ([, e, p]) => e === "support:typing" && (p as { ticketId: string }).ticketId === ticketId,
+    ),
 ];
 
 describe("support:send", () => {
@@ -57,8 +66,13 @@ describe("support:send", () => {
     const body = `Socket ${uniqueWord()}`;
 
     const reply = await connect(rider, "user").call("support:send", { ticketId: ticket.id, body });
-    expect(reply).toMatchObject({ ok: true, data: { message: { body, from: "user" }, ticket: { id: ticket.id } } });
-    expect(await db("supportTicketMessages").where({ ticketId: ticket.id, body }).first()).toBeDefined();
+    expect(reply).toMatchObject({
+      ok: true,
+      data: { message: { body, from: "user" }, ticket: { id: ticket.id } },
+    });
+    expect(
+      await db("supportTicketMessages").where({ ticketId: ticket.id, body }).first(),
+    ).toBeDefined();
     expect(vi.mocked(emitToSupportDesk)).toHaveBeenCalledWith(
       "support:message",
       expect.objectContaining({ ticketId: ticket.id }),
@@ -69,27 +83,42 @@ describe("support:send", () => {
     const ticket = await seedTicket(rider.userId, categoryId);
     const body = `Note ${uniqueWord()}`;
 
-    const reply = await connect(agent, "admin").call("support:send", { ticketId: ticket.id, body, internal: true });
+    const reply = await connect(agent, "admin").call("support:send", {
+      ticketId: ticket.id,
+      body,
+      internal: true,
+    });
     expect(reply).toMatchObject({ ok: true, data: { message: { kind: "note", internal: true } } });
     expect(JSON.stringify(vi.mocked(emitToUser).mock.calls)).not.toContain(body);
   });
 
   it("acks errors instead of throwing: bad payload, not theirs, no permission, closed", async () => {
     const ticket = await seedTicket(rider.userId, categoryId);
-    const closed = await seedTicket(rider.userId, categoryId, { status: "closed", closedAt: new Date() });
+    const closed = await seedTicket(rider.userId, categoryId, {
+      status: "closed",
+      closedAt: new Date(),
+    });
 
-    expect(await connect(rider, "user").call("support:send", { ticketId: ticket.id })).toMatchObject({ ok: false, status: 400 });
-    expect(await connect(stranger, "user").call("support:send", { ticketId: ticket.id, body: "x" })).toEqual({
+    expect(
+      await connect(rider, "user").call("support:send", { ticketId: ticket.id }),
+    ).toMatchObject({ ok: false, status: 400 });
+    expect(
+      await connect(stranger, "user").call("support:send", { ticketId: ticket.id, body: "x" }),
+    ).toEqual({
       ok: false,
       status: 404,
       error: `Support ticket not found: ${ticket.id}`,
     });
-    expect(await connect(reader, "admin").call("support:send", { ticketId: ticket.id, body: "x" })).toEqual({
+    expect(
+      await connect(reader, "admin").call("support:send", { ticketId: ticket.id, body: "x" }),
+    ).toEqual({
       ok: false,
       status: 403,
       error: "Missing permission: update on support",
     });
-    expect(await connect(rider, "user").call("support:send", { ticketId: closed.id, body: "x" })).toMatchObject({
+    expect(
+      await connect(rider, "user").call("support:send", { ticketId: closed.id, body: "x" }),
+    ).toMatchObject({
       ok: false,
       status: 409,
     });
@@ -141,7 +170,10 @@ describe("support:typing", () => {
 
   it("drops typing on someone else's or a closed ticket", async () => {
     const ticket = await seedTicket(rider.userId, categoryId);
-    const closed = await seedTicket(rider.userId, categoryId, { status: "closed", closedAt: new Date() });
+    const closed = await seedTicket(rider.userId, categoryId, {
+      status: "closed",
+      closedAt: new Date(),
+    });
     await connect(stranger, "user").typing({ ticketId: ticket.id, isTyping: true });
     await connect(rider, "user").typing({ ticketId: closed.id, isTyping: true });
     expect([...typingCalls(ticket.id), ...typingCalls(closed.id)]).toEqual([]);
@@ -161,7 +193,10 @@ describe("support:typing", () => {
       isTyping: true,
     });
     expect(typingCalls(internal.id)).toEqual([
-      ["support:typing", expect.objectContaining({ side: "staff", userId: agent.userId, internal: true })],
+      [
+        "support:typing",
+        expect.objectContaining({ side: "staff", userId: agent.userId, internal: true }),
+      ],
     ]);
   });
 });

@@ -208,7 +208,10 @@ describe("PATCH /emergency-contacts/:id", () => {
   it("rejects an empty body", async () => {
     const created = await addContact(rider);
 
-    const res = await api.patch(`/emergency-contacts/${created.id}`).set(auth(rider.token)).send({});
+    const res = await api
+      .patch(`/emergency-contacts/${created.id}`)
+      .set(auth(rider.token))
+      .send({});
 
     expectStatus(res, 400);
   });
@@ -227,7 +230,10 @@ describe("DELETE /emergency-contacts/:id", () => {
   it("lets an admin with users: delete remove it", async () => {
     const created = await addContact(rider);
 
-    expectStatus(await api.delete(`/emergency-contacts/${created.id}`).set(auth(manager.token)), 200);
+    expectStatus(
+      await api.delete(`/emergency-contacts/${created.id}`).set(auth(manager.token)),
+      200,
+    );
   });
 
   it("doesn't let another user delete it", async () => {

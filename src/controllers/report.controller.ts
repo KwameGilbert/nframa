@@ -11,7 +11,11 @@ import { tripModel, type Trip } from "../models/trip.model.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { sendReportEmail } from "../services/email.service.js";
 import { emitToReportsDesk, emitToUser } from "../services/socket.service.js";
-import { notifyReportCreated, notifyReport, notifyReportsDesk } from "../services/notificationEvents.service.js";
+import {
+  notifyReportCreated,
+  notifyReport,
+  notifyReportsDesk,
+} from "../services/notificationEvents.service.js";
 import { deleteFile, uploadFile } from "../services/storage.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
@@ -95,7 +99,8 @@ const statusChange = (report: TripReport) => ({
 async function assertReportable(trip: Trip) {
   if (trip.status === "accepted" || trip.status === "boarded") return;
 
-  const ended = trip.status === "completed" || trip.status === "no_show" || trip.status === "cancelled";
+  const ended =
+    trip.status === "completed" || trip.status === "no_show" || trip.status === "cancelled";
   if (!ended || !trip.acceptedAt) {
     throw AppError.conflict(
       ended

@@ -48,7 +48,11 @@ function tripWith(status: string, overrides: Record<string, unknown> = {}) {
   });
 }
 
-function file(caller: { token: string }, tripId: string, body: object = { category: "harassment", description: text }) {
+function file(
+  caller: { token: string },
+  tripId: string,
+  body: object = { category: "harassment", description: text },
+) {
   return api.post(`/trips/${tripId}/reports`).set(auth(caller.token)).send(body);
 }
 
@@ -56,7 +60,12 @@ async function report(caller: Person, tripId: string, body?: object) {
   const res = await file(caller, tripId, body);
   expectStatus(res, 201);
   trackForCleanup("tripReports", { id: res.body.data.id });
-  return res.body.data as { id: string; status: string; severity: string; evidence: { fileUrl: string }[] };
+  return res.body.data as {
+    id: string;
+    status: string;
+    severity: string;
+    evidence: { fileUrl: string }[];
+  };
 }
 
 // Reports staff act on don't need anyone to file them through the API (which is rate limited per account).
@@ -117,7 +126,8 @@ const deskEvents = (event: string, reportId: string) =>
   vi
     .mocked(emitToReportsDesk)
     .mock.calls.filter(
-      ([name, payload]) => name === event && (payload as { reportId: string }).reportId === reportId,
+      ([name, payload]) =>
+        name === event && (payload as { reportId: string }).reportId === reportId,
     );
 
 const userEvents = (userId: string, event: string, reportId: string) =>
@@ -193,7 +203,12 @@ describe("POST /trips/:tripId/reports", () => {
       outcomeMessage: null,
       resolvedAt: null,
     });
-    for (const staffOnly of ["internalNotes", "handledByAdminId", "reportedUserId", "reporterUserId"]) {
+    for (const staffOnly of [
+      "internalNotes",
+      "handledByAdminId",
+      "reportedUserId",
+      "reporterUserId",
+    ]) {
       expect(res.body.data).not.toHaveProperty(staffOnly);
     }
     const row = await db("tripReports").where({ id: res.body.data.id }).first();
@@ -205,7 +220,10 @@ describe("POST /trips/:tripId/reports", () => {
   it("lets a driver report their rider", async () => {
     const trip = await tripWith("completed", { completedAt: hoursAgo(1) });
 
-    const created = await report(driver, trip.id, { category: "propertyDamage", description: text });
+    const created = await report(driver, trip.id, {
+      category: "propertyDamage",
+      description: text,
+    });
 
     const row = await db("tripReports").where({ id: created.id }).first();
     expect(row).toMatchObject({
@@ -228,8 +246,14 @@ describe("POST /trips/:tripId/reports", () => {
   it("derives the severity from the category: safety ones are urgent", async () => {
     const [urgentTrip, normalTrip] = [await tripWith("accepted"), await tripWith("accepted")];
 
-    const urgent = await report(rider, urgentTrip.id, { category: "physicalAssault", description: text });
-    const normal = await report(rider, normalTrip.id, { category: "lateOrNoShow", description: text });
+    const urgent = await report(rider, urgentTrip.id, {
+      category: "physicalAssault",
+      description: text,
+    });
+    const normal = await report(rider, normalTrip.id, {
+      category: "lateOrNoShow",
+      description: text,
+    });
 
     expect(urgent.severity).toBe("urgent");
     expect(normal.severity).toBe("normal");
@@ -277,14 +301,17 @@ describe("POST /trips/:tripId/reports", () => {
     expect(res.body.error).toBe("Reports can be filed up to 72 hours after a trip ends");
   });
 
-  it.each(["pending", "declined", "expired"])("refuses a trip that is %s: nobody accepted it", async (status) => {
-    const trip = await tripWith(status);
+  it.each(["pending", "declined", "expired"])(
+    "refuses a trip that is %s: nobody accepted it",
+    async (status) => {
+      const trip = await tripWith(status);
 
-    const res = await file(driver, trip.id);
+      const res = await file(driver, trip.id);
 
-    expectStatus(res, 409);
-    expect(res.body.error).toBe(`Can't report a trip that is ${status}`);
-  });
+      expectStatus(res, 409);
+      expect(res.body.error).toBe(`Can't report a trip that is ${status}`);
+    },
+  );
 
   it("refuses a trip that was cancelled before it was accepted", async () => {
     const trip = await tripWith("cancelled", { acceptedAt: null, cancelledAt: hoursAgo(1) });
@@ -312,7 +339,9 @@ describe("POST /trips/:tripId/reports", () => {
 
     const missing = await file(rider, id);
     const badId = await file(rider, "not-a-uuid");
-    const anonymous = await api.post(`/trips/${id}/reports`).send({ category: "other", description: text });
+    const anonymous = await api
+      .post(`/trips/${id}/reports`)
+      .send({ category: "other", description: text });
 
     expectStatus(missing, 404);
     expect(missing.body.error).toBe(`Trip not found: ${id}`);
@@ -340,7 +369,9 @@ describe("POST /trips/:tripId/reports", () => {
     const other = await report(rider, trip.id, { category: "discrimination", description: text });
 
     expectStatus(again, 409);
-    expect(again.body.error).toBe("You already have an open report about this trip in that category");
+    expect(again.body.error).toBe(
+      "You already have an open report about this trip in that category",
+    );
     expect(other.status).toBe("open");
   });
 
@@ -409,7 +440,9 @@ describe("report evidence", () => {
     expectStatus(res, 201);
     trackForCleanup("tripReports", { id: res.body.data.id });
     expect(res.body.data.evidence).toHaveLength(2);
-    expect(res.body.data.evidence[0].fileUrl).toMatch(/^https:\/\/mock-storage\.test\/reports\/.+first\.png$/);
+    expect(res.body.data.evidence[0].fileUrl).toMatch(
+      /^https:\/\/mock-storage\.test\/reports\/.+first\.png$/,
+    );
     expect(JSON.stringify(res.body)).not.toContain("storageKey");
     const row = await db("tripReports").where({ id: res.body.data.id }).first();
     expect(row.evidence).toHaveLength(2);
@@ -442,18 +475,24 @@ describe("report evidence", () => {
   it("refuses anything that isn't a JPEG, PNG or WEBP image", async () => {
     const trip = await tripWith("accepted");
 
-    const pdf = await multipart(trip.id, stranger)
-      .attach("evidence", Buffer.from("%PDF-1.4"), { filename: "scan.pdf", contentType: "application/pdf" });
+    const pdf = await multipart(trip.id, stranger).attach("evidence", Buffer.from("%PDF-1.4"), {
+      filename: "scan.pdf",
+      contentType: "application/pdf",
+    });
 
     expectStatus(pdf, 400);
     expect(pdf.body.error).toBe("Unsupported file type: application/pdf. Allowed: JPEG, PNG, WEBP");
   });
 
   it("refuses an image over 5MB", async () => {
-    const res = await multipart(randomUUID(), stranger).attach("evidence", Buffer.alloc(5 * 1024 * 1024 + 1), {
-      filename: "huge.png",
-      contentType: "image/png",
-    });
+    const res = await multipart(randomUUID(), stranger).attach(
+      "evidence",
+      Buffer.alloc(5 * 1024 * 1024 + 1),
+      {
+        filename: "huge.png",
+        contentType: "image/png",
+      },
+    );
 
     expectStatus(res, 400);
     expect(res.body.error).toBe("Image too large. Maximum size is 5MB each");
@@ -479,7 +518,9 @@ describe("report evidence", () => {
     expect(res.status).toBe(500);
     expect(await db("tripReports").where({ tripId: trip.id })).toHaveLength(0);
     expect(
-      vi.mocked(deleteFile).mock.calls.some(([storageKey]) => storageKey.endsWith("-keep-cleanup.png")),
+      vi
+        .mocked(deleteFile)
+        .mock.calls.some(([storageKey]) => storageKey.endsWith("-keep-cleanup.png")),
     ).toBe(true);
   });
 });
@@ -495,7 +536,9 @@ describe("GET /reports and GET /reports/:id", () => {
     const ids = res.body.data.items.map((item: { id: string }) => item.id);
     expect(ids).toContain(mine.id);
     expect(ids).not.toContain(aboutMe.id);
-    const times = res.body.data.items.map((item: { createdAt: string }) => Date.parse(item.createdAt));
+    const times = res.body.data.items.map((item: { createdAt: string }) =>
+      Date.parse(item.createdAt),
+    );
     expect([...times].sort((a, b) => b - a)).toEqual(times);
     expect(res.body.data.pagination).toMatchObject({ page: 1, limit: 100 });
   });
@@ -506,10 +549,14 @@ describe("GET /reports and GET /reports/:id", () => {
     const closed = await seedReport({ tripId: trip.id, category: "other", status: "dismissed" });
 
     const byTrip = await api.get(`/reports?tripId=${trip.id}`).set(auth(rider.token));
-    const byStatus = await api.get(`/reports?tripId=${trip.id}&status=dismissed`).set(auth(rider.token));
+    const byStatus = await api
+      .get(`/reports?tripId=${trip.id}&status=dismissed`)
+      .set(auth(rider.token));
     const paged = await api.get(`/reports?tripId=${trip.id}&limit=1&page=2`).set(auth(rider.token));
 
-    expect(byTrip.body.data.items.map((item: { id: string }) => item.id).sort()).toEqual([open.id, closed.id].sort());
+    expect(byTrip.body.data.items.map((item: { id: string }) => item.id).sort()).toEqual(
+      [open.id, closed.id].sort(),
+    );
     expect(byStatus.body.data.items.map((item: { id: string }) => item.id)).toEqual([closed.id]);
     expect(paged.body.data.items).toHaveLength(1);
     expect(paged.body.data.pagination).toMatchObject({ totalItems: 2, totalPages: 2 });
@@ -525,7 +572,11 @@ describe("GET /reports and GET /reports/:id", () => {
     const res = await api.get(`/reports/${seeded.id}`).set(auth(rider.token));
 
     expectStatus(res, 200);
-    expect(res.body.data).toMatchObject({ id: seeded.id, status: "resolved", outcomeMessage: "We spoke to the driver." });
+    expect(res.body.data).toMatchObject({
+      id: seeded.id,
+      status: "resolved",
+      outcomeMessage: "We spoke to the driver.",
+    });
     expect(JSON.stringify(res.body)).not.toContain("Prior complaint");
     for (const staffOnly of ["internalNotes", "handledByAdminId", "reportedUserId"]) {
       expect(res.body.data).not.toHaveProperty(staffOnly);
@@ -552,26 +603,32 @@ describe("GET /reports and GET /reports/:id", () => {
 });
 
 describe("POST /reports/:id/withdraw", () => {
-  it.each(["open", "underReview"])("takes back a report that is %s, and tells the desk", async (from) => {
-    const seeded = await seedReport({ status: from });
+  it.each(["open", "underReview"])(
+    "takes back a report that is %s, and tells the desk",
+    async (from) => {
+      const seeded = await seedReport({ status: from });
 
-    const res = await api.post(`/reports/${seeded.id}/withdraw`).set(auth(rider.token));
+      const res = await api.post(`/reports/${seeded.id}/withdraw`).set(auth(rider.token));
 
-    expectStatus(res, 200);
-    expect(res.body.data.status).toBe("withdrawn");
-    expect(deskEvents("report:statusChanged", seeded.id)).toMatchObject([
-      ["report:statusChanged", { reportId: seeded.id, status: "withdrawn" }],
-    ]);
-  });
+      expectStatus(res, 200);
+      expect(res.body.data.status).toBe("withdrawn");
+      expect(deskEvents("report:statusChanged", seeded.id)).toMatchObject([
+        ["report:statusChanged", { reportId: seeded.id, status: "withdrawn" }],
+      ]);
+    },
+  );
 
-  it.each(["resolved", "dismissed", "withdrawn"])("is refused for a report that is already %s", async (status) => {
-    const seeded = await seedReport({ status });
+  it.each(["resolved", "dismissed", "withdrawn"])(
+    "is refused for a report that is already %s",
+    async (status) => {
+      const seeded = await seedReport({ status });
 
-    const res = await api.post(`/reports/${seeded.id}/withdraw`).set(auth(rider.token));
+      const res = await api.post(`/reports/${seeded.id}/withdraw`).set(auth(rider.token));
 
-    expectStatus(res, 409);
-    expect(res.body.error).toBe(`Can't withdraw a report that is ${status}`);
-  });
+      expectStatus(res, 409);
+      expect(res.body.error).toBe(`Can't withdraw a report that is ${status}`);
+    },
+  );
 
   it("is only for the person who filed it", async () => {
     const seeded = await seedReport();
@@ -621,15 +678,22 @@ describe("GET /admin/reports", () => {
   });
 
   it("filters by status, severity, category, trip, people and filing date", async () => {
-    const urgent = await seedReport({ category: "sexualMisconduct", severity: "urgent", reporter: driver, reported: rider });
+    const urgent = await seedReport({
+      category: "sexualMisconduct",
+      severity: "urgent",
+      reporter: driver,
+      reported: rider,
+    });
     await seedReport({ category: "other" });
     const ids = async (query: string) =>
-      (await api.get(`/admin/reports?${query}&limit=100`).set(auth(reader.token))).body.data.items.map(
-        (item: { id: string }) => item.id,
-      );
+      (
+        await api.get(`/admin/reports?${query}&limit=100`).set(auth(reader.token))
+      ).body.data.items.map((item: { id: string }) => item.id);
 
     expect(await ids(`severity=urgent&reporterUserId=${driver.userId}`)).toContain(urgent.id);
-    expect(await ids(`category=sexualMisconduct&reportedUserId=${rider.userId}`)).toContain(urgent.id);
+    expect(await ids(`category=sexualMisconduct&reportedUserId=${rider.userId}`)).toContain(
+      urgent.id,
+    );
     expect(await ids(`tripId=${urgent.tripId}`)).toEqual([urgent.id]);
     expect(await ids(`tripId=${urgent.tripId}&status=dismissed`)).toEqual([]);
     expect(await ids(`tripId=${urgent.tripId}&from=${today()}&to=${today()}`)).toEqual([urgent.id]);
@@ -644,7 +708,12 @@ describe("GET /admin/reports", () => {
     const res = await api.get(`/admin/reports?tripId=${trip.id}&limit=1`).set(auth(reader.token));
 
     expect(res.body.data.items).toHaveLength(1);
-    expect(res.body.data.pagination).toMatchObject({ page: 1, limit: 1, totalItems: 2, totalPages: 2 });
+    expect(res.body.data.pagination).toMatchObject({
+      page: 1,
+      limit: 1,
+      totalItems: 2,
+      totalPages: 2,
+    });
   });
 
   it("needs reports: read: not users, not sos, not a rider", async () => {
@@ -733,7 +802,10 @@ describe("PATCH /admin/reports/:id", () => {
     const { trip, reported, reportedEmail } = await reportAboutOwnRider();
     const created = await report(driver, trip.id, { category: "harassment", description: text });
 
-    const review = await staffMove(staff, created.id, { status: "underReview", internalNotes: "Calling the driver" });
+    const review = await staffMove(staff, created.id, {
+      status: "underReview",
+      internalNotes: "Calling the driver",
+    });
     expectStatus(review, 200);
     expect(review.body.data).toMatchObject({
       status: "underReview",
@@ -749,12 +821,19 @@ describe("PATCH /admin/reports/:id", () => {
     expectStatus(resolved, 200);
     expect(resolved.body.data.resolvedAt).not.toBeNull();
     expect(resolved.body.data.internalNotes).toBe("Calling the driver");
-    expect(userEvents(driver.userId, "report:statusChanged", created.id).map(([, , p]) => (p as { status: string }).status))
-      .toEqual(["underReview", "resolved"]);
+    expect(
+      userEvents(driver.userId, "report:statusChanged", created.id).map(
+        ([, , p]) => (p as { status: string }).status,
+      ),
+    ).toEqual(["underReview", "resolved"]);
     expect(deskEvents("report:statusChanged", created.id)).toHaveLength(2);
     expect(userEvents(reported.userId, "report:statusChanged", created.id)).toHaveLength(0);
     await waitForMail(driverEmail, "Your report is being reviewed");
-    const mail = await waitForMail(driverEmail, "Your report was resolved", "&lt;b&gt;acted&lt;/b&gt; on this &amp; will follow up.");
+    const mail = await waitForMail(
+      driverEmail,
+      "Your report was resolved",
+      "&lt;b&gt;acted&lt;/b&gt; on this &amp; will follow up.",
+    );
     expect(mail.html).not.toContain("Calling the driver");
     await settle();
     expect(sentTo(reportedEmail)).toHaveLength(0);
@@ -764,7 +843,10 @@ describe("PATCH /admin/reports/:id", () => {
     const { trip } = await reportAboutOwnRider();
     const created = await report(driver, trip.id, { category: "other", description: text });
 
-    const res = await staffMove(staff, created.id, { status: "dismissed", outcomeMessage: "Not enough to act on." });
+    const res = await staffMove(staff, created.id, {
+      status: "dismissed",
+      outcomeMessage: "Not enough to act on.",
+    });
 
     expectStatus(res, 200);
     expect(res.body.data.status).toBe("dismissed");
@@ -783,21 +865,28 @@ describe("PATCH /admin/reports/:id", () => {
 
   it("keeps notes and the message unless new ones are given", async () => {
     const seeded = await seedReport();
-    await staffMove(staff, seeded.id, { status: "underReview", internalNotes: "First note", outcomeMessage: "Hello" });
+    await staffMove(staff, seeded.id, {
+      status: "underReview",
+      internalNotes: "First note",
+      outcomeMessage: "Hello",
+    });
 
     const res = await staffMove(staff, seeded.id, { status: "dismissed" });
 
     expect(res.body.data).toMatchObject({ internalNotes: "First note", outcomeMessage: "Hello" });
   });
 
-  it.each(["resolved", "dismissed", "withdrawn"])("can't change a report that is already %s", async (status) => {
-    const seeded = await seedReport({ status });
+  it.each(["resolved", "dismissed", "withdrawn"])(
+    "can't change a report that is already %s",
+    async (status) => {
+      const seeded = await seedReport({ status });
 
-    const res = await staffMove(staff, seeded.id, { status: "underReview" });
+      const res = await staffMove(staff, seeded.id, { status: "underReview" });
 
-    expectStatus(res, 409);
-    expect(res.body.error).toBe(`Can't move a report from ${status} to underReview`);
-  });
+      expectStatus(res, 409);
+      expect(res.body.error).toBe(`Can't move a report from ${status} to underReview`);
+    },
+  );
 
   it("lets exactly one win when two staff act together", async () => {
     const seeded = await seedReport();
@@ -850,7 +939,10 @@ describe("PATCH /admin/reports/:id", () => {
     });
 
     await flushActivityLogs();
-    const [entry] = await db("activityLogs").where({ action: "report.updateStatus", targetId: seeded.id });
+    const [entry] = await db("activityLogs").where({
+      action: "report.updateStatus",
+      targetId: seeded.id,
+    });
 
     expect(entry).toMatchObject({ module: "reports", actorId: staff.userId });
     expect(entry.before.status).toBe("open");
@@ -874,9 +966,15 @@ describe("the reports desk room", () => {
   };
 
   it("admits admins who can read reports, and only them", async () => {
-    expect(await joined(reader.userId, "admin")).toEqual([`user:${reader.userId}`, "admin:reports"]);
+    expect(await joined(reader.userId, "admin")).toEqual([
+      `user:${reader.userId}`,
+      "admin:reports",
+    ]);
     expect(await joined(staff.userId, "admin")).toContain("admin:reports");
-    expect(await joined(usersAdmin.userId, "admin")).toEqual([`user:${usersAdmin.userId}`, "admin:safety"]);
+    expect(await joined(usersAdmin.userId, "admin")).toEqual([
+      `user:${usersAdmin.userId}`,
+      "admin:safety",
+    ]);
     expect(await joined(outsider.userId, "admin")).toEqual([`user:${outsider.userId}`]);
     expect(await joined(rider.userId, "user")).toEqual([`user:${rider.userId}`]);
   });

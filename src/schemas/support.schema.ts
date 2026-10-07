@@ -2,13 +2,21 @@ import { z } from "zod";
 import { MAX_ATTACHMENTS } from "../config/supportAttachments.js";
 import { SUPPORT_PRIORITIES } from "./supportCategory.schema.js";
 
-export const SUPPORT_STATUSES = ["open", "inProgress", "awaitingUser", "resolved", "closed"] as const;
+export const SUPPORT_STATUSES = [
+  "open",
+  "inProgress",
+  "awaitingUser",
+  "resolved",
+  "closed",
+] as const;
 export type SupportStatus = (typeof SUPPORT_STATUSES)[number];
 export const ACTIVE_SUPPORT_STATUSES: SupportStatus[] = ["open", "inProgress", "awaitingUser"];
 
 // A query param that may be sent once or repeated (?status=open&status=resolved), always read as a list.
 export function oneOrMany<T extends z.ZodType>(item: T) {
-  return z.union([item, z.array(item).min(1).max(10)]).transform((value) => [value].flat() as z.output<T>[]);
+  return z
+    .union([item, z.array(item).min(1).max(10)])
+    .transform((value) => [value].flat() as z.output<T>[]);
 }
 
 export const supportStatusSchema = z.enum(SUPPORT_STATUSES).meta({
@@ -39,7 +47,10 @@ export const createTicketSchema = z.object({
     .optional()
     .meta({ description: "The first message. Required unless at least one file is attached" }),
   tripId: z.uuid().optional().meta({ description: "A trip of yours this is about" }),
-  transactionId: z.uuid().optional().meta({ description: "A wallet transaction of yours this is about" }),
+  transactionId: z
+    .uuid()
+    .optional()
+    .meta({ description: "A wallet transaction of yours this is about" }),
   payoutId: z.uuid().optional().meta({ description: "A payout of yours (drivers) this is about" }),
   relatedTicketId: z
     .uuid()
@@ -77,7 +88,13 @@ export type ListMyTicketsQuery = z.infer<typeof listMyTicketsQuerySchema>;
 
 export const rateTicketSchema = z.object({
   rating: z.number().int().min(1).max(5).meta({ description: "1 (poor) to 5 (great)", example: 5 }),
-  comment: z.string().trim().min(1).max(1000).optional().meta({ example: "Sorted out quickly, thanks." }),
+  comment: z
+    .string()
+    .trim()
+    .min(1)
+    .max(1000)
+    .optional()
+    .meta({ example: "Sorted out quickly, thanks." }),
 });
 
 export type RateTicketInput = z.infer<typeof rateTicketSchema>;
@@ -100,7 +117,9 @@ export const attachmentSchema = z.object({
 export const messageParamsSchema = z.object({ id: z.uuid(), messageId: z.uuid() });
 
 export const postMessageSchema = z.object({
-  body: messageSchema.optional().meta({ description: "The text. Required unless at least one file is attached" }),
+  body: messageSchema
+    .optional()
+    .meta({ description: "The text. Required unless at least one file is attached" }),
   replyToMessageId: z.uuid().optional().meta({ description: "The message this one quotes" }),
 });
 
@@ -120,7 +139,9 @@ export const listMessagesQuerySchema = z
   .object({
     before: seqSchema.optional().meta({ description: "Older than this seq (scrolling up)" }),
     after: seqSchema.optional().meta({ description: "Newer than this seq (catching up)" }),
-    around: seqSchema.optional().meta({ description: "Centred on this seq (jumping to a search hit)" }),
+    around: seqSchema
+      .optional()
+      .meta({ description: "Centred on this seq (jumping to a search hit)" }),
     limit: z.coerce.number().int().min(1).max(100).default(30),
     attachmentKind: z
       .enum(["image", "video", "audio", "document"])
@@ -135,10 +156,16 @@ export type ListMessagesQuery = z.infer<typeof listMessagesQuerySchema>;
 
 const messageViewSchema = z.object({
   id: z.uuid(),
-  seq: z.number().int().meta({ description: "Orders the timeline; use it for cursors and read markers" }),
+  seq: z
+    .number()
+    .int()
+    .meta({ description: "Orders the timeline; use it for cursors and read markers" }),
   kind: z.enum(["message", "note", "event"]),
   from: z.enum(["user", "support", "system"]),
-  senderName: z.string().nullable().meta({ description: "An agent's first name (users) or full name (staff)" }),
+  senderName: z
+    .string()
+    .nullable()
+    .meta({ description: "An agent's first name (users) or full name (staff)" }),
   body: z.string().nullable(),
   attachments: z.array(attachmentSchema),
   replyToMessageId: z.uuid().nullable(),
@@ -148,7 +175,10 @@ const messageViewSchema = z.object({
     .meta({ description: "For kind event: what changed (from, to, reason, rating)" }),
   deleted: z.boolean(),
   removedBy: z.enum(["user", "support"]).nullable().meta({ description: "Who deleted it" }),
-  internal: z.boolean().optional().meta({ description: "Staff only: true for notes and events the user never sees" }),
+  internal: z
+    .boolean()
+    .optional()
+    .meta({ description: "Staff only: true for notes and events the user never sees" }),
   createdAt: z.iso.datetime(),
 });
 
@@ -189,9 +219,17 @@ export const adminListTicketsQuerySchema = z.object({
     .enum(["true", "false"])
     .transform((value) => value === "true")
     .optional()
-    .meta({ description: "true: the last message came from the user (they are waiting on support)" }),
-  from: z.iso.date().optional().meta({ description: "Opened on or after this day (YYYY-MM-DD, UTC)" }),
-  to: z.iso.date().optional().meta({ description: "Opened on or before this day (YYYY-MM-DD, UTC)" }),
+    .meta({
+      description: "true: the last message came from the user (they are waiting on support)",
+    }),
+  from: z.iso
+    .date()
+    .optional()
+    .meta({ description: "Opened on or after this day (YYYY-MM-DD, UTC)" }),
+  to: z.iso
+    .date()
+    .optional()
+    .meta({ description: "Opened on or before this day (YYYY-MM-DD, UTC)" }),
   q: searchSchema,
   sort: z.enum(SUPPORT_SORTS).optional().meta({
     description:
@@ -211,16 +249,17 @@ export const updateTicketSchema = z
     subject: subjectSchema,
   })
   .partial()
-  .refine((data) => Object.keys(data).length > 0, { message: "At least one field must be provided" });
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "At least one field must be provided",
+  });
 
 export type UpdateTicketInput = z.infer<typeof updateTicketSchema>;
 
 export const assignTicketSchema = z
   .object({
-    adminId: z
-      .uuid()
-      .optional()
-      .meta({ description: "The admin to give it to (their user id); leave out to take it yourself" }),
+    adminId: z.uuid().optional().meta({
+      description: "The admin to give it to (their user id); leave out to take it yourself",
+    }),
   })
   .optional()
   .default({});
@@ -229,9 +268,9 @@ export type AssignTicketInput = z.infer<typeof assignTicketSchema>;
 
 export const adminCreateTicketSchema = createTicketSchema.extend({
   userId: z.uuid().meta({ description: "The rider or driver the ticket is for" }),
-  message: messageSchema
-    .optional()
-    .meta({ description: "Your first message to them. Required unless at least one file is attached" }),
+  message: messageSchema.optional().meta({
+    description: "Your first message to them. Required unless at least one file is attached",
+  }),
   priority: z
     .enum(SUPPORT_PRIORITIES)
     .optional()
@@ -248,7 +287,10 @@ const lastMessageSchema = z
   .object({
     id: z.uuid(),
     from: z.enum(["user", "support"]),
-    preview: z.string().nullable().meta({ description: "The first 120 characters; null for files only" }),
+    preview: z
+      .string()
+      .nullable()
+      .meta({ description: "The first 120 characters; null for files only" }),
     attachmentKind: z.enum(["image", "video", "audio", "document"]).nullable(),
     deleted: z.boolean(),
     createdAt: z.iso.datetime(),
@@ -279,16 +321,18 @@ export const userTicketResponseSchema = z.object({
 
 export const userTicketDetailResponseSchema = userTicketResponseSchema.extend({
   canReply: z.boolean().meta({ description: "False once the ticket is closed" }),
-  reopenUntil: z.iso
-    .datetime()
-    .nullable()
-    .meta({ description: "For a resolved ticket: replying before this reopens it; after it, it closes" }),
+  reopenUntil: z.iso.datetime().nullable().meta({
+    description: "For a resolved ticket: replying before this reopens it; after it, it closes",
+  }),
 });
 
 const matchedMessageSchema = z
   .object({
     id: z.uuid(),
-    seq: z.number().int().meta({ description: "Open the conversation with around=<seq> to jump to it" }),
+    seq: z
+      .number()
+      .int()
+      .meta({ description: "Open the conversation with around=<seq> to jump to it" }),
     snippet: z.string().meta({ description: "Plain text around the match" }),
     internal: z.boolean(),
     createdAt: z.iso.datetime(),
@@ -315,10 +359,16 @@ export const staffTicketResponseSchema = z.object({
   status: supportStatusSchema,
   priority: z.enum(SUPPORT_PRIORITIES),
   category: z.object({ id: z.uuid(), name: z.string() }),
-  raiser: z.object({ id: z.uuid(), fullName: z.string().nullable(), role: z.enum(["rider", "driver"]) }),
+  raiser: z.object({
+    id: z.uuid(),
+    fullName: z.string().nullable(),
+    role: z.enum(["rider", "driver"]),
+  }),
   assignee: personSchema.meta({ description: "The agent on it; null while unassigned" }),
   assignedAt: z.iso.datetime().nullable(),
-  createdBy: personSchema.meta({ description: "The agent who opened it on the user's behalf, if any" }),
+  createdBy: personSchema.meta({
+    description: "The agent who opened it on the user's behalf, if any",
+  }),
   tripId: z.uuid().nullable(),
   transactionId: z.uuid().nullable(),
   payoutId: z.uuid().nullable(),
@@ -336,7 +386,8 @@ export const staffTicketResponseSchema = z.object({
   resolvedAt: z.iso.datetime().nullable(),
   closedAt: z.iso.datetime().nullable(),
   detachedAt: z.iso.datetime().nullable().meta({
-    description: "Set when the raiser's phone number went to a new person: they no longer see this ticket",
+    description:
+      "Set when the raiser's phone number went to a new person: they no longer see this ticket",
   }),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
@@ -350,12 +401,17 @@ const countsSchema = z.object({
   closed: z.number().int(),
   unassigned: z.number().int().meta({ description: "Active tickets nobody has" }),
   mine: z.number().int().meta({ description: "Active tickets assigned to the caller" }),
-  needsReply: z.number().int().meta({ description: "Active tickets whose last message is the user's" }),
+  needsReply: z
+    .number()
+    .int()
+    .meta({ description: "Active tickets whose last message is the user's" }),
 });
 
 export const staffTicketListResponseSchema = userTicketListResponseSchema.extend({
   items: z.array(staffTicketResponseSchema.extend({ matchedMessage: matchedMessageSchema })),
-  stats: countsSchema.meta({ description: "Counts over the whole queue (not the filters), for tabs" }),
+  stats: countsSchema.meta({
+    description: "Counts over the whole queue (not the filters), for tabs",
+  }),
 });
 
 export const staffTicketDetailResponseSchema = staffTicketResponseSchema.extend({
@@ -379,7 +435,14 @@ export const staffTicketDetailResponseSchema = staffTicketResponseSchema.extend(
     })
     .nullable(),
   transaction: z
-    .object({ id: z.uuid(), type: z.string(), direction: z.string(), amount: z.number(), status: z.string(), createdAt: z.iso.datetime() })
+    .object({
+      id: z.uuid(),
+      type: z.string(),
+      direction: z.string(),
+      amount: z.number(),
+      status: z.string(),
+      createdAt: z.iso.datetime(),
+    })
     .nullable(),
   payout: z
     .object({ id: z.uuid(), amount: z.number(), status: z.string(), createdAt: z.iso.datetime() })

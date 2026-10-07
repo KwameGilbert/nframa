@@ -61,7 +61,11 @@ export interface UploadedPath {
 // type claims. format converts on upload (HEIC photos are stored as JPEG).
 export async function uploadPath(
   path: string,
-  { publicId, resourceType, format }: { publicId: string; resourceType: ResourceType; format?: string },
+  {
+    publicId,
+    resourceType,
+    format,
+  }: { publicId: string; resourceType: ResourceType; format?: string },
 ): Promise<UploadedPath> {
   configure();
 
@@ -88,7 +92,10 @@ export async function uploadPath(
 
 // destroy() doesn't accept "auto": it needs the type the file was stored as. Uploads with "auto" store images
 // and PDFs as "image", hence the default.
-export async function remove(publicId: string, resourceType: ResourceType = "image"): Promise<void> {
+export async function remove(
+  publicId: string,
+  resourceType: ResourceType = "image",
+): Promise<void> {
   configure();
   await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
 }

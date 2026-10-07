@@ -24,7 +24,7 @@ registry.registerPath({
   responses: {
     201: successResponse("Vehicle created successfully", vehicleResponseSchema),
     400: errorResponse(
-      "Validation error, a missing or unsupported photo (\"Add a photo of each side of the vehicle; missing: left, right\"), or carOwnerUserId doesn't match an existing user",
+      'Validation error, a missing or unsupported photo ("Add a photo of each side of the vehicle; missing: left, right"), or carOwnerUserId doesn\'t match an existing user',
     ),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("carOwnerUserId isn't the caller and the caller lacks users: create"),
@@ -102,6 +102,9 @@ registry.registerPath({
     ),
     401: errorResponse("Missing or invalid access token"),
     403: errorResponse("Caller doesn't own this vehicle and lacks users: update"),
-    404: errorResponse("Vehicle not found", "Vehicle not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34"),
+    404: errorResponse(
+      "Vehicle not found",
+      "Vehicle not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+    ),
   },
 });

@@ -16,8 +16,7 @@ let driver: Awaited<ReturnType<typeof signUpByPhone>>;
 let otherDriver: Awaited<ReturnType<typeof signUpByPhone>>;
 let rider: Awaited<ReturnType<typeof signUpByPhone>>;
 
-const digits = (count: number) =>
-  Array.from({ length: count }, () => randomInt(10)).join("");
+const digits = (count: number) => Array.from({ length: count }, () => randomInt(10)).join("");
 
 const momoBody = () => ({
   type: "mobile_money",
@@ -57,7 +56,11 @@ async function paymentMethod(owner: { token: string }, body: object = momoBody()
   return id;
 }
 
-async function addPayoutMethod(owner: { token: string }, paymentMethodId: string, extra: object = {}) {
+async function addPayoutMethod(
+  owner: { token: string },
+  paymentMethodId: string,
+  extra: object = {},
+) {
   const res = await api
     .post("/payout-methods")
     .set(auth(owner.token))
@@ -74,17 +77,18 @@ async function freshDriver() {
 
 beforeAll(async () => {
   superAdmin = await loginAsSuperAdmin();
-  [verifier, payoutsAdmin, payoutsReader, usersOnly, driver, otherDriver, rider] = await Promise.all([
-    createSignedInAdmin(superAdmin.token, { users: { update: true } }),
-    createSignedInAdmin(superAdmin.token, { payouts: { read: true, update: true } }),
-    createSignedInAdmin(superAdmin.token, { payouts: { read: true } }),
-    createSignedInAdmin(superAdmin.token, {
-      users: { create: true, read: true, update: true, delete: true },
-    }),
-    signUpByPhone("driver"),
-    signUpByPhone("driver"),
-    signUpByPhone("rider"),
-  ]);
+  [verifier, payoutsAdmin, payoutsReader, usersOnly, driver, otherDriver, rider] =
+    await Promise.all([
+      createSignedInAdmin(superAdmin.token, { users: { update: true } }),
+      createSignedInAdmin(superAdmin.token, { payouts: { read: true, update: true } }),
+      createSignedInAdmin(superAdmin.token, { payouts: { read: true } }),
+      createSignedInAdmin(superAdmin.token, {
+        users: { create: true, read: true, update: true, delete: true },
+      }),
+      signUpByPhone("driver"),
+      signUpByPhone("driver"),
+      signUpByPhone("rider"),
+    ]);
 });
 
 describe("POST /payout-methods", () => {
@@ -92,7 +96,10 @@ describe("POST /payout-methods", () => {
     const owner = await freshDriver();
     const id = await paymentMethod(owner);
 
-    const res = await api.post("/payout-methods").set(auth(owner.token)).send({ paymentMethodId: id });
+    const res = await api
+      .post("/payout-methods")
+      .set(auth(owner.token))
+      .send({ paymentMethodId: id });
 
     expectStatus(res, 201);
     trackForCleanup("payoutMethods", { id: res.body.data.id });
@@ -111,10 +118,12 @@ describe("POST /payout-methods", () => {
   it("takes automatic payout settings, and a bank account works too", async () => {
     const id = await paymentMethod(driver, bankBody());
 
-    const method = await api
-      .post("/payout-methods")
-      .set(auth(driver.token))
-      .send({ paymentMethodId: id, isAutomatic: true, minimumThreshold: 150.5, payoutFrequency: "weekly" });
+    const method = await api.post("/payout-methods").set(auth(driver.token)).send({
+      paymentMethodId: id,
+      isAutomatic: true,
+      minimumThreshold: 150.5,
+      payoutFrequency: "weekly",
+    });
 
     expectStatus(method, 201);
     trackForCleanup("payoutMethods", { id: method.body.data.id });
@@ -138,7 +147,10 @@ describe("POST /payout-methods", () => {
   it("refuses a payment method that isn't verified yet", async () => {
     const id = await paymentMethod(driver, momoBody(), false);
 
-    const res = await api.post("/payout-methods").set(auth(driver.token)).send({ paymentMethodId: id });
+    const res = await api
+      .post("/payout-methods")
+      .set(auth(driver.token))
+      .send({ paymentMethodId: id });
 
     expectStatus(res, 409);
     expect(res.body.error).toBe("Verify this payment method before using it for payouts");
@@ -147,7 +159,10 @@ describe("POST /payout-methods", () => {
   it("refuses a card", async () => {
     const id = await paymentMethod(driver, cardBody());
 
-    const res = await api.post("/payout-methods").set(auth(driver.token)).send({ paymentMethodId: id });
+    const res = await api
+      .post("/payout-methods")
+      .set(auth(driver.token))
+      .send({ paymentMethodId: id });
 
     expectStatus(res, 400);
   });
@@ -158,7 +173,10 @@ describe("POST /payout-methods", () => {
     await api.delete(`/payment-methods/${removed}`).set(auth(driver.token)).expect(200);
 
     for (const id of [foreign, removed, randomUUID()]) {
-      const res = await api.post("/payout-methods").set(auth(driver.token)).send({ paymentMethodId: id });
+      const res = await api
+        .post("/payout-methods")
+        .set(auth(driver.token))
+        .send({ paymentMethodId: id });
 
       expectStatus(res, 404);
     }
@@ -168,7 +186,10 @@ describe("POST /payout-methods", () => {
     const id = await paymentMethod(driver);
     await addPayoutMethod(driver, id);
 
-    const again = await api.post("/payout-methods").set(auth(driver.token)).send({ paymentMethodId: id });
+    const again = await api
+      .post("/payout-methods")
+      .set(auth(driver.token))
+      .send({ paymentMethodId: id });
 
     expectStatus(again, 409);
   });
@@ -176,7 +197,10 @@ describe("POST /payout-methods", () => {
   it("is for drivers", async () => {
     const id = await paymentMethod(rider);
 
-    const res = await api.post("/payout-methods").set(auth(rider.token)).send({ paymentMethodId: id });
+    const res = await api
+      .post("/payout-methods")
+      .set(auth(rider.token))
+      .send({ paymentMethodId: id });
 
     expectStatus(res, 403);
     expect(res.body.error).toBe("Only drivers can set up payouts");
@@ -231,7 +255,11 @@ describe("PATCH /payout-methods/:id", () => {
       .send({ isAutomatic: true, minimumThreshold: 75, payoutFrequency: "monthly" });
 
     expectStatus(res, 200);
-    expect(res.body.data).toMatchObject({ isAutomatic: true, minimumThreshold: 75, payoutFrequency: "monthly" });
+    expect(res.body.data).toMatchObject({
+      isAutomatic: true,
+      minimumThreshold: 75,
+      payoutFrequency: "monthly",
+    });
   });
 
   it("moves the primary, keeping exactly one", async () => {
@@ -342,7 +370,12 @@ describe("staff payout method routes", () => {
 
     expectStatus(res, 200);
     expect(res.body.data.items.map((m: { id: string }) => m.id)).toEqual([method.id]);
-    expect(res.body.data.pagination).toMatchObject({ page: 1, limit: 20, totalItems: 1, totalPages: 1 });
+    expect(res.body.data.pagination).toMatchObject({
+      page: 1,
+      limit: 20,
+      totalItems: 1,
+      totalPages: 1,
+    });
   });
 
   it("filters by automatic payouts", async () => {
@@ -397,6 +430,8 @@ describe("staff payout method routes", () => {
       .where("requestId", "like", `${REQUEST_ID_PREFIX}%`)
       .where({ action: "payoutMethod.adminUpdate", targetId: method.id });
     expect(entry.module).toBe("payouts");
-    expect(entry.changedFields).toEqual(expect.arrayContaining(["isAutomatic", "minimumThreshold"]));
+    expect(entry.changedFields).toEqual(
+      expect.arrayContaining(["isAutomatic", "minimumThreshold"]),
+    );
   });
 });

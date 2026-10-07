@@ -45,7 +45,11 @@ export function loggableBody(req: Pick<Request, "originalUrl" | "method" | "body
   }
   if (req.originalUrl.startsWith("/payment-methods") && req.method === "POST") {
     const { phoneNumber, accountNumber, ...rest } = (req.body ?? {}) as Record<string, unknown>;
-    return { ...rest, ...(phoneNumber ? { phoneNumber: "[REDACTED]" } : {}), ...(accountNumber ? { accountNumber: "[REDACTED]" } : {}) };
+    return {
+      ...rest,
+      ...(phoneNumber ? { phoneNumber: "[REDACTED]" } : {}),
+      ...(accountNumber ? { accountNumber: "[REDACTED]" } : {}),
+    };
   }
   if (req.method === "POST" && /^\/trips\/[^/]+\/reports/.test(req.originalUrl)) {
     return { ...(req.body as object), description: "[REDACTED]" };
@@ -72,7 +76,10 @@ export function loggableResponse(body: unknown, path = "") {
   if (typeof data !== "object" || data === null) return body;
   if (isSupportPath(path)) return { ...(body as object), data: "[REDACTED]" };
 
-  const secrets = ["boardingCode", ...(path.startsWith("/auth/") ? ["accessToken", "refreshToken"] : [])];
+  const secrets = [
+    "boardingCode",
+    ...(path.startsWith("/auth/") ? ["accessToken", "refreshToken"] : []),
+  ];
   if (!secrets.some((key) => key in data)) return body;
   return { ...(body as object), data: blank(data, secrets) };
 }

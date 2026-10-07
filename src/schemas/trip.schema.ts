@@ -470,7 +470,10 @@ export const adminTripDetailSchema = tripSchema.extend({
       }),
   }),
   payments: z.object({
-    riderPaid: money(20.75, "Net successful debits less credits on the rider's wallet for this trip"),
+    riderPaid: money(
+      20.75,
+      "Net successful debits less credits on the rider's wallet for this trip",
+    ),
     driverReceived: money(17.95, "Net successful credits on the driver's wallet for this trip"),
     heldAmount: money(0, "Still held in the rider's wallet"),
     platformRetained: z.number().nullable().meta({

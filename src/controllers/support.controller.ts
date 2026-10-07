@@ -58,7 +58,11 @@ export async function checkNewTicket(
     throw AppError.badRequest("Write a message or attach a file");
   }
   const category = await supportCategoryModel.findById(input.categoryId);
-  if (!category || !category.isActive || (category.audience !== "all" && category.audience !== role)) {
+  if (
+    !category ||
+    !category.isActive ||
+    (category.audience !== "all" && category.audience !== role)
+  ) {
     throw AppError.badRequest(`Support category not available: ${input.categoryId}`);
   }
   for (const link of Object.keys(LINKS) as (keyof typeof LINKS)[]) {
@@ -102,7 +106,11 @@ export async function createTicket(req: Request, res: Response) {
   const { ticket } = created;
   const activity = await supportTicketModel.activity([ticket], "user");
 
-  sendCreated(res, "Support ticket created successfully", userTicketView(ticket, activity.get(ticket.id)));
+  sendCreated(
+    res,
+    "Support ticket created successfully",
+    userTicketView(ticket, activity.get(ticket.id)),
+  );
 
   emitToSupportDesk("support:ticketCreated", { ticket: staffTicketView(ticket) });
   void notifySupportDesk(ticket);
@@ -226,7 +234,11 @@ async function ownTicket(req: Request) {
 
 export async function listMyMessages(req: Request, res: Response) {
   const { ticket } = await ownTicket(req);
-  const page = await supportMessageModel.listPage(ticket.id, true, req.validated.query as ListMessagesQuery);
+  const page = await supportMessageModel.listPage(
+    ticket.id,
+    true,
+    req.validated.query as ListMessagesQuery,
+  );
 
   sendSuccess(res, "Messages retrieved successfully", {
     ...page,
@@ -255,7 +267,11 @@ export async function postMyMessage(req: Request, res: Response) {
 export async function deleteMyMessage(req: Request, res: Response) {
   const { userId, ticket } = await ownTicket(req);
   const { messageId } = req.validated.params as { messageId: string };
-  const message = await deleteTicketMessage(ticket, messageId, { userId, side: "user", canModerate: false });
+  const message = await deleteTicketMessage(ticket, messageId, {
+    userId,
+    side: "user",
+    canModerate: false,
+  });
 
   sendSuccess(res, "Message deleted successfully", userMessageView(message));
 

@@ -577,7 +577,12 @@ describe("Admin Trip Management", () => {
       });
       const rows = [
         { userId: rider.userId, type: "trip_charge", direction: "debit", amount: trip.totalAmount },
-        { userId: driver.userId, type: "driver_earning", direction: "credit", amount: trip.driverEarnings },
+        {
+          userId: driver.userId,
+          type: "driver_earning",
+          direction: "credit",
+          amount: trip.driverEarnings,
+        },
       ];
       for (const row of rows) {
         const [{ id }] = await db("transactions")

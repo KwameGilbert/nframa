@@ -219,7 +219,9 @@ describe("recording", () => {
     );
     // Never approved automatically: with its only document verified, the driver waits for an admin.
     // Find the recalculate entry from the review request (triggered by admin, not upload by driver)
-    const reviewRecalculate = recalculated.items.find((item: { actorId: string }) => item.actorId === superAdmin.userId);
+    const reviewRecalculate = recalculated.items.find(
+      (item: { actorId: string }) => item.actorId === superAdmin.userId,
+    );
     expect(reviewRecalculate).toMatchObject({
       after: { verificationStatus: "pending" },
       changedFields: ["verificationStatus"],
@@ -343,9 +345,7 @@ describe("GET /activity-logs/user/:userId", () => {
     const rider = await signUpByPhone("rider");
     await flushActivityLogs();
 
-    const res = await api
-      .get(`/activity-logs/user/${rider.userId}`)
-      .set(auth(auditor.token));
+    const res = await api.get(`/activity-logs/user/${rider.userId}`).set(auth(auditor.token));
 
     expectStatus(res, 200);
     expect(res.body.message).toBe("User activity logs retrieved successfully");

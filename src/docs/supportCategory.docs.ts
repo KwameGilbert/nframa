@@ -66,7 +66,10 @@ registry.registerPath({
     body: { content: { "application/json": { schema: createSupportCategorySchema } } },
   },
   responses: {
-    201: successResponse("Support category created successfully", adminSupportCategoryResponseSchema),
+    201: successResponse(
+      "Support category created successfully",
+      adminSupportCategoryResponseSchema,
+    ),
     400: errorResponse("Validation error"),
     401: unauthorized,
     403: errorResponse("Missing permission: create on support"),
@@ -87,7 +90,10 @@ registry.registerPath({
     body: { content: { "application/json": { schema: updateSupportCategorySchema } } },
   },
   responses: {
-    200: successResponse("Support category updated successfully", adminSupportCategoryResponseSchema),
+    200: successResponse(
+      "Support category updated successfully",
+      adminSupportCategoryResponseSchema,
+    ),
     400: errorResponse("Validation error"),
     401: unauthorized,
     403: errorResponse("Missing permission: update on support"),

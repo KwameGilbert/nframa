@@ -41,7 +41,9 @@ function getClient(): Expo {
 }
 
 // Up to 100 messages (Expo's per-request limit), each to one token. Results are in the same order as messages.
-export async function sendExpoPush(messages: (ExpoPushMessage & { to: string })[]): Promise<ExpoSendResult[]> {
+export async function sendExpoPush(
+  messages: (ExpoPushMessage & { to: string })[],
+): Promise<ExpoSendResult[]> {
   const results: ExpoSendResult[] = [];
   const valid: ExpoPushMessage[] = [];
   const validAt: number[] = [];
@@ -73,7 +75,9 @@ export async function sendExpoPush(messages: (ExpoPushMessage & { to: string })[
 }
 
 // Keyed by receipt id. An id Expo has no receipt for yet is absent from the result.
-export async function fetchExpoReceipts(receiptIds: string[]): Promise<Record<string, ExpoReceiptResult>> {
+export async function fetchExpoReceipts(
+  receiptIds: string[],
+): Promise<Record<string, ExpoReceiptResult>> {
   const expo = getClient();
   const out: Record<string, ExpoReceiptResult> = {};
 

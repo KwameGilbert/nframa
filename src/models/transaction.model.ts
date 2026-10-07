@@ -71,12 +71,10 @@ class TransactionModel extends BaseModel<Transaction> {
 
   // Every ledger row a trip produced (rider charges, driver payout, ...), oldest first.
   async listForTrip(tripId: string) {
-    const rows: Transaction[] = await this.table
-      .where({ tripId })
-      .orderBy([
-        { column: "createdAt", order: "asc" },
-        { column: "id", order: "asc" },
-      ]);
+    const rows: Transaction[] = await this.table.where({ tripId }).orderBy([
+      { column: "createdAt", order: "asc" },
+      { column: "id", order: "asc" },
+    ]);
     return rows.map(toTransaction);
   }
 

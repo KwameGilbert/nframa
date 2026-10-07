@@ -480,12 +480,10 @@ describe("walletModel.record", () => {
 describe("top-up limits set the wrong way round", { concurrent: false }, () => {
   it("answers 503 instead of refusing every amount", async () => {
     const rider = await newRider();
-    const spy = vi
-      .spyOn(settingModel, "getValues")
-      .mockImplementation((async () => ({
-        "wallet.minTopUp": 100,
-        "wallet.maxTopUp": 50,
-      })) as never);
+    const spy = vi.spyOn(settingModel, "getValues").mockImplementation((async () => ({
+      "wallet.minTopUp": 100,
+      "wallet.maxTopUp": 50,
+    })) as never);
 
     try {
       const res = await api.post("/wallet/topup").set(auth(rider.token)).send({ amount: 75 });

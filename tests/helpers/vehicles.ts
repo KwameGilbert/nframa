@@ -12,7 +12,10 @@ export function postVehicle(
     if (value !== undefined) req = req.field(key, String(value));
   }
   for (const side of sides) {
-    req = req.attach(side, Buffer.from(`${side} photo`), { filename: `${side}.jpg`, contentType: "image/jpeg" });
+    req = req.attach(side, Buffer.from(`${side} photo`), {
+      filename: `${side}.jpg`,
+      contentType: "image/jpeg",
+    });
   }
   return req;
 }

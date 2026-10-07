@@ -150,7 +150,9 @@ describe("sign-in codes", () => {
     );
     await settle();
 
-    const codeMails = sentTo(admin.email).filter((m) => m.subject === "Your Nframa verification code");
+    const codeMails = sentTo(admin.email).filter(
+      (m) => m.subject === "Your Nframa verification code",
+    );
     expect(codeMails).toHaveLength(1);
     expect(codeMails[0].html).toContain(code);
   });
@@ -211,7 +213,9 @@ describe("account status mails", () => {
     const suspension = await waitForMail(email, "Your Nframa account has been suspended");
 
     expect(suspension.html).toContain(target.fullName.split(" ")[0]);
-    expect(suspension.html).toContain("Used &lt;b&gt;another&lt;/b&gt; person&#39;s card &amp; more");
+    expect(suspension.html).toContain(
+      "Used &lt;b&gt;another&lt;/b&gt; person&#39;s card &amp; more",
+    );
     expect(suspension.html).not.toContain("<b>another</b>");
 
     const reactivated = await setStatus(target.userId, { status: "active" });
@@ -352,8 +356,9 @@ describe("security mails", () => {
       .send({ status: "suspended" });
     await settle();
     expectStatus(same, 200);
-    expect(sentTo(admin.email).filter((m) => m.subject === "Your Nframa admin access changed"))
-      .toHaveLength(1);
+    expect(
+      sentTo(admin.email).filter((m) => m.subject === "Your Nframa admin access changed"),
+    ).toHaveLength(1);
   });
 });
 
@@ -463,10 +468,7 @@ describe("wallet mails", () => {
     const email = await giveEmail(rider.userId);
     trackForCleanup("transactions", { userId: rider.userId });
     trackForCleanup("wallets", { userId: rider.userId });
-    const started = await api
-      .post("/wallet/topup")
-      .set(auth(rider.token))
-      .send({ amount: 25.5 });
+    const started = await api.post("/wallet/topup").set(auth(rider.token)).send({ amount: 25.5 });
     expectStatus(started, 201);
     const { reference } = started.body.data as { reference: string };
 
@@ -489,10 +491,7 @@ describe("wallet mails", () => {
     const email = await giveEmail(owner.userId);
     trackForCleanup("transactions", { userId: owner.userId });
     trackForCleanup("wallets", { userId: owner.userId });
-    const started = await api
-      .post("/wallet/topup")
-      .set(auth(owner.token))
-      .send({ amount: 12 });
+    const started = await api.post("/wallet/topup").set(auth(owner.token)).send({ amount: 12 });
     expectStatus(started, 201);
     const { reference } = started.body.data as { reference: string };
     forcePaystackResult(reference, { status: "reversed" });
@@ -553,8 +552,16 @@ describe("trip mails", () => {
     await api.post(`/trips/${first}/accept`).set(asDriver()).expect(200);
     await api.post(`/trips/${second}/accept`).set(asDriver()).expect(200);
 
-    await api.post(`/trips/${first}/cancel`).set(asRider()).send({ reason: "Plans changed" }).expect(200);
-    await api.post(`/trips/${second}/cancel`).set(asDriver()).send({ reason: "Flat tyre" }).expect(200);
+    await api
+      .post(`/trips/${first}/cancel`)
+      .set(asRider())
+      .send({ reason: "Plans changed" })
+      .expect(200);
+    await api
+      .post(`/trips/${second}/cancel`)
+      .set(asDriver())
+      .send({ reason: "Flat tyre" })
+      .expect(200);
 
     const toDriver = await waitForMail(driverEmail, "A trip was cancelled", byRider);
     expect(toDriver.html).toContain("cancelled by the rider");

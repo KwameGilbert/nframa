@@ -29,7 +29,13 @@ export const URGENT_REPORT_CATEGORIES: readonly ReportCategory[] = [
 ];
 
 export const REPORT_SEVERITIES = ["normal", "urgent"] as const;
-export const REPORT_STATUSES = ["open", "underReview", "resolved", "dismissed", "withdrawn"] as const;
+export const REPORT_STATUSES = [
+  "open",
+  "underReview",
+  "resolved",
+  "dismissed",
+  "withdrawn",
+] as const;
 
 export type ReportSeverity = (typeof REPORT_SEVERITIES)[number];
 export type ReportStatus = (typeof REPORT_STATUSES)[number];
@@ -44,22 +50,20 @@ const categorySchema = z.enum(REPORT_CATEGORIES).meta({
 
 export const createReportSchema = z.object({
   category: categorySchema,
-  description: z
-    .string()
-    .trim()
-    .min(10)
-    .max(2000)
-    .meta({
-      description:
-        "What happened, in the reporter's own words. Only staff see it; the person reported is never told",
-      example: "The driver kept asking for my number after I said no, and would not stop at my request.",
-    }),
+  description: z.string().trim().min(10).max(2000).meta({
+    description:
+      "What happened, in the reporter's own words. Only staff see it; the person reported is never told",
+    example:
+      "The driver kept asking for my number after I said no, and would not stop at my request.",
+  }),
 });
 
 export type CreateReportInput = z.infer<typeof createReportSchema>;
 
 export const tripReportsParamsSchema = z.object({
-  tripId: z.uuid().meta({ description: "The trip the report is about; the caller was its rider or driver" }),
+  tripId: z
+    .uuid()
+    .meta({ description: "The trip the report is about; the caller was its rider or driver" }),
 });
 
 export const reportParamsSchema = z.object({
@@ -106,13 +110,15 @@ export const updateReportStatusSchema = z.object({
     example: "underReview",
   }),
   internalNotes: z.string().trim().max(2000).optional().meta({
-    description: "Staff-only notes. Never shown to the reporter or the person reported; replaces earlier notes when given",
+    description:
+      "Staff-only notes. Never shown to the reporter or the person reported; replaces earlier notes when given",
     example: "Called the driver; second report against him this month.",
   }),
   outcomeMessage: z.string().trim().max(1000).optional().meta({
     description:
       "What staff tell the reporter (shown in the app and emailed when the report is resolved or dismissed). Replaces an earlier message when given",
-    example: "Thank you for reporting this. We have spoken to the driver and taken action on his account.",
+    example:
+      "Thank you for reporting this. We have spoken to the driver and taken action on his account.",
   }),
 });
 
@@ -121,21 +127,28 @@ export type UpdateReportStatusInput = z.infer<typeof updateReportStatusSchema>;
 // Responses (docs only — see CLAUDE.md "API docs").
 
 const evidenceSchema = z.object({
-  fileUrl: z.url().meta({ example: "https://res.cloudinary.com/demo/image/upload/nframa/reports/1.jpg" }),
+  fileUrl: z
+    .url()
+    .meta({ example: "https://res.cloudinary.com/demo/image/upload/nframa/reports/1.jpg" }),
 });
 
 const reportFields = z.object({
   id: z.uuid(),
   tripId: z.uuid(),
-  reporterRole: z.enum(["rider", "driver"]).meta({ description: "Whether the reporter was the trip's rider or its driver" }),
+  reporterRole: z
+    .enum(["rider", "driver"])
+    .meta({ description: "Whether the reporter was the trip's rider or its driver" }),
   category: z.enum(REPORT_CATEGORIES),
   severity: z.enum(REPORT_SEVERITIES),
   description: z.string(),
   tripStatus: z.string().meta({
-    description: "The trip's status when the report was filed, e.g. boarded for a report made during the ride",
+    description:
+      "The trip's status when the report was filed, e.g. boarded for a report made during the ride",
     example: "boarded",
   }),
-  evidence: z.array(evidenceSchema).meta({ description: "Images attached when the report was filed, up to 5" }),
+  evidence: z
+    .array(evidenceSchema)
+    .meta({ description: "Images attached when the report was filed, up to 5" }),
   status: z.enum(REPORT_STATUSES).meta({
     description:
       "open: waiting for staff. underReview: staff are on it. resolved / dismissed: closed by staff. withdrawn: the reporter took it back",
@@ -143,7 +156,10 @@ const reportFields = z.object({
   outcomeMessage: z.string().nullable().meta({
     description: "What staff told the reporter when closing it; null until then",
   }),
-  resolvedAt: z.iso.datetime().nullable().meta({ description: "When staff resolved or dismissed it" }),
+  resolvedAt: z.iso
+    .datetime()
+    .nullable()
+    .meta({ description: "When staff resolved or dismissed it" }),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -188,9 +204,17 @@ export const reportAdminDetailResponseSchema = reportAdminResponseSchema.extend(
   }),
   history: z
     .object({
-      reporterFiled: z.number().int().meta({ description: "Reports the reporter has filed in total" }),
-      reportedAgainst: z.number().int().meta({ description: "Reports filed against the reported person in total, this one included" }),
-      reportedUnresolved: z.number().int().meta({ description: "Of those, how many are still open or under review" }),
+      reporterFiled: z
+        .number()
+        .int()
+        .meta({ description: "Reports the reporter has filed in total" }),
+      reportedAgainst: z.number().int().meta({
+        description: "Reports filed against the reported person in total, this one included",
+      }),
+      reportedUnresolved: z
+        .number()
+        .int()
+        .meta({ description: "Of those, how many are still open or under review" }),
     })
     .meta({ description: "How the two people appear elsewhere, so repeat problems stand out" }),
 });
@@ -221,5 +245,8 @@ export const createReportMultipartSchema = createReportSchema.extend({
     .array(z.string().meta({ format: "binary" }))
     .max(MAX_REPORT_EVIDENCE)
     .optional()
-    .meta({ description: "Up to 5 images (JPEG, PNG or WEBP, 5MB each); repeat the evidence field once per file" }),
+    .meta({
+      description:
+        "Up to 5 images (JPEG, PNG or WEBP, 5MB each); repeat the evidence field once per file",
+    }),
 });

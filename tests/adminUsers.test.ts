@@ -147,9 +147,9 @@ describe("GET /admin", () => {
 
     expectStatus(res, 200);
     // Filter out null values and find the admin
-    const found = res.body.data.filter((a: unknown) => a !== null).find(
-      (a: { adminUser: { userId: string } }) => a.adminUser?.userId === admin.userId,
-    );
+    const found = res.body.data
+      .filter((a: unknown) => a !== null)
+      .find((a: { adminUser: { userId: string } }) => a.adminUser?.userId === admin.userId);
     expect(found.adminUser).toMatchObject({ userId: admin.userId, roleId, status: "invited" });
     expect(found.adminUser.user.id).toBe(admin.userId);
     expect(found.adminUser.role.id).toBe(roleId);

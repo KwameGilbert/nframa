@@ -69,16 +69,11 @@ export type UpdateSosStatusInput = z.infer<typeof updateSosStatusSchema>;
 // status route accepts: it can start from any status that is still in play, which "resolved" can't claim to be.
 export const adminCancelSosSchema = z
   .object({
-    resolutionNotes: z
-      .string()
-      .trim()
-      .max(2000)
-      .optional()
-      .meta({
-        description:
-          "Why the alert is being cancelled. Staff only: the person who raised it never sees it",
-        example: "Duplicate of the alert raised from the rider's other phone.",
-      }),
+    resolutionNotes: z.string().trim().max(2000).optional().meta({
+      description:
+        "Why the alert is being cancelled. Staff only: the person who raised it never sees it",
+      example: "Duplicate of the alert raised from the rider's other phone.",
+    }),
   })
   .default({});
 
@@ -112,19 +107,13 @@ const incidentFields = z.object({
   longitude: z.number().meta({ example: -0.17837 }),
   address: z.string().nullable(),
   reason: z.string().nullable(),
-  emergencyContactsSnapshot: z
-    .array(z.record(z.string(), z.unknown()))
-    .nullable()
-    .meta({
-      description: "The person's emergency contacts as they were when the alert was raised",
-    }),
-  resolvedAt: z.iso
-    .datetime()
-    .nullable()
-    .meta({
-      description:
-        "When the alert stopped being in play: operations resolved it, or it was cancelled by the person or by operations. Null while it is still open",
-    }),
+  emergencyContactsSnapshot: z.array(z.record(z.string(), z.unknown())).nullable().meta({
+    description: "The person's emergency contacts as they were when the alert was raised",
+  }),
+  resolvedAt: z.iso.datetime().nullable().meta({
+    description:
+      "When the alert stopped being in play: operations resolved it, or it was cancelled by the person or by operations. Null while it is still open",
+  }),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });

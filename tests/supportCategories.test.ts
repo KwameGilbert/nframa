@@ -166,7 +166,11 @@ describe("PATCH /admin/support/categories/:id", () => {
     expectStatus(await patch(manager, a.id, { name: b.name.toLowerCase() }), 409);
     expectError(await patch(manager, a.id, {}), 400, "At least one field must be provided");
     const id = randomUUID();
-    expectError(await patch(manager, id, { isActive: false }), 404, `Support category not found: ${id}`);
+    expectError(
+      await patch(manager, id, { isActive: false }),
+      404,
+      `Support category not found: ${id}`,
+    );
   });
 
   it("needs support: update", async () => {

@@ -25,7 +25,10 @@ export function searchTerms(raw: string): SearchTerms {
   const tsquery =
     operators || tokens.length === 0
       ? { sql: `websearch_to_tsquery('english', ?)`, bindings: [q] }
-      : { sql: `(to_tsquery('english', ?) || to_tsquery('simple', ?))`, bindings: [prefix, prefix] };
+      : {
+          sql: `(to_tsquery('english', ?) || to_tsquery('simple', ?))`,
+          bindings: [prefix, prefix],
+        };
 
   const code = CODE.exec(q)?.[1];
   const digits = PHONE.test(q) ? q.replace(/\D/g, "").replace(/^(233|0)/, "") : null;
@@ -75,7 +78,11 @@ export function searchClauses(terms: SearchTerms, staff: boolean): Clause[] {
   );
   const fuzzy = terms.q.length >= FUZZY_MIN_LENGTH;
   if (fuzzy) {
-    clauses.push({ sql: `word_similarity(?, t.subject) >= ${FUZZY_THRESHOLD}`, bindings: [terms.q], weight: 10 });
+    clauses.push({
+      sql: `word_similarity(?, t.subject) >= ${FUZZY_THRESHOLD}`,
+      bindings: [terms.q],
+      weight: 10,
+    });
   }
   if (!staff) return clauses;
 
@@ -105,7 +112,10 @@ export function searchClauses(terms: SearchTerms, staff: boolean): Clause[] {
 }
 
 export function matchSql(clauses: Clause[]) {
-  return { sql: `(${clauses.map((c) => c.sql).join(" OR ")})`, bindings: clauses.flatMap((c) => c.bindings) };
+  return {
+    sql: `(${clauses.map((c) => c.sql).join(" OR ")})`,
+    bindings: clauses.flatMap((c) => c.bindings),
+  };
 }
 
 export function scoreSql(clauses: Clause[]) {

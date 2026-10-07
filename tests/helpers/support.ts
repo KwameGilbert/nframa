@@ -19,7 +19,11 @@ export async function seedCategory(over: Record<string, unknown> = {}) {
 }
 
 // Straight to the database: tickets staff act on don't need to go through the (rate-limited) create route.
-export async function seedTicket(userId: string, categoryId: string, over: Record<string, unknown> = {}) {
+export async function seedTicket(
+  userId: string,
+  categoryId: string,
+  over: Record<string, unknown> = {},
+) {
   const [row] = await db("supportTickets")
     .insert({
       code: generateCode("ST"),

@@ -644,7 +644,11 @@ describe("POST /admin/safety/incidents/:id/cancel", () => {
     });
     expect(res.body.data.resolvedAt).not.toBeNull();
     expect(userEvents(incident.userId, "sos:statusChanged", incident.id)).toMatchObject([
-      [incident.userId, "sos:statusChanged", { incidentId: incident.id, status: "cancelledByAdmin" }],
+      [
+        incident.userId,
+        "sos:statusChanged",
+        { incidentId: incident.id, status: "cancelledByAdmin" },
+      ],
     ]);
     expect(deskEvents("sos:cancelled", incident.id)).toHaveLength(1);
     expect((await adminView(incident.id)).body.data.status).toBe("cancelledByAdmin");
@@ -668,7 +672,8 @@ describe("POST /admin/safety/incidents/:id/cancel", () => {
     "works from %s, including after emergency services were contacted, when the person no longer can",
     async (from) => {
       const incident = await seedIncident();
-      if (from !== "triggered") expectStatus(await move(dispatcher, incident.id, { status: from }), 200);
+      if (from !== "triggered")
+        expectStatus(await move(dispatcher, incident.id, { status: from }), 200);
 
       const res = await adminCancel(dispatcher, incident.id);
 
@@ -679,14 +684,27 @@ describe("POST /admin/safety/incidents/:id/cancel", () => {
 
   it("keeps the notes operations already wrote unless a reason is given now", async () => {
     const [kept, replaced] = await Promise.all([seedIncident(), seedIncident()]);
-    await move(dispatcher, kept.id, { status: "underReview", resolutionNotes: "Calling the driver" });
-    await move(dispatcher, replaced.id, { status: "underReview", resolutionNotes: "Calling the driver" });
+    await move(dispatcher, kept.id, {
+      status: "underReview",
+      resolutionNotes: "Calling the driver",
+    });
+    await move(dispatcher, replaced.id, {
+      status: "underReview",
+      resolutionNotes: "Calling the driver",
+    });
 
     expectStatus(await adminCancel(dispatcher, kept.id), 200);
-    expectStatus(await adminCancel(dispatcher, replaced.id, { resolutionNotes: "Driver confirmed a false alarm" }), 200);
+    expectStatus(
+      await adminCancel(dispatcher, replaced.id, {
+        resolutionNotes: "Driver confirmed a false alarm",
+      }),
+      200,
+    );
 
     expect((await adminView(kept.id)).body.data.resolutionNotes).toBe("Calling the driver");
-    expect((await adminView(replaced.id)).body.data.resolutionNotes).toBe("Driver confirmed a false alarm");
+    expect((await adminView(replaced.id)).body.data.resolutionNotes).toBe(
+      "Driver confirmed a false alarm",
+    );
   });
 
   it("is refused for an alert that is already over, saying what it is", async () => {
@@ -791,7 +809,9 @@ describe("POST /admin/safety/incidents/:id/cancel", () => {
 
     const missing = await adminCancel(dispatcher, id);
     const badId = await adminCancel(dispatcher, "not-a-uuid");
-    const tooLong = await adminCancel(dispatcher, incident.id, { resolutionNotes: "x".repeat(2001) });
+    const tooLong = await adminCancel(dispatcher, incident.id, {
+      resolutionNotes: "x".repeat(2001),
+    });
 
     expectStatus(missing, 404);
     expect(missing.body.error).toBe(`SOS incident not found: ${id}`);

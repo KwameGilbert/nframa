@@ -178,7 +178,11 @@ export async function getUserRatingSummary(req: Request, res: Response) {
     await assertSelfOrPermission(req, userId, "users", "read");
   }
 
-  sendSuccess(res, "Rating summary retrieved successfully", await reviewModel.getRatingSummary(userId));
+  sendSuccess(
+    res,
+    "Rating summary retrieved successfully",
+    await reviewModel.getRatingSummary(userId),
+  );
 }
 
 export async function deleteTripReview(req: Request, res: Response) {

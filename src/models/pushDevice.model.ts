@@ -26,7 +26,12 @@ export const DEVICE_VIEW_COLUMNS = ["id", "platform", "createdAt", "updatedAt"] 
 
 export type PushDeviceView = Pick<PushDevice, (typeof DEVICE_VIEW_COLUMNS)[number]>;
 
-export function toDeviceView({ id, platform, createdAt, updatedAt }: PushDeviceView): PushDeviceView {
+export function toDeviceView({
+  id,
+  platform,
+  createdAt,
+  updatedAt,
+}: PushDeviceView): PushDeviceView {
   return { id, platform, createdAt, updatedAt };
 }
 

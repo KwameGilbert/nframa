@@ -144,16 +144,35 @@ class WalletModel extends BaseModel<Wallet> {
   // never takes the rider below what they can spend (balance - heldAmount), and the check runs under the wallet lock.
   async transferTip(
     trx: Knex.Transaction,
-    { fromUserId, toUserId, tripId, amount }: { fromUserId: string; toUserId: string; tripId: string; amount: number },
+    {
+      fromUserId,
+      toUserId,
+      tripId,
+      amount,
+    }: { fromUserId: string; toUserId: string; tripId: string; amount: number },
   ): Promise<void> {
     const rounded = positiveMoney(amount);
     await lockWallet(trx, fromUserId);
-    const wallet = await trx("wallets").where({ userId: fromUserId }).first("balance", "heldAmount");
+    const wallet = await trx("wallets")
+      .where({ userId: fromUserId })
+      .first("balance", "heldAmount");
     if (roundMoney(Number(wallet.balance) - Number(wallet.heldAmount)) < rounded) {
       throw AppError.conflict("Insufficient wallet balance");
     }
-    await this.recordIn(trx, { userId: fromUserId, tripId, type: "tip", direction: "debit", amount: rounded });
-    await this.recordIn(trx, { userId: toUserId, tripId, type: "tip", direction: "credit", amount: rounded });
+    await this.recordIn(trx, {
+      userId: fromUserId,
+      tripId,
+      type: "tip",
+      direction: "debit",
+      amount: rounded,
+    });
+    await this.recordIn(trx, {
+      userId: toUserId,
+      tripId,
+      type: "tip",
+      direction: "credit",
+      amount: rounded,
+    });
   }
 
   // Credits a pending top-up once its payment is confirmed. Idempotent: the transaction row is locked first,

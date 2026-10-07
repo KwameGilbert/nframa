@@ -28,10 +28,11 @@ export const createEmergencyContactSchema = contactFieldsSchema.extend({
 
 export type CreateEmergencyContactInput = z.infer<typeof createEmergencyContactSchema>;
 
-export const updateEmergencyContactSchema = contactFieldsSchema.partial().refine(
-  (data) => Object.keys(data).length > 0,
-  { message: "At least one field must be provided" },
-);
+export const updateEmergencyContactSchema = contactFieldsSchema
+  .partial()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "At least one field must be provided",
+  });
 
 export type UpdateEmergencyContactInput = z.infer<typeof updateEmergencyContactSchema>;
 

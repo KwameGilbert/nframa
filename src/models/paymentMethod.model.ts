@@ -77,7 +77,13 @@ class PaymentMethodModel extends BaseModel<PaymentMethod> {
     return rows.map((row: PaymentMethod) => this.sanitize(row));
   }
 
-  async adminList({ userId, userRole, verificationStatus, page, limit }: AdminListPaymentMethodsQuery) {
+  async adminList({
+    userId,
+    userRole,
+    verificationStatus,
+    page,
+    limit,
+  }: AdminListPaymentMethodsQuery) {
     const matching = () =>
       this.table.where({ isActive: true }).modify((query) => {
         if (userId) query.where({ userId });
@@ -125,7 +131,10 @@ class PaymentMethodModel extends BaseModel<PaymentMethod> {
 
   // Only a verified method can be primary: losing verification drops it, and the first one to be verified
   // becomes primary if the person has none.
-  async setVerification(id: string, status: VerificationStatus): Promise<PaymentMethod | undefined> {
+  async setVerification(
+    id: string,
+    status: VerificationStatus,
+  ): Promise<PaymentMethod | undefined> {
     try {
       return await db.transaction(async (trx) => {
         const verified = status === "verified";

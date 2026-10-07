@@ -139,7 +139,9 @@ describe("OpenAPI error examples", () => {
       .filter((e) => e.status === 403 && String(e.example?.error).endsWith(" on users"))
       .map((e) => e.path);
     for (const path of onUsers) {
-      expect(path, "guarded by the users module").toMatch(/^\/(users|drivers?|rider|vehicles|emergency-contacts|reviews|safety|admin\/payment-methods)/);
+      expect(path, "guarded by the users module").toMatch(
+        /^\/(users|drivers?|rider|vehicles|emergency-contacts|reviews|safety|admin\/payment-methods)/,
+      );
     }
   });
 
@@ -181,7 +183,9 @@ describe("OpenAPI HTTP verbs", () => {
     const res = await api.get("/openapi.json");
     expectStatus(res, 200);
     const found: { method: string; path: string; hasBody: boolean }[] = [];
-    for (const [path, item] of Object.entries<Record<string, { requestBody?: unknown }>>(res.body.paths)) {
+    for (const [path, item] of Object.entries<Record<string, { requestBody?: unknown }>>(
+      res.body.paths,
+    )) {
       for (const [method, operation] of Object.entries(item)) {
         found.push({ method, path, hasBody: operation.requestBody !== undefined });
       }
@@ -199,7 +203,11 @@ describe("OpenAPI HTTP verbs", () => {
 
   it("makes actions POST: PATCH is only for partially updating a record", async () => {
     const wrong = (await operations())
-      .filter(({ method, path }) => (method === "patch" || method === "put") && ACTIONS.includes(path.split("/").at(-1) ?? ""))
+      .filter(
+        ({ method, path }) =>
+          (method === "patch" || method === "put") &&
+          ACTIONS.includes(path.split("/").at(-1) ?? ""),
+      )
       .map(({ method, path }) => `${method.toUpperCase()} ${path}`);
 
     expect(wrong).toEqual([]);

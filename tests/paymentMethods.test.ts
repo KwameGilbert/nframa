@@ -15,8 +15,7 @@ let rider: Awaited<ReturnType<typeof signUpByPhone>>;
 let driver: Awaited<ReturnType<typeof signUpByPhone>>;
 let otherRider: Awaited<ReturnType<typeof signUpByPhone>>;
 
-const digits = (count: number) =>
-  Array.from({ length: count }, () => randomInt(10)).join("");
+const digits = (count: number) => Array.from({ length: count }, () => randomInt(10)).join("");
 
 const card = (over: object = {}) => ({
   type: "card",
@@ -94,7 +93,13 @@ describe("POST /payment-methods", () => {
       verifiedAt: null,
       isPrimary: false,
     });
-    for (const internal of ["metadata", "tokenizedReference", "identifier", "provider", "isActive"]) {
+    for (const internal of [
+      "metadata",
+      "tokenizedReference",
+      "identifier",
+      "provider",
+      "isActive",
+    ]) {
       expect(res.body.data).not.toHaveProperty(internal);
     }
   });
@@ -103,14 +108,23 @@ describe("POST /payment-methods", () => {
     const phoneNumber = `+233${data.ghanaPhoneNumber()}`;
     const accountNumber = digits(13);
 
-    const momoRes = await api.post("/payment-methods").set(auth(driver.token)).send(momo({ phoneNumber }));
-    const bankRes = await api.post("/payment-methods").set(auth(driver.token)).send(bank({ accountNumber }));
+    const momoRes = await api
+      .post("/payment-methods")
+      .set(auth(driver.token))
+      .send(momo({ phoneNumber }));
+    const bankRes = await api
+      .post("/payment-methods")
+      .set(auth(driver.token))
+      .send(bank({ accountNumber }));
 
     expectStatus(momoRes, 201);
     expectStatus(bankRes, 201);
     trackForCleanup("paymentMethods", { id: momoRes.body.data.id });
     trackForCleanup("paymentMethods", { id: bankRes.body.data.id });
-    expect(momoRes.body.data.details).toEqual({ network: "mtn", phoneNumber: `****${phoneNumber.slice(-4)}` });
+    expect(momoRes.body.data.details).toEqual({
+      network: "mtn",
+      phoneNumber: `****${phoneNumber.slice(-4)}`,
+    });
     expect(momoRes.body.data.displayName).toBe(`MTN ****${phoneNumber.slice(-4)}`);
     expect(bankRes.body.data.details).toEqual({
       bankCode: "GCB",
@@ -225,10 +239,15 @@ describe("reading my payment methods", () => {
     const mine = await save(rider, card());
 
     const all = await api.get("/payment-methods").set(auth(otherRider.token));
-    const onlyVerified = await api.get("/payment-methods?verified=true").set(auth(otherRider.token));
-    const onlyPending = await api.get("/payment-methods?verified=false").set(auth(otherRider.token));
+    const onlyVerified = await api
+      .get("/payment-methods?verified=true")
+      .set(auth(otherRider.token));
+    const onlyPending = await api
+      .get("/payment-methods?verified=false")
+      .set(auth(otherRider.token));
 
-    const ids = (res: { body: { data: { items: { id: string }[] } } }) => res.body.data.items.map((m) => m.id);
+    const ids = (res: { body: { data: { items: { id: string }[] } } }) =>
+      res.body.data.items.map((m) => m.id);
     expectStatus(all, 200);
     expect(ids(all)).toEqual(expect.arrayContaining([pending.id, verified.id]));
     expect(ids(all)).not.toContain(mine.id);
@@ -364,13 +383,18 @@ describe("staff payment method routes", () => {
     const method = await save(driver, momo({ phoneNumber }));
 
     const res = await api
-      .get(`/admin/payment-methods?userId=${driver.userId}&userRole=driver&verificationStatus=pending`)
+      .get(
+        `/admin/payment-methods?userId=${driver.userId}&userRole=driver&verificationStatus=pending`,
+      )
       .set(auth(reader.token));
 
     expectStatus(res, 200);
     expect(res.body.data.items.map((m: { id: string }) => m.id)).toContain(method.id);
     expect(
-      res.body.data.items.every((m: { userId: string; userRole: string }) => m.userId === driver.userId && m.userRole === "driver"),
+      res.body.data.items.every(
+        (m: { userId: string; userRole: string }) =>
+          m.userId === driver.userId && m.userRole === "driver",
+      ),
     ).toBe(true);
     expect(res.body.data.pagination).toMatchObject({ page: 1, limit: 20 });
     expect(JSON.stringify(res.body)).not.toContain(phoneNumber);
@@ -393,7 +417,11 @@ describe("staff payment method routes", () => {
 
     expect(verified).toMatchObject({ verificationStatus: "verified", isPrimary: true });
     expect(verified.verifiedAt).not.toBeNull();
-    expect(reset).toMatchObject({ verificationStatus: "pending", isPrimary: false, verifiedAt: null });
+    expect(reset).toMatchObject({
+      verificationStatus: "pending",
+      isPrimary: false,
+      verifiedAt: null,
+    });
   });
 
   it("only makes the first verified method primary", async () => {
@@ -415,8 +443,12 @@ describe("staff payment method routes", () => {
       .patch(`/admin/payment-methods/${method.id}`)
       .set(auth(reader.token))
       .send({ verificationStatus: "verified" });
-    const deleteDenied = await api.delete(`/admin/payment-methods/${method.id}`).set(auth(reader.token));
-    const removed = await api.delete(`/admin/payment-methods/${method.id}`).set(auth(manager.token));
+    const deleteDenied = await api
+      .delete(`/admin/payment-methods/${method.id}`)
+      .set(auth(reader.token));
+    const removed = await api
+      .delete(`/admin/payment-methods/${method.id}`)
+      .set(auth(manager.token));
     const gone = await api.delete(`/admin/payment-methods/${method.id}`).set(auth(manager.token));
 
     expectStatus(verifyDenied, 403);

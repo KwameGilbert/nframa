@@ -33,11 +33,19 @@ export async function listSupportCategories(req: Request, res: Response) {
   const role = req.auth?.role === "rider" || req.auth?.role === "driver" ? req.auth.role : null;
   const categories = await supportCategoryModel.listForAudience(role);
 
-  sendSuccess(res, "Support categories retrieved successfully", categories.map(publicSupportCategory));
+  sendSuccess(
+    res,
+    "Support categories retrieved successfully",
+    categories.map(publicSupportCategory),
+  );
 }
 
 export async function adminListSupportCategories(_req: Request, res: Response) {
-  sendSuccess(res, "Support categories retrieved successfully", await supportCategoryModel.listWithCounts());
+  sendSuccess(
+    res,
+    "Support categories retrieved successfully",
+    await supportCategoryModel.listWithCounts(),
+  );
 }
 
 export async function createSupportCategory(req: Request, res: Response) {

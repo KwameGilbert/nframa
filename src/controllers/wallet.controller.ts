@@ -40,7 +40,11 @@ function logOutcome(req: Request, before: Transaction, outcome: TopUpOutcome) {
       action: "wallet.topup_settled",
       description: `Wallet topped up with ${after.currency} ${after.amount.toFixed(2)}`,
     });
-    void notifyWallet(after.userId, "topUp", { id: after.id, amount: after.amount, currency: after.currency });
+    void notifyWallet(after.userId, "topUp", {
+      id: after.id,
+      amount: after.amount,
+      currency: after.currency,
+    });
   } else if (failedNow) {
     logActivity(req, {
       ...activity,
@@ -48,7 +52,11 @@ function logOutcome(req: Request, before: Transaction, outcome: TopUpOutcome) {
       description: `A ${after.currency} ${after.amount.toFixed(2)} wallet top-up failed`,
       error: failedNow,
     });
-    void notifyWallet(after.userId, "topUpFailed", { id: after.id, amount: after.amount, currency: after.currency });
+    void notifyWallet(after.userId, "topUpFailed", {
+      id: after.id,
+      amount: after.amount,
+      currency: after.currency,
+    });
   }
 }
 

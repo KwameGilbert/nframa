@@ -521,9 +521,7 @@ describe("activity log and docs", () => {
     const example = (method: string, path: string, status: number) =>
       res.body.paths[path]?.[method]?.responses[status]?.content["application/json"].example?.error;
 
-    expect(example("post", "/trips/{id}/accept", 403)).toBe(
-      "Only the trip's driver can accept it",
-    );
+    expect(example("post", "/trips/{id}/accept", 403)).toBe("Only the trip's driver can accept it");
     expect(example("post", "/trips/{id}/accept", 429)).toBe("Too many requests, try again later");
     expect(example("post", "/trips/{id}/decline", 409)).toBe(
       "Can't decline a trip that is accepted",

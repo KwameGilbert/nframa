@@ -1,0 +1,6 @@
+# LF in the repository and in every checkout (Prettier's endOfLine), so a Windows checkout doesn't show every file as
+# changed or fail format:check.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary

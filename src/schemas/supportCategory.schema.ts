@@ -16,12 +16,10 @@ const nameSchema = z
   .min(2)
   .max(60)
   .meta({ description: "Shown to users; unique, ignoring case", example: "Lost item" });
-const descriptionSchema = z
-  .string()
-  .trim()
-  .max(300)
-  .nullable()
-  .meta({ description: "One line shown under the name", example: "You left something in a vehicle." });
+const descriptionSchema = z.string().trim().max(300).nullable().meta({
+  description: "One line shown under the name",
+  example: "You left something in a vehicle.",
+});
 const audienceSchema = z.enum(SUPPORT_AUDIENCES).meta({
   description: "Who can pick it: everyone, riders only or drivers only",
   example: "all",

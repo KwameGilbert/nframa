@@ -12,7 +12,9 @@ import { signUpByPhone } from "./helpers/actors.js";
 // Push receipt sweep: enqueue tickets from Expo, poll for delivery status, clean up old records.
 
 const listReceipts = () =>
-  db("pushReceipts").select("id", "receiptId", "token", "handled", "createdAt").orderBy("createdAt");
+  db("pushReceipts")
+    .select("id", "receiptId", "token", "handled", "createdAt")
+    .orderBy("createdAt");
 
 const countReceipts = () => db("pushReceipts").count("* as count").first();
 

@@ -22,7 +22,10 @@ const cardSchema = z.strictObject({
   type: z.literal("card"),
   displayName,
   brand: z.string().trim().min(1).max(20).meta({ example: "Visa" }),
-  lastFourDigits: z.string().regex(/^\d{4}$/, "Must be 4 digits").meta({ example: "4242" }),
+  lastFourDigits: z
+    .string()
+    .regex(/^\d{4}$/, "Must be 4 digits")
+    .meta({ example: "4242" }),
   expiryMonth: z.number().int().min(1).max(12).meta({ example: 12 }),
   expiryYear: z.number().int().min(2000).max(2100).meta({ example: 2028 }),
 });

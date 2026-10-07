@@ -7,7 +7,7 @@ registry.registerPath({
   tags: ["Health"],
   summary: "Check that the API is up",
   description:
-    "A liveness probe for load balancers, uptime monitors and apps that want to know whether the server is reachable. No Authorization header is needed and the route is not rate limited. It only proves that the server process is running and answering: it does not query the database or any outside service (payments, SMS, email, maps), so a 200 does not mean Postgres is reachable. It always answers 200 with data.status \"ok\"; a stopped or unreachable server simply doesn't answer, so treat a timeout or connection error as unhealthy.",
+    'A liveness probe for load balancers, uptime monitors and apps that want to know whether the server is reachable. No Authorization header is needed and the route is not rate limited. It only proves that the server process is running and answering: it does not query the database or any outside service (payments, SMS, email, maps), so a 200 does not mean Postgres is reachable. It always answers 200 with data.status "ok"; a stopped or unreachable server simply doesn\'t answer, so treat a timeout or connection error as unhealthy.',
   responses: {
     200: successResponse("Service is healthy", z.object({ status: z.literal("ok") })),
   },

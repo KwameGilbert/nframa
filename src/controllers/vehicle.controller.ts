@@ -28,7 +28,8 @@ async function findVehicleFor(req: Request, id: string, action: "read" | "update
 
 const VEHICLE_ACTIVITY = { module: "vehicles", targetType: "vehicle" } as const;
 
-const photoFiles = (req: Request) => (req.files ?? {}) as Partial<Record<string, Express.Multer.File[]>>;
+const photoFiles = (req: Request) =>
+  (req.files ?? {}) as Partial<Record<string, Express.Multer.File[]>>;
 
 function uploadPhoto(vehicleId: string, file: Express.Multer.File) {
   return uploadFile(file.buffer, `vehicles/${vehicleId}`, file.originalname);
@@ -44,12 +45,16 @@ export async function createVehicle(req: Request, res: Response) {
   const files = photoFiles(req);
   const missing = VEHICLE_PHOTO_SIDES.filter((side) => !files[side]?.[0]);
   if (missing.length > 0) {
-    throw AppError.badRequest(`Add a photo of each side of the vehicle; missing: ${missing.join(", ")}`);
+    throw AppError.badRequest(
+      `Add a photo of each side of the vehicle; missing: ${missing.join(", ")}`,
+    );
   }
 
   // The photos go up before the row is written; if anything fails they are taken down again.
   const id = randomUUID();
-  const results = await Promise.allSettled(VEHICLE_PHOTO_SIDES.map((side) => uploadPhoto(id, files[side]![0])));
+  const results = await Promise.allSettled(
+    VEHICLE_PHOTO_SIDES.map((side) => uploadPhoto(id, files[side]![0])),
+  );
   const uploaded = results.map((r) => (r.status === "fulfilled" ? r.value : undefined));
   const failed = results.find((r) => r.status === "rejected");
   if (failed) {
@@ -57,7 +62,9 @@ export async function createVehicle(req: Request, res: Response) {
     throw failed.reason;
   }
   const bySide = (pick: (u: UploadedFile) => string) =>
-    Object.fromEntries(VEHICLE_PHOTO_SIDES.map((side, i) => [side, pick(uploaded[i]!)])) as VehiclePhotos;
+    Object.fromEntries(
+      VEHICLE_PHOTO_SIDES.map((side, i) => [side, pick(uploaded[i]!)]),
+    ) as VehiclePhotos;
 
   let vehicle;
   try {

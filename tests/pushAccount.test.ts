@@ -41,7 +41,9 @@ describe("Push notifications for wallet top-ups", () => {
     });
 
     const notifications = vi.mocked(notifyWallet).mock.calls;
-    const failedCalls = notifications.filter(([uid, event]) => uid === userId && event === "topUpFailed");
+    const failedCalls = notifications.filter(
+      ([uid, event]) => uid === userId && event === "topUpFailed",
+    );
     expect(failedCalls).toHaveLength(1);
     expect(failedCalls[0][2]).toMatchObject({
       amount: 100,
@@ -71,8 +73,7 @@ describe("Push notifications for reviews", () => {
 
     const notifications = vi.mocked(notifyReview).mock.calls;
     const withTip = notifications.filter(
-      ([userId, data]) =>
-        userId === driverId && (data as { tip?: number }).tip === tip,
+      ([userId, data]) => userId === driverId && (data as { tip?: number }).tip === tip,
     );
     expect(withTip).toHaveLength(1);
   });

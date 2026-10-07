@@ -3,10 +3,7 @@ import type { Knex } from "knex";
 import db from "../database/knex.js";
 import { AppError } from "../utils/AppError.js";
 import { BaseModel } from "./BaseModel.js";
-import type {
-  AdminListPayoutMethodsQuery,
-  PayoutFrequency,
-} from "../schemas/payout.schema.js";
+import type { AdminListPayoutMethodsQuery, PayoutFrequency } from "../schemas/payout.schema.js";
 
 export interface PayoutMethod {
   id: string;
@@ -133,7 +130,9 @@ class PayoutMethodModel extends BaseModel<PayoutMethod> {
   async setPrimary(id: string, driverUserId: string) {
     try {
       await db.transaction(async (trx) => {
-        await trx(this.tableName).where({ driverUserId, isPrimary: true }).update({ isPrimary: false });
+        await trx(this.tableName)
+          .where({ driverUserId, isPrimary: true })
+          .update({ isPrimary: false });
         await trx(this.tableName)
           .where({ id, driverUserId })
           .update({ isPrimary: true, updatedAt: new Date() });
@@ -153,7 +152,9 @@ class PayoutMethodModel extends BaseModel<PayoutMethod> {
   }
 
   async ensurePrimary(trx: Knex.Transaction, driverUserId: string): Promise<void> {
-    const hasPrimary = await trx(this.tableName).where({ driverUserId, isPrimary: true }).first("id");
+    const hasPrimary = await trx(this.tableName)
+      .where({ driverUserId, isPrimary: true })
+      .first("id");
     if (hasPrimary) return;
 
     const newest = await trx(this.tableName)

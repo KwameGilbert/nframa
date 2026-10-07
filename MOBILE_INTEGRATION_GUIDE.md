@@ -1272,10 +1272,10 @@ Content-Type: application/json
 Get the Expo push token from:
 
 ```javascript
-import * as Notifications from 'expo-notifications';
+import * as Notifications from "expo-notifications";
 
 const token = await Notifications.getExpoPushTokenAsync({
-  projectId: 'your-expo-project-id'
+  projectId: "your-expo-project-id",
 });
 ```
 
@@ -1303,10 +1303,10 @@ Authorization: Bearer <accessToken>
 Then subscribe to push notifications:
 
 ```javascript
-const registration = await navigator.serviceWorker.register('service-worker.js');
+const registration = await navigator.serviceWorker.register("service-worker.js");
 const subscription = await registration.pushManager.subscribe({
   userVisibleOnly: true,
-  applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
+  applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
 });
 ```
 
@@ -1499,10 +1499,10 @@ Always 200, whether the device was registered or not (security: don't leak wheth
 New notifications arrive in real-time via the `notification:new` event on the user's socket connection. Connect to Socket.IO (see Real-Time Events in SOCKET_KEYS.md) and listen:
 
 ```javascript
-socket.on('notification:new', ({ notification, unreadCount }) => {
+socket.on("notification:new", ({ notification, unreadCount }) => {
   // Update the app's notification badge with unreadCount
   // Display the notification in the inbox
-  console.log('New notification:', notification);
+  console.log("New notification:", notification);
 });
 ```
 
@@ -1542,15 +1542,19 @@ form.append("message", "I was charged GHS 25 twice.");
 form.append("tripId", tripId);
 form.append("attachments", { uri: photo.uri, name: "receipt.jpg", type: "image/jpeg" });
 form.append("attachments", { uri: recording.uri, name: "voice.m4a", type: "audio/x-m4a" }); // voice note
-await fetch(`${BASE_URL}/support/tickets`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+await fetch(`${BASE_URL}/support/tickets`, {
+  method: "POST",
+  headers: { Authorization: `Bearer ${token}` },
+  body: form,
+});
 ```
 
-| Kind | Types | Max size |
-| --- | --- | --- |
-| Image | JPEG, PNG, WEBP, HEIC (stored as JPEG) | 10 MB |
-| Video | MP4, MOV, WEBM, 3GP | 50 MB |
-| Audio (voice notes) | M4A, AAC, MP3, OGG, WEBM, WAV | 16 MB |
-| Document | PDF, Word, Excel, TXT, CSV | 10 MB |
+| Kind                | Types                                  | Max size |
+| ------------------- | -------------------------------------- | -------- |
+| Image               | JPEG, PNG, WEBP, HEIC (stored as JPEG) | 10 MB    |
+| Video               | MP4, MOV, WEBM, 3GP                    | 50 MB    |
+| Audio (voice notes) | M4A, AAC, MP3, OGG, WEBM, WAV          | 16 MB    |
+| Document            | PDF, Word, Excel, TXT, CSV             | 10 MB    |
 
 Each attachment comes back as `{ id, kind, fileUrl, thumbnailUrl (video poster), mimeType, fileName, sizeBytes, durationSeconds, width, height }`.
 
@@ -1558,13 +1562,13 @@ Each attachment comes back as `{ id, kind, fileUrl, thumbnailUrl (video poster),
 
 `GET /support/tickets` (newest activity first; filter with repeated `status`, `tripId`, or search with `q`): each ticket carries `unreadCount` and `lastMessage` (`{ from: "user" | "support", preview, attachmentKind, deleted }`) for the inbox row. With `q`, results come best match first and each carries `matchedMessage` (`{ seq, snippet }`): open the chat with `around=<seq>` to jump to it.
 
-| Status | Meaning for the user |
-| --- | --- |
-| `open` | Waiting for an agent |
-| `inProgress` | An agent is on it |
-| `awaitingUser` | Support replied and is waiting for you (resolves by itself after 5 days of silence) |
-| `resolved` | Done. A reply within 7 days (`reopenUntil`) reopens it; you can rate the help |
-| `closed` | Final. `canReply` is false: offer "Open a new ticket" and pass this one as `relatedTicketId` |
+| Status         | Meaning for the user                                                                         |
+| -------------- | -------------------------------------------------------------------------------------------- |
+| `open`         | Waiting for an agent                                                                         |
+| `inProgress`   | An agent is on it                                                                            |
+| `awaitingUser` | Support replied and is waiting for you (resolves by itself after 5 days of silence)          |
+| `resolved`     | Done. A reply within 7 days (`reopenUntil`) reopens it; you can rate the help                |
+| `closed`       | Final. `canReply` is false: offer "Open a new ticket" and pass this one as `relatedTicketId` |
 
 `POST /support/tickets/{id}/resolve` ("My problem is solved") and `POST /support/tickets/{id}/rate` (`{ rating: 1-5, comment? }`, once per resolution).
 
@@ -1627,8 +1631,8 @@ All limits are **per 15-minute window** and apply in addition to a generous per-
 | `POST /auth/refresh`                                | 300 per IP                                                               | Every request        |
 | `POST /trips`                                       | 30 per account                                                           | Every request        |
 | `GET /trips`, `GET /trips/available`                | 300 per account                                                          | Every request        |
-| `POST /trips/{id}/accept`                          | 120 per account                                                          | Every request        |
-| `POST /trips/{id}/decline`                         | 120 per account                                                          | Every request        |
+| `POST /trips/{id}/accept`                           | 120 per account                                                          | Every request        |
+| `POST /trips/{id}/decline`                          | 120 per account                                                          | Every request        |
 | `GET /commutes/{id}/trips`                          | 120 per account                                                          | Every request        |
 | `PUT /trips/{id}/location`                          | 300 per account                                                          | Every request        |
 | `POST /trips/board`                                 | 60 per account                                                           | Every request        |
@@ -1649,57 +1653,57 @@ Standard `RateLimit` / `RateLimit-Policy` response headers (draft-8 format) tell
 
 ## Quick Reference: All Endpoints Used Above
 
-| Method | Path                                        | Auth       | Purpose                                              |
-| ------ | ------------------------------------------- | ---------- | ---------------------------------------------------- |
-| POST   | `/auth/login/otp`                           | —          | Request a sign-up/sign-in code                       |
-| POST   | `/auth/login/verify`                        | —          | Verify code, get tokens (creates account if new)     |
-| POST   | `/auth/login`                               | —          | Email + password sign-in (accounts with a password)  |
-| POST   | `/auth/refresh`                             | —          | Exchange refresh token for a new pair                |
-| GET    | `/auth/me`                                  | ✓          | Get the signed-in account                            |
-| POST   | `/auth/logout`                              | —          | Revoke a refresh token                               |
-| POST   | `/auth/password/forgot`                     | —          | Email a reset code                                   |
-| POST   | `/auth/password/reset`                      | —          | Set new password with the reset code                 |
-| POST   | `/auth/password/change`                     | ✓          | Change password while signed in                      |
-| POST   | `/rider`                                    | ✓          | Create rider profile                                 |
-| GET    | `/rider/{userId}`                           | ✓          | Get rider profile                                    |
-| POST   | `/driver`                                   | ✓          | Create driver profile                                |
-| GET    | `/driver/{userId}`                          | ✓          | Get driver profile (with vehicles/documents)         |
-| PATCH  | `/driver/{userId}`                          | ✓          | Update driver profile / go online                    |
-| POST   | `/vehicles`                                 | ✓          | Register a vehicle (multipart: details + `front`, `back`, `left`, `right` photos, all required) |
-| PUT    | `/vehicles/{id}/photos/{side}`              | ✓          | Replace one photo (multipart `photo`)                |
-| PATCH  | `/users/{id}`                               | ✓          | Update account details (fullName, dateOfBirth, etc)  |
-| GET    | `/trips/available`                          | ✓ (rider)  | Find commutes near a point on a date                 |
-| POST   | `/trips`                                    | ✓ (rider)  | Request a seat on a commute                          |
-| GET    | `/trips`                                    | ✓          | List my trips (rider) or my commutes' trips (driver) |
-| GET    | `/trips/{id}`                               | ✓          | Get a trip                                           |
-| POST   | `/trips/{id}/cancel`                        | ✓          | Cancel a trip                                        |
-| PATCH  | `/trips/{id}/accept`                        | ✓ (driver) | Accept a pending request                             |
-| PATCH  | `/trips/{id}/decline`                       | ✓ (driver) | Decline a pending request                            |
-| GET    | `/commutes/{id}/trips`                      | ✓ (driver) | A commute's trips on a date (manifest)               |
-| PUT    | `/trips/{id}/location`                      | ✓ (rider)  | Share the rider's location on the day                |
-| POST   | `/trips/{id}/arrived`                       | ✓ (driver) | Mark arrival at the pickup                           |
-| POST   | `/trips/board`                              | ✓ (driver) | Scan the rider's boarding code                       |
-| POST   | `/trips/{id}/complete`                      | ✓ (driver) | Complete a boarded trip                              |
-| POST   | `/trips/{id}/no-show`                       | ✓ (driver) | Report a rider who didn't show up                    |
-| PATCH  | `/commutes/{id}`                            | ✓ (driver) | Edit or pause a commute                              |
-| GET    | `/document-types`                           | ✓          | List document types to upload                        |
-| POST   | `/driver/verification/{documentTypeId}`     | ✓          | Upload a document                                    |
-| GET    | `/driver/verification`                      | ✓          | Get own documents with history                       |
-| GET    | `/verification/{documentId}/history`        | ✓          | Get one document's history                           |
-| DELETE | `/verification/{documentId}`                | ✓          | Delete (soft) a document                             |
-| GET    | `/admin/driver/verification/pending`        | ✓ (admin)  | List documents awaiting review                       |
-| PATCH  | `/admin/verification/document/{documentId}` | ✓ (admin)  | Review a document                                    |
-| PATCH  | `/admin/driver/{userId}/verification`       | ✓ (admin)  | Approve/change driver status                         |
-| GET    | `/support/categories`                       | user       | Categories to open a ticket under                    |
-| POST   | `/support/tickets`                          | user       | Open a ticket (JSON or multipart with files)         |
-| GET    | `/support/tickets`                          | user       | My tickets (status filter, search `q`)               |
-| GET    | `/support/tickets/{id}`                     | user       | One ticket (`canReply`, `reopenUntil`)               |
-| GET    | `/support/tickets/{id}/messages`            | user       | The chat, paged by `seq`                             |
-| POST   | `/support/tickets/{id}/messages`            | user       | Send a message (JSON or multipart)                   |
-| DELETE | `/support/tickets/{id}/messages/{messageId}`| user       | Delete my message (15 minutes)                       |
-| POST   | `/support/tickets/{id}/read`                | user       | Mark the chat read                                   |
-| POST   | `/support/tickets/{id}/resolve`             | user       | Mark my ticket resolved                              |
-| POST   | `/support/tickets/{id}/rate`                | user       | Rate the help (1 to 5)                               |
+| Method | Path                                         | Auth       | Purpose                                                                                         |
+| ------ | -------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------- |
+| POST   | `/auth/login/otp`                            | —          | Request a sign-up/sign-in code                                                                  |
+| POST   | `/auth/login/verify`                         | —          | Verify code, get tokens (creates account if new)                                                |
+| POST   | `/auth/login`                                | —          | Email + password sign-in (accounts with a password)                                             |
+| POST   | `/auth/refresh`                              | —          | Exchange refresh token for a new pair                                                           |
+| GET    | `/auth/me`                                   | ✓          | Get the signed-in account                                                                       |
+| POST   | `/auth/logout`                               | —          | Revoke a refresh token                                                                          |
+| POST   | `/auth/password/forgot`                      | —          | Email a reset code                                                                              |
+| POST   | `/auth/password/reset`                       | —          | Set new password with the reset code                                                            |
+| POST   | `/auth/password/change`                      | ✓          | Change password while signed in                                                                 |
+| POST   | `/rider`                                     | ✓          | Create rider profile                                                                            |
+| GET    | `/rider/{userId}`                            | ✓          | Get rider profile                                                                               |
+| POST   | `/driver`                                    | ✓          | Create driver profile                                                                           |
+| GET    | `/driver/{userId}`                           | ✓          | Get driver profile (with vehicles/documents)                                                    |
+| PATCH  | `/driver/{userId}`                           | ✓          | Update driver profile / go online                                                               |
+| POST   | `/vehicles`                                  | ✓          | Register a vehicle (multipart: details + `front`, `back`, `left`, `right` photos, all required) |
+| PUT    | `/vehicles/{id}/photos/{side}`               | ✓          | Replace one photo (multipart `photo`)                                                           |
+| PATCH  | `/users/{id}`                                | ✓          | Update account details (fullName, dateOfBirth, etc)                                             |
+| GET    | `/trips/available`                           | ✓ (rider)  | Find commutes near a point on a date                                                            |
+| POST   | `/trips`                                     | ✓ (rider)  | Request a seat on a commute                                                                     |
+| GET    | `/trips`                                     | ✓          | List my trips (rider) or my commutes' trips (driver)                                            |
+| GET    | `/trips/{id}`                                | ✓          | Get a trip                                                                                      |
+| POST   | `/trips/{id}/cancel`                         | ✓          | Cancel a trip                                                                                   |
+| PATCH  | `/trips/{id}/accept`                         | ✓ (driver) | Accept a pending request                                                                        |
+| PATCH  | `/trips/{id}/decline`                        | ✓ (driver) | Decline a pending request                                                                       |
+| GET    | `/commutes/{id}/trips`                       | ✓ (driver) | A commute's trips on a date (manifest)                                                          |
+| PUT    | `/trips/{id}/location`                       | ✓ (rider)  | Share the rider's location on the day                                                           |
+| POST   | `/trips/{id}/arrived`                        | ✓ (driver) | Mark arrival at the pickup                                                                      |
+| POST   | `/trips/board`                               | ✓ (driver) | Scan the rider's boarding code                                                                  |
+| POST   | `/trips/{id}/complete`                       | ✓ (driver) | Complete a boarded trip                                                                         |
+| POST   | `/trips/{id}/no-show`                        | ✓ (driver) | Report a rider who didn't show up                                                               |
+| PATCH  | `/commutes/{id}`                             | ✓ (driver) | Edit or pause a commute                                                                         |
+| GET    | `/document-types`                            | ✓          | List document types to upload                                                                   |
+| POST   | `/driver/verification/{documentTypeId}`      | ✓          | Upload a document                                                                               |
+| GET    | `/driver/verification`                       | ✓          | Get own documents with history                                                                  |
+| GET    | `/verification/{documentId}/history`         | ✓          | Get one document's history                                                                      |
+| DELETE | `/verification/{documentId}`                 | ✓          | Delete (soft) a document                                                                        |
+| GET    | `/admin/driver/verification/pending`         | ✓ (admin)  | List documents awaiting review                                                                  |
+| PATCH  | `/admin/verification/document/{documentId}`  | ✓ (admin)  | Review a document                                                                               |
+| PATCH  | `/admin/driver/{userId}/verification`        | ✓ (admin)  | Approve/change driver status                                                                    |
+| GET    | `/support/categories`                        | user       | Categories to open a ticket under                                                               |
+| POST   | `/support/tickets`                           | user       | Open a ticket (JSON or multipart with files)                                                    |
+| GET    | `/support/tickets`                           | user       | My tickets (status filter, search `q`)                                                          |
+| GET    | `/support/tickets/{id}`                      | user       | One ticket (`canReply`, `reopenUntil`)                                                          |
+| GET    | `/support/tickets/{id}/messages`             | user       | The chat, paged by `seq`                                                                        |
+| POST   | `/support/tickets/{id}/messages`             | user       | Send a message (JSON or multipart)                                                              |
+| DELETE | `/support/tickets/{id}/messages/{messageId}` | user       | Delete my message (15 minutes)                                                                  |
+| POST   | `/support/tickets/{id}/read`                 | user       | Mark the chat read                                                                              |
+| POST   | `/support/tickets/{id}/resolve`              | user       | Mark my ticket resolved                                                                         |
+| POST   | `/support/tickets/{id}/rate`                 | user       | Rate the help (1 to 5)                                                                          |
 
 ---
 

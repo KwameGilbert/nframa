@@ -3,7 +3,11 @@ import type { Request, Response } from "express";
 import { hasPermission } from "../middlewares/authorize.js";
 import { rolePermissionModel } from "../models/rolePermission.model.js";
 import { supportMessageModel } from "../models/supportMessage.model.js";
-import { supportTicketModel, type Outcome, type SupportTicket } from "../models/supportTicket.model.js";
+import {
+  supportTicketModel,
+  type Outcome,
+  type SupportTicket,
+} from "../models/supportTicket.model.js";
 import { userModel } from "../models/user.model.js";
 import { logActivity } from "../services/activityLog.service.js";
 import { notifySupport } from "../services/notificationEvents.service.js";
@@ -59,7 +63,11 @@ export async function adminListTickets(req: Request, res: Response) {
   ]);
   const [activity, matches] = await Promise.all([
     supportTicketModel.activity(items, "staff"),
-    supportTicketModel.matchedMessages(items.map((t) => t.id), query.q, true),
+    supportTicketModel.matchedMessages(
+      items.map((t) => t.id),
+      query.q,
+      true,
+    ),
   ]);
 
   sendSuccess(res, "Support tickets retrieved successfully", {
@@ -88,7 +96,11 @@ export async function adminGetTicket(req: Request, res: Response) {
     supportTicketModel.staffDetail(ticket),
   ]);
 
-  sendSuccess(res, "Support ticket retrieved successfully", staffTicketDetailView(ticket, activity.get(id), detail));
+  sendSuccess(
+    res,
+    "Support ticket retrieved successfully",
+    staffTicketDetailView(ticket, activity.get(id), detail),
+  );
 
   // Reading a ticket shows a person's phone, email and conversation, so it is on the record.
   logActivity(req, {
@@ -139,7 +151,11 @@ export async function adminCreateTicket(req: Request, res: Response) {
   const { ticket } = created;
   const activity = await supportTicketModel.activity([ticket], "staff");
 
-  sendCreated(res, "Support ticket created successfully", staffTicketView(ticket, activity.get(id)));
+  sendCreated(
+    res,
+    "Support ticket created successfully",
+    staffTicketView(ticket, activity.get(id)),
+  );
 
   emitToSupportDesk("support:ticketCreated", { ticket: staffTicketView(ticket) });
   emitToUser(ticket.userId, "support:ticketCreated", { ticket: userTicketView(ticket) });
@@ -161,13 +177,17 @@ export async function adminUpdateTicket(req: Request, res: Response) {
   await supportTicketModel.sweep({ id });
   const before = await supportTicketModel.findById(id);
   if (!before) throw ticketNotFound(id);
-  const { ticket, events } = unwrap(id, await supportTicketModel.changeByStaff(id, adminIdOf(req), input));
+  const { ticket, events } = unwrap(
+    id,
+    await supportTicketModel.changeByStaff(id, adminIdOf(req), input),
+  );
 
   sendSuccess(res, "Support ticket updated successfully", staffTicketView(ticket));
 
   if (events.length === 0) return;
   announceTicket(ticket, events);
-  if (before.status !== ticket.status && !ticket.detachedAt) void notifySupport(ticket.userId, "statusChanged", ticket);
+  if (before.status !== ticket.status && !ticket.detachedAt)
+    void notifySupport(ticket.userId, "statusChanged", ticket);
   logActivity(req, {
     ...TICKET_ACTIVITY,
     action: "support.ticket.update",
@@ -196,7 +216,10 @@ export async function assignTicket(req: Request, res: Response) {
   await supportTicketModel.sweep({ id });
   const { ticket, events } = unwrap(
     id,
-    await supportTicketModel.assign(id, adminId, { id: targetId, fullName: target?.fullName ?? null }),
+    await supportTicketModel.assign(id, adminId, {
+      id: targetId,
+      fullName: target?.fullName ?? null,
+    }),
   );
 
   sendSuccess(res, "Support ticket assigned successfully", staffTicketView(ticket));
@@ -237,7 +260,11 @@ export async function unassignTicket(req: Request, res: Response) {
 
 export async function listAssignees(_req: Request, res: Response) {
   const ids = await rolePermissionModel.adminUserIdsWithPermission("support", "update");
-  sendSuccess(res, "Support agents retrieved successfully", await supportTicketModel.assignees(ids));
+  sendSuccess(
+    res,
+    "Support agents retrieved successfully",
+    await supportTicketModel.assignees(ids),
+  );
 }
 
 // Chat.
@@ -250,7 +277,11 @@ async function staffTicket(req: Request) {
 
 export async function adminListMessages(req: Request, res: Response) {
   const ticket = await staffTicket(req);
-  const page = await supportMessageModel.listPage(ticket.id, false, req.validated.query as ListMessagesQuery);
+  const page = await supportMessageModel.listPage(
+    ticket.id,
+    false,
+    req.validated.query as ListMessagesQuery,
+  );
 
   sendSuccess(res, "Messages retrieved successfully", {
     ...page,
@@ -290,7 +321,11 @@ export async function adminDeleteMessage(req: Request, res: Response) {
   const { messageId } = req.validated.params as { messageId: string };
   const adminId = adminIdOf(req);
   const canModerate = await hasPermission(req, "support", "delete");
-  const message = await deleteTicketMessage(ticket, messageId, { userId: adminId, side: "staff", canModerate });
+  const message = await deleteTicketMessage(ticket, messageId, {
+    userId: adminId,
+    side: "staff",
+    canModerate,
+  });
 
   sendSuccess(res, "Message deleted successfully", staffMessageView(message));
 

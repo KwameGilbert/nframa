@@ -12,7 +12,11 @@ export interface WebPushSubscription {
 export type WebPushResult = { ok: true } | { ok: false; gone: boolean };
 
 function vapid() {
-  const { VAPID_PUBLIC_KEY: publicKey, VAPID_PRIVATE_KEY: privateKey, VAPID_SUBJECT: subject } = process.env;
+  const {
+    VAPID_PUBLIC_KEY: publicKey,
+    VAPID_PRIVATE_KEY: privateKey,
+    VAPID_SUBJECT: subject,
+  } = process.env;
   return publicKey && privateKey && subject ? { publicKey, privateKey, subject } : undefined;
 }
 
@@ -39,7 +43,11 @@ export async function sendWebPush(
     await webpush.sendNotification(subscription, JSON.stringify(payload), {
       TTL: ttl,
       urgency,
-      vapidDetails: { subject: keys.subject, publicKey: keys.publicKey, privateKey: keys.privateKey },
+      vapidDetails: {
+        subject: keys.subject,
+        publicKey: keys.publicKey,
+        privateKey: keys.privateKey,
+      },
     });
     return { ok: true };
   } catch (err) {

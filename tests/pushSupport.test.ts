@@ -36,14 +36,23 @@ beforeAll(async () => {
 // The pushes a device got about one ticket, after every pending delivery has finished.
 async function pushes(device: Device, ticketId: string) {
   await flushNotifications();
-  return expoPushesTo(device.token).filter((m) => (m.data as { ticketId?: string })?.ticketId === ticketId);
+  return expoPushesTo(device.token).filter(
+    (m) => (m.data as { ticketId?: string })?.ticketId === ticketId,
+  );
 }
-const types = (messages: Awaited<ReturnType<typeof pushes>>) => messages.map((m) => (m.data as { type: string }).type);
+const types = (messages: Awaited<ReturnType<typeof pushes>>) =>
+  messages.map((m) => (m.data as { type: string }).type);
 
 const staffReply = (who: Session, id: string) =>
-  api.post(`/admin/support/tickets/${id}/messages`).set(auth(who.token)).send({ body: `Re ${uniqueWord()}` });
+  api
+    .post(`/admin/support/tickets/${id}/messages`)
+    .set(auth(who.token))
+    .send({ body: `Re ${uniqueWord()}` });
 const userReply = (id: string) =>
-  api.post(`/support/tickets/${id}/messages`).set(auth(rider.token)).send({ body: `Hi ${uniqueWord()}` });
+  api
+    .post(`/support/tickets/${id}/messages`)
+    .set(auth(rider.token))
+    .send({ body: `Hi ${uniqueWord()}` });
 
 describe("chat pushes", () => {
   it("pushes a support reply once per unread run, and keeps it out of the inbox", async () => {
@@ -57,12 +66,18 @@ describe("chat pushes", () => {
     expectStatus(await staffReply(agent, ticket.id), 201);
     const all = await pushes(devices.rider, ticket.id);
     expect(types(all)).toEqual(["support.reply", "support.reply"]);
-    expect(all[0]).toMatchObject({ title: "Nframa Support replied", data: { ticketId: ticket.id } });
+    expect(all[0]).toMatchObject({
+      title: "Nframa Support replied",
+      data: { ticketId: ticket.id },
+    });
     expect((await inboxOf(rider.userId)).filter((n) => n.type === "support.reply")).toEqual([]);
   });
 
   it("pushes the assignee when the user replies, once per unread run", async () => {
-    const ticket = await seedTicket(rider.userId, normal.id, { status: "inProgress", assignedAdminId: agent2.userId });
+    const ticket = await seedTicket(rider.userId, normal.id, {
+      status: "inProgress",
+      assignedAdminId: agent2.userId,
+    });
 
     expectStatus(await userReply(ticket.id), 201);
     expectStatus(await userReply(ticket.id), 201);
@@ -91,16 +106,25 @@ describe("ticket pushes", () => {
     expectStatus(await patch({ status: "resolved" }), 200);
     expect(types(await pushes(devices.rider, ticket.id))).toEqual(["support.statusChanged"]);
     const [row] = (await inboxOf(rider.userId)).filter((n) => n.data.ticketId === ticket.id);
-    expect(row).toMatchObject({ type: "support.statusChanged", title: "Your support ticket was resolved" });
+    expect(row).toMatchObject({
+      type: "support.statusChanged",
+      title: "Your support ticket was resolved",
+    });
   });
 
   it("tells an agent when someone else assigns them, never when they take it themselves", async () => {
     const mine = await seedTicket(rider.userId, normal.id);
     const given = await seedTicket(rider.userId, normal.id);
 
-    expectStatus(await api.post(`/admin/support/tickets/${mine.id}/assign`).set(auth(agent.token)), 200);
     expectStatus(
-      await api.post(`/admin/support/tickets/${given.id}/assign`).set(auth(agent.token)).send({ adminId: agent2.userId }),
+      await api.post(`/admin/support/tickets/${mine.id}/assign`).set(auth(agent.token)),
+      200,
+    );
+    expectStatus(
+      await api
+        .post(`/admin/support/tickets/${given.id}/assign`)
+        .set(auth(agent.token))
+        .send({ adminId: agent2.userId }),
       200,
     );
     expect(await pushes(devices.agent, mine.id)).toEqual([]);
@@ -118,7 +142,9 @@ describe("ticket pushes", () => {
     trackForCleanup("supportTickets", { id: res.body.data.id });
 
     expect(types(await pushes(devices.rider, res.body.data.id))).toEqual(["support.openedForYou"]);
-    expect((await inboxOf(rider.userId)).some((n) => n.data.ticketId === res.body.data.id)).toBe(true);
+    expect((await inboxOf(rider.userId)).some((n) => n.data.ticketId === res.body.data.id)).toBe(
+      true,
+    );
   });
 
   it("alerts the support desk for urgent tickets only, and only staff who can read support", async () => {
@@ -126,7 +152,11 @@ describe("ticket pushes", () => {
       const res = await api
         .post("/support/tickets")
         .set(auth(rider.token))
-        .send({ categoryId, subject: `Secret ${uniqueWord()}`, message: `Private ${uniqueWord()}` });
+        .send({
+          categoryId,
+          subject: `Secret ${uniqueWord()}`,
+          message: `Private ${uniqueWord()}`,
+        });
       expectStatus(res, 201);
       trackForCleanup("supportTickets", { id: res.body.data.id });
       return res.body.data as { id: string; code: string; subject: string };
@@ -136,7 +166,10 @@ describe("ticket pushes", () => {
 
     const alerts = await pushes(devices.agent, hot.id);
     expect(alerts).toEqual([
-      expect.objectContaining({ title: "New urgent support ticket", data: { ticketId: hot.id, type: "support.deskAlert" } }),
+      expect.objectContaining({
+        title: "New urgent support ticket",
+        data: { ticketId: hot.id, type: "support.deskAlert" },
+      }),
     ]);
     expect(await pushes(devices.outsider, hot.id)).toEqual([]);
     expect(await pushes(devices.agent, calm.id)).toEqual([]);

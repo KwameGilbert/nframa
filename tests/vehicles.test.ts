@@ -61,20 +61,31 @@ describe("POST /vehicles", () => {
     const partial = await postVehicle(driver.token, details, ["front", "back"]);
     expectError(partial, 400, "Add a photo of each side of the vehicle; missing: left, right");
     const json = await api.post("/vehicles").set(auth(driver.token)).send(details);
-    expectError(json, 400, "Add a photo of each side of the vehicle; missing: front, back, left, right");
+    expectError(
+      json,
+      400,
+      "Add a photo of each side of the vehicle; missing: front, back, left, right",
+    );
     const extra = await postVehicle(driver.token, details).attach("roof", Buffer.from("x"), {
       filename: "roof.jpg",
       contentType: "image/jpeg",
     });
     expectError(extra, 400, "Send one image under each of front, back, left, right");
-    expect(vi.mocked(uploadFile)).not.toHaveBeenCalledWith(expect.anything(), expect.anything(), "roof.jpg");
+    expect(vi.mocked(uploadFile)).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "roof.jpg",
+    );
   });
 
   it("keeps plate numbers unique, deleting the photos it stored", async () => {
     const { driver, vehicle } = await driverWithVehicle();
     vi.mocked(deleteFile).mockClear();
 
-    const res = await postVehicle(driver.token, { ...(await newVehicle(driver.userId)), plate: vehicle.plate });
+    const res = await postVehicle(driver.token, {
+      ...(await newVehicle(driver.userId)),
+      plate: vehicle.plate,
+    });
 
     expectStatus(res, 409);
     expect(vi.mocked(deleteFile)).toHaveBeenCalledTimes(4);
@@ -113,7 +124,10 @@ describe("PUT /vehicles/:id/photos/:side", () => {
     api
       .put(`/vehicles/${id}/photos/${side}`)
       .set(auth(token))
-      .attach("photo", Buffer.from("new photo"), { filename: "new-left.jpg", contentType: "image/jpeg" });
+      .attach("photo", Buffer.from("new photo"), {
+        filename: "new-left.jpg",
+        contentType: "image/jpeg",
+      });
 
   it("swaps one side's photo and deletes the old file", async () => {
     const { driver, vehicle } = await driverWithVehicle();

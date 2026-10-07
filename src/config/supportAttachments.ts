@@ -27,9 +27,15 @@ export const ATTACHMENT_TYPES: Record<string, { kind: AttachmentKind; ext: strin
   "audio/x-wav": { kind: "audio", ext: "wav" },
   "application/pdf": { kind: "document", ext: "pdf" },
   "application/msword": { kind: "document", ext: "doc" },
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { kind: "document", ext: "docx" },
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+    kind: "document",
+    ext: "docx",
+  },
   "application/vnd.ms-excel": { kind: "document", ext: "xls" },
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { kind: "document", ext: "xlsx" },
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+    kind: "document",
+    ext: "xlsx",
+  },
   "text/plain": { kind: "document", ext: "txt" },
   "text/csv": { kind: "document", ext: "csv" },
 };

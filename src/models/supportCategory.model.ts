@@ -46,7 +46,12 @@ class SupportCategoryModel extends BaseModel<SupportCategory> {
 
   async listWithCounts(id?: string): Promise<AdminSupportCategory[]> {
     const query = db("supportCategories as c")
-      .select("c.*", db.raw(`(SELECT count(*)::int FROM "supportTickets" t WHERE t."categoryId" = c.id) AS "ticketCount"`))
+      .select(
+        "c.*",
+        db.raw(
+          `(SELECT count(*)::int FROM "supportTickets" t WHERE t."categoryId" = c.id) AS "ticketCount"`,
+        ),
+      )
       .orderBy([
         { column: "c.sortOrder", order: "asc" },
         { column: "c.name", order: "asc" },

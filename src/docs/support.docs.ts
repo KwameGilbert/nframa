@@ -36,8 +36,7 @@ const NOT_FOUND = errorResponse(
   "No such ticket of yours",
   "Support ticket not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
 );
-const OWN_ONLY =
-  "Only the person who opened a ticket can see or act on it; anyone else gets 404.";
+const OWN_ONLY = "Only the person who opened a ticket can see or act on it; anyone else gets 404.";
 const SWEEP =
   "Before answering, a ticket that has waited on your reply for support.autoResolveDays (default 5) is resolved, and one resolved more than support.reopenWindowDays (default 7) ago is closed.";
 
@@ -143,10 +142,7 @@ registry.registerPath({
     401: unauthorized,
     403: ONLY_USERS,
     404: NOT_FOUND,
-    409: errorResponse(
-      "Not resolved yet, or already rated",
-      "You have already rated this ticket",
-    ),
+    409: errorResponse("Not resolved yet, or already rated", "You have already rated this ticket"),
     429: rateLimitedResponse,
   },
 });
@@ -255,7 +251,10 @@ registry.registerPath({
   },
   responses: {
     200: successResponse("Support ticket updated successfully", staffTicketResponseSchema),
-    400: errorResponse("Validation error, or an inactive category", "That support category isn't available"),
+    400: errorResponse(
+      "Validation error, or an inactive category",
+      "That support category isn't available",
+    ),
     401: unauthorized,
     403: errorResponse("Missing permission: update on support"),
     404: STAFF_NOT_FOUND,
@@ -276,7 +275,10 @@ registry.registerPath({
   },
   responses: {
     200: successResponse("Support ticket assigned successfully", staffTicketResponseSchema),
-    400: errorResponse("Validation error, or the agent can't take tickets", "That admin can't take support tickets"),
+    400: errorResponse(
+      "Validation error, or the agent can't take tickets",
+      "That admin can't take support tickets",
+    ),
     401: unauthorized,
     403: errorResponse("Missing permission: update on support"),
     404: STAFF_NOT_FOUND,
@@ -304,7 +306,10 @@ registry.registerPath({
 
 // Chat (both sides).
 
-const MESSAGE_NOT_FOUND = errorResponse("No such message on this ticket", "Message not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34");
+const MESSAGE_NOT_FOUND = errorResponse(
+  "No such message on this ticket",
+  "Message not found: 3f2b8c1e-6d4a-4e9b-9a57-1c0d8e2f7b34",
+);
 const PAGING =
   "Paged by seq, oldest first: no cursor gives the latest page; before=<seq> scrolls up, after=<seq> catches up after a reconnect, around=<seq> centres on one message (e.g. a search hit). hasMoreBefore / hasMoreAfter say whether to keep going. attachmentKind lists only messages with that kind of file (a media gallery). readMarkers give each side's last read seq for ticks: the other side has read everything up to its marker. Deduplicate by id when merging pages and live events.";
 const POST_BODY = {
@@ -344,11 +349,17 @@ registry.registerPath({
   request: { params: ticketParamsSchema, body: POST_BODY },
   responses: {
     201: successResponse("Message sent successfully", postedMessageResponseSchema),
-    400: errorResponse("Validation error, no text or file, or a bad reply target", "Write a message or attach a file"),
+    400: errorResponse(
+      "Validation error, no text or file, or a bad reply target",
+      "Write a message or attach a file",
+    ),
     401: unauthorized,
     403: ONLY_USERS,
     404: NOT_FOUND,
-    409: errorResponse("The ticket is closed", "This ticket is closed. Open a new ticket and link it with relatedTicketId"),
+    409: errorResponse(
+      "The ticket is closed",
+      "This ticket is closed. Open a new ticket and link it with relatedTicketId",
+    ),
     429: rateLimitedResponse,
   },
 });
@@ -367,7 +378,10 @@ registry.registerPath({
     401: unauthorized,
     403: errorResponse("Not your message", "You can only delete your own messages"),
     404: MESSAGE_NOT_FOUND,
-    409: errorResponse("Already deleted, or too late", "Messages can only be deleted within 15 minutes of sending"),
+    409: errorResponse(
+      "Already deleted, or too late",
+      "Messages can only be deleted within 15 minutes of sending",
+    ),
     429: rateLimitedResponse,
   },
 });
@@ -417,11 +431,17 @@ registry.registerPath({
   request: { params: ticketParamsSchema, body: POST_BODY },
   responses: {
     201: successResponse("Message sent successfully", postedMessageResponseSchema),
-    400: errorResponse("Validation error, no text or file, or a bad reply target", "You can only reply to a message on this ticket"),
+    400: errorResponse(
+      "Validation error, no text or file, or a bad reply target",
+      "You can only reply to a message on this ticket",
+    ),
     401: unauthorized,
     403: errorResponse("Missing permission: update on support"),
     404: STAFF_NOT_FOUND,
-    409: errorResponse("The ticket is closed", "This ticket is closed. Open a new ticket and link it with relatedTicketId"),
+    409: errorResponse(
+      "The ticket is closed",
+      "This ticket is closed. Open a new ticket and link it with relatedTicketId",
+    ),
   },
 });
 
@@ -455,7 +475,10 @@ registry.registerPath({
     200: successResponse("Message deleted successfully"),
     400: errorResponse("Validation error"),
     401: unauthorized,
-    403: errorResponse("Lacks support: update, or not your message without support: delete", "You can only delete your own messages"),
+    403: errorResponse(
+      "Lacks support: update, or not your message without support: delete",
+      "You can only delete your own messages",
+    ),
     404: MESSAGE_NOT_FOUND,
     409: errorResponse("Already deleted, or too late", "This message is already deleted"),
   },

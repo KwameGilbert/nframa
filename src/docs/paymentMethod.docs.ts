@@ -28,7 +28,10 @@ registry.registerPath({
   responses: {
     201: successResponse("Payment method saved successfully", paymentMethodResponseSchema),
     400: errorResponse("Invalid details, or an extra field such as a card number"),
-    403: errorResponse("Admins can't save payment methods", "Only riders and drivers can save payment methods"),
+    403: errorResponse(
+      "Admins can't save payment methods",
+      "Only riders and drivers can save payment methods",
+    ),
     409: errorResponse("Already saved", "You have already saved this payment method"),
   },
 });

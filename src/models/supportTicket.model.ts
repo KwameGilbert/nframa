@@ -62,7 +62,8 @@ export interface TicketActivity {
 
 export type SweepScope = { id: string } | { userId: string } | Record<string, never>;
 
-export type Outcome<T> = { ok: true; ticket: T; events: SupportMessage[] } | { ok: false; reason: string };
+export type Outcome<T> =
+  { ok: true; ticket: T; events: SupportMessage[] } | { ok: false; reason: string };
 
 export const LINKS = {
   tripId: { table: "trips", owner: ["riderUserId", "driverUserId"], label: "Trip" },
@@ -151,7 +152,8 @@ function applyStaffFilters(q: Knex.QueryBuilder, query: AdminListTicketsQuery, a
     else q.where((w) => w.whereNull("t.lastMessageSide").orWhere("t.lastMessageSide", "staff"));
   }
   if (query.from) q.where("t.createdAt", ">=", new Date(`${query.from}T00:00:00Z`));
-  if (query.to) q.where("t.createdAt", "<", new Date(new Date(`${query.to}T00:00:00Z`).getTime() + 86_400_000));
+  if (query.to)
+    q.where("t.createdAt", "<", new Date(new Date(`${query.to}T00:00:00Z`).getTime() + 86_400_000));
   return q;
 }
 
@@ -204,7 +206,9 @@ function applySort(q: Knex.QueryBuilder, sort: AdminListTicketsQuery["sort"]) {
 export const supportTicketModel = {
   // The ticket, its opening events and the first message, all or nothing. The random code can collide; the whole
   // transaction is retried with a new one.
-  async create(data: CreateTicketData): Promise<{ ticket: SupportTicket; events: SupportMessage[] }> {
+  async create(
+    data: CreateTicketData,
+  ): Promise<{ ticket: SupportTicket; events: SupportMessage[] }> {
     const { body, attachments, onBehalf, ...ticket } = data;
     const side = onBehalf ? "staff" : "user";
     const actorId = onBehalf?.adminId ?? ticket.userId;
@@ -241,7 +245,11 @@ export const supportTicketModel = {
                 side,
                 userId: actorId,
                 internal: true,
-                data: { adminId: onBehalf.adminId, adminName: onBehalf.adminName, byAdminId: onBehalf.adminId },
+                data: {
+                  adminId: onBehalf.adminId,
+                  adminName: onBehalf.adminName,
+                  byAdminId: onBehalf.adminId,
+                },
               }),
             );
           }
@@ -300,7 +308,9 @@ export const supportTicketModel = {
     const search = searchOf(base, query.q, false);
 
     return page(base, query, (q) =>
-      search ? search.byScore(q) : q.orderBy([{ column: "t.lastMessageAt", order: "desc" }, { column: "t.id" }]),
+      search
+        ? search.byScore(q)
+        : q.orderBy([{ column: "t.lastMessageAt", order: "desc" }, { column: "t.id" }]),
     );
   },
 
@@ -316,7 +326,10 @@ export const supportTicketModel = {
 
   // For search results: per ticket, the latest message that matched, as plain text around the match.
   async matchedMessages(ids: string[], q: string | undefined, staff: boolean) {
-    const matches = new Map<string, { id: string; seq: number; snippet: string; internal: boolean; createdAt: Date }>();
+    const matches = new Map<
+      string,
+      { id: string; seq: number; snippet: string; internal: boolean; createdAt: Date }
+    >();
     if (!q || ids.length === 0) return matches;
     const { tsquery } = searchTerms(q);
     const query = db("supportTicketMessages as m")
@@ -349,20 +362,37 @@ export const supportTicketModel = {
         db.raw(`count(*) FILTER (WHERE "status" = 'awaitingUser')::int AS "awaitingUser"`),
         db.raw(`count(*) FILTER (WHERE "status" = 'resolved')::int AS "resolved"`),
         db.raw(`count(*) FILTER (WHERE "status" = 'closed')::int AS "closed"`),
-        db.raw(`count(*) FILTER (WHERE "status" IN ${ACTIVE_SQL} AND "assignedAdminId" IS NULL)::int AS "unassigned"`),
-        db.raw(`count(*) FILTER (WHERE "status" IN ${ACTIVE_SQL} AND "assignedAdminId" = ?)::int AS "mine"`, [adminId]),
-        db.raw(`count(*) FILTER (WHERE "status" IN ${ACTIVE_SQL} AND "lastMessageSide" = 'user')::int AS "needsReply"`),
+        db.raw(
+          `count(*) FILTER (WHERE "status" IN ${ACTIVE_SQL} AND "assignedAdminId" IS NULL)::int AS "unassigned"`,
+        ),
+        db.raw(
+          `count(*) FILTER (WHERE "status" IN ${ACTIVE_SQL} AND "assignedAdminId" = ?)::int AS "mine"`,
+          [adminId],
+        ),
+        db.raw(
+          `count(*) FILTER (WHERE "status" IN ${ACTIVE_SQL} AND "lastMessageSide" = 'user')::int AS "needsReply"`,
+        ),
       )
       .first();
     return row as Record<
-      "open" | "inProgress" | "awaitingUser" | "resolved" | "closed" | "unassigned" | "mine" | "needsReply",
+      | "open"
+      | "inProgress"
+      | "awaitingUser"
+      | "resolved"
+      | "closed"
+      | "unassigned"
+      | "mine"
+      | "needsReply",
       number
     >;
   },
 
   // Per ticket: messages from the other side the viewer hasn't read, and the last message the viewer may see. A user
   // never sees notes; staff count user messages against their shared read marker.
-  async activity(tickets: Pick<SupportTicket, "id">[], viewer: Viewer): Promise<Map<string, TicketActivity>> {
+  async activity(
+    tickets: Pick<SupportTicket, "id">[],
+    viewer: Viewer,
+  ): Promise<Map<string, TicketActivity>> {
     const ids = tickets.map((t) => t.id);
     const activity = new Map<string, TicketActivity>(
       ids.map((id) => [id, { unreadCount: 0, lastMessage: null }]),
@@ -374,7 +404,16 @@ export const supportTicketModel = {
       .distinctOn("ticketId")
       .whereIn("ticketId", ids)
       .orderBy([{ column: "ticketId" }, { column: "seq", order: "desc" }])
-      .select("id", "ticketId", "senderSide", "kind", "body", "attachments", "deletedAt", "createdAt");
+      .select(
+        "id",
+        "ticketId",
+        "senderSide",
+        "kind",
+        "body",
+        "attachments",
+        "deletedAt",
+        "createdAt",
+      );
     if (viewer === "user") lastQuery.where({ kind: "message", internal: false });
     else lastQuery.whereIn("kind", ["message", "note"]);
 
@@ -401,7 +440,16 @@ export const supportTicketModel = {
     const [raiser, trip, transaction, payout, relatedTicket, history] = await Promise.all([
       db("users")
         .where({ id: ticket.userId })
-        .first("id", "fullName", "role", "phoneCountryCode", "phoneNumber", "email", "status", "deletedAt"),
+        .first(
+          "id",
+          "fullName",
+          "role",
+          "phoneCountryCode",
+          "phoneNumber",
+          "email",
+          "status",
+          "deletedAt",
+        ),
       ticket.tripId
         ? db("trips")
             .where({ id: ticket.tripId })
@@ -413,10 +461,14 @@ export const supportTicketModel = {
             .first("id", "type", "direction", "amount", "status", "createdAt")
         : undefined,
       ticket.payoutId
-        ? db("payoutHistory").where({ id: ticket.payoutId }).first("id", "amount", "status", "createdAt")
+        ? db("payoutHistory")
+            .where({ id: ticket.payoutId })
+            .first("id", "amount", "status", "createdAt")
         : undefined,
       ticket.relatedTicketId
-        ? db("supportTickets").where({ id: ticket.relatedTicketId }).first("id", "code", "subject", "status")
+        ? db("supportTickets")
+            .where({ id: ticket.relatedTicketId })
+            .first("id", "code", "subject", "status")
         : undefined,
       db("supportTickets")
         .where({ userId: ticket.userId })
@@ -432,7 +484,10 @@ export const supportTicketModel = {
   // past support.reopenWindowDays closes. Run before anything reads or writes tickets. Each rule is one statement,
   // the status change and its timeline event together.
   async sweep(scope: SweepScope, trx: Knex | Knex.Transaction = db): Promise<void> {
-    const settings = await settingModel.getValues(["support.autoResolveDays", "support.reopenWindowDays"]);
+    const settings = await settingModel.getValues([
+      "support.autoResolveDays",
+      "support.reopenWindowDays",
+    ]);
     const { sql, bindings } = scopeSql(scope);
 
     await trx.raw(
@@ -465,7 +520,8 @@ export const supportTicketModel = {
     return db.transaction(async (trx) => {
       const locked = await lock(trx, id, userId);
       if (!locked) return { ok: false, reason: "notFound" };
-      if (!ACTIVE_SUPPORT_STATUSES.includes(locked.status)) return { ok: false, reason: locked.status };
+      if (!ACTIVE_SUPPORT_STATUSES.includes(locked.status))
+        return { ok: false, reason: locked.status };
 
       await trx("supportTickets")
         .where({ id })
@@ -490,12 +546,18 @@ export const supportTicketModel = {
     return db.transaction(async (trx) => {
       const locked = await lock(trx, id, userId);
       if (!locked) return { ok: false, reason: "notFound" };
-      if (locked.status !== "resolved" && locked.status !== "closed") return { ok: false, reason: "notResolved" };
+      if (locked.status !== "resolved" && locked.status !== "closed")
+        return { ok: false, reason: "notResolved" };
       if (locked.ratedAt) return { ok: false, reason: "rated" };
 
       await trx("supportTickets")
         .where({ id })
-        .update({ rating, ratingComment: comment ?? null, ratedAt: trx.fn.now(), updatedAt: trx.fn.now() });
+        .update({
+          rating,
+          ratingComment: comment ?? null,
+          ratedAt: trx.fn.now(),
+          updatedAt: trx.fn.now(),
+        });
       const event = await supportMessageModel.insertEventIn(trx, {
         ticketId: id,
         type: "rated",
@@ -510,7 +572,11 @@ export const supportTicketModel = {
 
   // Status and details, one event for each kind of change. A closed ticket's status is final, but its details can
   // still be corrected. Leaving "resolved" for an active status clears the resolution and its rating.
-  async changeByStaff(id: string, adminId: string, input: UpdateTicketInput): Promise<Outcome<SupportTicket>> {
+  async changeByStaff(
+    id: string,
+    adminId: string,
+    input: UpdateTicketInput,
+  ): Promise<Outcome<SupportTicket>> {
     return db.transaction(async (trx) => {
       const locked = await lock(trx, id);
       if (!locked) return { ok: false, reason: "notFound" };
@@ -523,7 +589,12 @@ export const supportTicketModel = {
         if (input.status === "resolved") update.resolvedAt = trx.fn.now();
         if (input.status === "closed") update.closedAt = trx.fn.now();
         if (locked.status === "resolved" && ACTIVE_SUPPORT_STATUSES.includes(input.status)) {
-          Object.assign(update, { resolvedAt: null, rating: null, ratingComment: null, ratedAt: null });
+          Object.assign(update, {
+            resolvedAt: null,
+            rating: null,
+            ratingComment: null,
+            ratedAt: null,
+          });
         }
         events.push(
           await supportMessageModel.insertEventIn(trx, {
@@ -545,7 +616,9 @@ export const supportTicketModel = {
         }
       }
       if (changes.categoryId) {
-        const category = await trx("supportCategories").where({ id: input.categoryId, isActive: true }).first("id");
+        const category = await trx("supportCategories")
+          .where({ id: input.categoryId, isActive: true })
+          .first("id");
         if (!category) return { ok: false, reason: "category" };
       }
       if (Object.keys(changes).length > 0) {
@@ -562,7 +635,9 @@ export const supportTicketModel = {
       }
 
       if (Object.keys(update).length > 0) {
-        await trx("supportTickets").where({ id }).update({ ...update, updatedAt: trx.fn.now() });
+        await trx("supportTickets")
+          .where({ id })
+          .update({ ...update, updatedAt: trx.fn.now() });
       }
       return { ok: true, ticket: await reload(trx, id), events };
     });
@@ -578,7 +653,8 @@ export const supportTicketModel = {
       const locked = await lock(trx, id);
       if (!locked) return { ok: false, reason: "notFound" };
       if (locked.status === "closed") return { ok: false, reason: "closed" };
-      if (locked.assignedAdminId === to.id) return { ok: true, ticket: await reload(trx, id), events: [] };
+      if (locked.assignedAdminId === to.id)
+        return { ok: true, ticket: await reload(trx, id), events: [] };
 
       await trx("supportTickets")
         .where({ id })
@@ -594,7 +670,12 @@ export const supportTicketModel = {
         side: "staff",
         userId: byAdminId,
         internal: true,
-        data: { adminId: to.id, adminName: to.fullName, previousAdminId: locked.assignedAdminId, byAdminId },
+        data: {
+          adminId: to.id,
+          adminName: to.fullName,
+          previousAdminId: locked.assignedAdminId,
+          byAdminId,
+        },
       });
       return { ok: true, ticket: await reload(trx, id), events: [event] };
     });
@@ -652,12 +733,17 @@ export const supportTicketModel = {
           .where({ id: post.replyToMessageId, ticketId: id })
           .whereNot("kind", "event")
           .first("internal");
-        if (!target || (kind === "message" && target.internal)) return { ok: false, reason: "badReply" };
+        if (!target || (kind === "message" && target.internal))
+          return { ok: false, reason: "badReply" };
       }
 
       const update: Record<string, unknown> = {};
       const events: SupportMessage[] = [];
-      const event = (type: SupportMessage["eventType"] & string, internal: boolean, data: Record<string, unknown>) =>
+      const event = (
+        type: SupportMessage["eventType"] & string,
+        internal: boolean,
+        data: Record<string, unknown>,
+      ) =>
         supportMessageModel
           .insertEventIn(trx, { ticketId: id, type, side, userId, internal, data })
           .then((e) => events.push(e));
@@ -665,14 +751,25 @@ export const supportTicketModel = {
       if (kind === "message" && side === "user") {
         const to = locked.assignedAdminId ? "inProgress" : "open";
         if (locked.status === "resolved") {
-          Object.assign(update, { status: to, resolvedAt: null, rating: null, ratingComment: null, ratedAt: null });
+          Object.assign(update, {
+            status: to,
+            resolvedAt: null,
+            rating: null,
+            ratingComment: null,
+            ratedAt: null,
+          });
           await event("statusChanged", false, { from: "resolved", to, reason: "userReplied" });
         } else if (locked.status === "awaitingUser") update.status = to;
       }
       if (kind === "message" && side === "staff") {
         if (!locked.assignedAdminId) {
           Object.assign(update, { assignedAdminId: userId, assignedAt: trx.fn.now() });
-          await event("assigned", true, { adminId: userId, adminName: post.userName ?? null, previousAdminId: null, byAdminId: userId });
+          await event("assigned", true, {
+            adminId: userId,
+            adminName: post.userName ?? null,
+            previousAdminId: null,
+            byAdminId: userId,
+          });
         }
         if (ACTIVE_SUPPORT_STATUSES.includes(locked.status)) update.status = "awaitingUser";
         update.firstResponseAt = trx.raw(`coalesce("firstResponseAt", now())`);
@@ -691,7 +788,8 @@ export const supportTicketModel = {
 
       const message = await supportMessageModel.insertMessageIn(trx, { ...post, ticketId: id });
       // A note is staff talking among themselves: it doesn't make the ticket active or reset its idle clock.
-      if (kind === "message") Object.assign(update, { lastMessageAt: message.createdAt, lastMessageSide: side });
+      if (kind === "message")
+        Object.assign(update, { lastMessageAt: message.createdAt, lastMessageSide: side });
       await trx("supportTickets")
         .where({ id })
         .update({
@@ -699,7 +797,13 @@ export const supportTicketModel = {
           [side === "user" ? "userLastReadSeq" : "staffLastReadSeq"]: message.seq,
           updatedAt: trx.fn.now(),
         });
-      return { ok: true, ticket: await reload(trx, id), events, message, firstUnread: kind === "message" && !pending };
+      return {
+        ok: true,
+        ticket: await reload(trx, id),
+        events,
+        message,
+        firstUnread: kind === "message" && !pending,
+      };
     });
   },
 

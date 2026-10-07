@@ -6,7 +6,10 @@ import { app } from "./app.js";
 import { socketAuthenticate, type SocketData } from "./middlewares/socketAuthenticate.js";
 import { initSocketService, joinSocketRooms } from "./services/socket.service.js";
 import { startPushReceiptSweep } from "./services/pushReceipts.service.js";
-import { registerSupportSocket, type ClientToServerEvents } from "./services/supportSocket.service.js";
+import {
+  registerSupportSocket,
+  type ClientToServerEvents,
+} from "./services/supportSocket.service.js";
 
 config();
 

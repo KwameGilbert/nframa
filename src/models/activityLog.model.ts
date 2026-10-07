@@ -220,7 +220,9 @@ class ActivityLogModel extends BaseModel<ActivityLog> {
   private forUserFiltered(userId: string) {
     return db("activityLogs as al")
       .leftJoin("users as actor", "actor.id", "al.actorId")
-      .where((qb) => qb.where("al.actorId", userId).orWhere("al.targetId", normalizeTargetId(userId)));
+      .where((qb) =>
+        qb.where("al.actorId", userId).orWhere("al.targetId", normalizeTargetId(userId)),
+      );
   }
 
   async forUser(userId: string, { page, limit }: Page) {

@@ -128,8 +128,18 @@ class ReportModel extends BaseModel<TripReport> {
 
   // The staff queue: what still needs a person first, urgent before the rest, newest first within each.
   async adminList(query: AdminListReportsQuery) {
-    const { status, severity, category, reporterUserId, reportedUserId, tripId, from, to, page, limit } =
-      query;
+    const {
+      status,
+      severity,
+      category,
+      reporterUserId,
+      reportedUserId,
+      tripId,
+      from,
+      to,
+      page,
+      limit,
+    } = query;
     const matching = () =>
       this.table
         .leftJoin("users as reporter", "reporter.id", "tripReports.reporterUserId")
@@ -143,7 +153,11 @@ class ReportModel extends BaseModel<TripReport> {
           if (tripId) q.where("tripReports.tripId", tripId);
           if (from) q.where("tripReports.createdAt", ">=", new Date(`${from}T00:00:00Z`));
           if (to) {
-            q.where("tripReports.createdAt", "<", new Date(new Date(`${to}T00:00:00Z`).getTime() + 86_400_000));
+            q.where(
+              "tripReports.createdAt",
+              "<",
+              new Date(new Date(`${to}T00:00:00Z`).getTime() + 86_400_000),
+            );
           }
         });
 
@@ -183,7 +197,9 @@ class ReportModel extends BaseModel<TripReport> {
           "completedAt",
           "cancelledAt",
         ),
-      db("tripReports").where({ reporterUserId: report.reporterUserId }).first(db.raw("count(*)::int as total")),
+      db("tripReports")
+        .where({ reporterUserId: report.reporterUserId })
+        .first(db.raw("count(*)::int as total")),
       db("tripReports")
         .where({ reportedUserId: report.reportedUserId })
         .first(

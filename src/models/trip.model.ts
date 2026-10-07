@@ -929,27 +929,26 @@ class TripModel extends BaseModel<Trip> {
     limit,
   }: AdminListTripsQuery) {
     const matching = () =>
-      db("trips as t")
-        .modify((query) => {
-          if (status) query.where("t.status", status);
-          if (riderUserId) query.where("t.riderUserId", riderUserId);
-          if (driverUserId) query.where("t.driverUserId", driverUserId);
-          if (commuteId) query.where("t.commuteId", commuteId);
-          if (tripDate) query.where("t.tripDate", tripDate);
-          if (search) {
-            const term = `%${search.replace(/[\\%_]/g, "\\$&")}%`;
-            query.where((q) =>
-              q
-                .whereILike("t.pickupAddress", term)
-                .orWhereILike("t.dropoffAddress", term)
-                .orWhereILike("t.boardingCode", term)
-                .orWhereILike("d.fullName", term)
-                .orWhereILike("d.email", term)
-                .orWhereILike("r.fullName", term)
-                .orWhereILike("r.email", term),
-            );
-          }
-        });
+      db("trips as t").modify((query) => {
+        if (status) query.where("t.status", status);
+        if (riderUserId) query.where("t.riderUserId", riderUserId);
+        if (driverUserId) query.where("t.driverUserId", driverUserId);
+        if (commuteId) query.where("t.commuteId", commuteId);
+        if (tripDate) query.where("t.tripDate", tripDate);
+        if (search) {
+          const term = `%${search.replace(/[\\%_]/g, "\\$&")}%`;
+          query.where((q) =>
+            q
+              .whereILike("t.pickupAddress", term)
+              .orWhereILike("t.dropoffAddress", term)
+              .orWhereILike("t.boardingCode", term)
+              .orWhereILike("d.fullName", term)
+              .orWhereILike("d.email", term)
+              .orWhereILike("r.fullName", term)
+              .orWhereILike("r.email", term),
+          );
+        }
+      });
 
     const countQuery = matching()
       .leftJoin("users as d", "d.id", "t.driverUserId")

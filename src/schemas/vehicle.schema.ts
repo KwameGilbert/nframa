@@ -12,14 +12,10 @@ const plateSchema = z.string().min(1).meta({
     "Registration plate. Unique across all vehicles and compared exactly as written, so case and spaces matter; a clash answers 409",
   example: "GR 1234-21",
 });
-const seatsSchema = z
-  .number()
-  .int()
-  .positive()
-  .meta({
-    description: "Number of seats in the vehicle, a whole number of at least 1",
-    example: 4,
-  });
+const seatsSchema = z.number().int().positive().meta({
+  description: "Number of seats in the vehicle, a whole number of at least 1",
+  example: 4,
+});
 
 export const VEHICLE_PHOTO_SIDES = ["front", "back", "left", "right"] as const;
 export type VehiclePhotoSide = (typeof VEHICLE_PHOTO_SIDES)[number];
@@ -39,7 +35,10 @@ export const createVehicleSchema = z.object({
 });
 
 const photoFile = (side: string) =>
-  z.string().meta({ format: "binary", description: `A photo of the vehicle's ${side} (JPEG, PNG or WEBP, 5MB)` });
+  z.string().meta({
+    format: "binary",
+    description: `A photo of the vehicle's ${side} (JPEG, PNG or WEBP, 5MB)`,
+  });
 
 export const createVehicleMultipartSchema = createVehicleSchema.extend({
   front: photoFile("front"),
@@ -89,7 +88,10 @@ export const vehicleResponseSchema = z.object({
   photos: z
     .object({ front: z.url(), back: z.url(), left: z.url(), right: z.url() })
     .partial()
-    .meta({ description: "Photo URLs by side; every vehicle registered now has all four (older ones may have none)" }),
+    .meta({
+      description:
+        "Photo URLs by side; every vehicle registered now has all four (older ones may have none)",
+    }),
   isVerified: z.boolean(),
   verificationDate: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),

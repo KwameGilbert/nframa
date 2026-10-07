@@ -65,7 +65,8 @@ export function filesOf(req: { files?: unknown }): Express.Multer.File[] {
 export const ticketNotFound = (id: string) => AppError.notFound(`Support ticket not found: ${id}`);
 
 const REFUSALS: Record<string, () => AppError> = {
-  closed: () => AppError.conflict("This ticket is closed. Open a new ticket and link it with relatedTicketId"),
+  closed: () =>
+    AppError.conflict("This ticket is closed. Open a new ticket and link it with relatedTicketId"),
   badReply: () => AppError.badRequest("You can only reply to a message on this ticket"),
 };
 
@@ -73,12 +74,18 @@ const REFUSALS: Record<string, () => AppError> = {
 // go up, then the locked write; files are deleted again if it fails or is refused.
 export async function postTicketMessage(
   ticket: SupportTicket,
-  post: { side: "user" | "staff"; userId: string; userName: string | null; kind: "message" | "note" },
+  post: {
+    side: "user" | "staff";
+    userId: string;
+    userName: string | null;
+    kind: "message" | "note";
+  },
   input: PostMessageInput,
   files: Express.Multer.File[],
 ) {
   if (ticket.status === "closed" && post.kind === "message") throw REFUSALS.closed();
-  if (!input.body && files.length === 0) throw AppError.badRequest("Write a message or attach a file");
+  if (!input.body && files.length === 0)
+    throw AppError.badRequest("Write a message or attach a file");
 
   const attachments = await storeAttachments(files, ticket.id);
   let outcome: Awaited<ReturnType<typeof supportTicketModel.postMessage>>;
@@ -132,7 +139,8 @@ export function announceMessage({ ticket, message, events, firstUnread }: Posted
   if (events.length > 0) announceTicket(ticket, events);
   if (!firstUnread || message.kind !== "message" || ticket.detachedAt) return;
   if (message.senderSide === "staff") void notifySupport(ticket.userId, "reply", ticket);
-  else if (ticket.assignedAdminId) void notifySupport(ticket.assignedAdminId, "userReplied", ticket);
+  else if (ticket.assignedAdminId)
+    void notifySupport(ticket.assignedAdminId, "userReplied", ticket);
 }
 
 export async function deleteTicketMessage(
@@ -146,9 +154,12 @@ export async function deleteTicketMessage(
   });
   if (!outcome.ok) {
     if (outcome.reason === "deleted") throw AppError.conflict("This message is already deleted");
-    if (outcome.reason === "notYours") throw AppError.forbidden("You can only delete your own messages");
+    if (outcome.reason === "notYours")
+      throw AppError.forbidden("You can only delete your own messages");
     if (outcome.reason === "window") {
-      throw AppError.conflict(`Messages can only be deleted within ${MESSAGE_DELETE_WINDOW_MINUTES} minutes of sending`);
+      throw AppError.conflict(
+        `Messages can only be deleted within ${MESSAGE_DELETE_WINDOW_MINUTES} minutes of sending`,
+      );
     }
     throw AppError.notFound(`Message not found: ${messageId}`);
   }

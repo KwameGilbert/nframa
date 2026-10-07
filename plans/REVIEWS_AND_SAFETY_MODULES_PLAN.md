@@ -7,6 +7,7 @@
 ---
 
 ## Table of Contents
+
 1. [Overview](#1-overview)
 2. [Module 1: Ratings & Reviews (`tripReviews`)](#2-module-1-ratings--reviews-tripreviews)
    - [2.1 Context & Mobile App Alignment](#21-context--mobile-app-alignment)
@@ -33,10 +34,12 @@
 ## 1. Overview
 
 This document specifies the database schemas, API contracts, domain validation rules, authorization logic, and test suites for two core backend features:
+
 - **Module 1 (Ratings & Reviews)**: Enables bidirectional post-trip reviews, comments, compliments, driver tips, and aggregate rating calculation for drivers and riders.
 - **Module 3 (SOS & Safety Incident Management)**: Implements panic triggers, emergency contact integration, real-time GPS tracking of safety events, and operational incident dispatch lifecycles.
 
 Both modules adhere to Nframa backend conventions:
+
 - Strict TypeScript ESM with explicit `.js` import extensions.
 - Knex query builder extending `BaseModel`.
 - Controller input parsing through `req.validated`.
@@ -49,9 +52,10 @@ Both modules adhere to Nframa backend conventions:
 ## 2. Module 1: Ratings & Reviews (`tripReviews`)
 
 ### 2.1 Context & Mobile App Alignment
+
 - **Rider App (`customer`)**:
   - `RateDriverModal.tsx`: Opens automatically upon trip completion.
-  - Inputs: Star rating (1–5), optional comment, optional tip (`tip`: GHS 0, 5, 10, 20, 50), and compliments/tags (e.g., *"Clean Vehicle"*, *"Punctual"*, *"Polite"*).
+  - Inputs: Star rating (1–5), optional comment, optional tip (`tip`: GHS 0, 5, 10, 20, 50), and compliments/tags (e.g., _"Clean Vehicle"_, _"Punctual"_, _"Polite"_).
   - Displays driver rating on search cards and upcoming trip sheets.
 - **Driver App (`driver`)**:
   - `app/profile/reviews.tsx`: Displays list of passenger reviews, individual star scores, pickup/dropoff corridors, and average performance rating.
@@ -60,6 +64,7 @@ Both modules adhere to Nframa backend conventions:
 ---
 
 ### 2.2 Database Schema & Migration
+
 File: `src/database/migrations/20261002235000_create_trip_reviews_table.ts`
 
 ```sql
@@ -88,24 +93,23 @@ CREATE INDEX "idx_tripReviews_tripId" ON "tripReviews" ("tripId");
 ---
 
 ### 2.3 Zod Validation Schemas
+
 File: `src/schemas/review.schema.ts`
 
 ```ts
 import { z } from "zod";
 
-export const reviewRatingSchema = z
-  .coerce.number()
+export const reviewRatingSchema = z.coerce
+  .number()
   .int()
   .min(1)
   .max(5)
   .meta({ description: "Star rating from 1 to 5", example: 5 });
 
-export const reviewCommentSchema = z
-  .string()
-  .trim()
-  .max(1000)
-  .optional()
-  .meta({ description: "Feedback commentary", example: "Great driver! Very punctual and clean car." });
+export const reviewCommentSchema = z.string().trim().max(1000).optional().meta({
+  description: "Feedback commentary",
+  example: "Great driver! Very punctual and clean car.",
+});
 
 export const reviewTagsSchema = z
   .array(z.string().trim().max(50))
@@ -113,8 +117,8 @@ export const reviewTagsSchema = z
   .optional()
   .meta({ example: ["Punctual", "Clean Vehicle", "Smooth Driving"] });
 
-export const reviewTipSchema = z
-  .coerce.number()
+export const reviewTipSchema = z.coerce
+  .number()
   .nonnegative()
   .optional()
   .default(0)
@@ -179,6 +183,7 @@ export const ratingSummaryResponseSchema = z.object({
 ---
 
 ### 2.4 Model Layer
+
 File: `src/models/review.model.ts`
 
 - Extends `BaseModel<TripReview>`.
@@ -191,6 +196,7 @@ File: `src/models/review.model.ts`
 ---
 
 ### 2.5 Controller & Business Logic
+
 File: `src/controllers/review.controller.ts`
 
 1. **`createTripReview`**:
@@ -211,6 +217,7 @@ File: `src/controllers/review.controller.ts`
 ---
 
 ### 2.6 REST Routes & Authorization
+
 File: `src/routes/review.routes.ts`
 
 ```ts
@@ -225,7 +232,9 @@ DELETE /reviews/:id                  -> authenticate, requirePermission("users",
 ---
 
 ### 2.7 OpenAPI Docs & Examples
+
 File: `src/docs/review.docs.ts`
+
 - Registered in `src/docs/openapi.ts` in alphabetical order.
 - Tags: `["Reviews"]`.
 - Documented 200, 201, 400, 401, 403, 404, and 409 responses with realistic examples.
@@ -233,7 +242,9 @@ File: `src/docs/review.docs.ts`
 ---
 
 ### 2.8 Testing Strategy
+
 File: `tests/reviews.test.ts`
+
 - Tests completed trip requirement (rejects rating on `pending` / `active` trips).
 - Tests duplicate prevention (409 on second review for same trip by same caller).
 - Tests non-participant rejection (403 if caller was not rider/driver on trip).
@@ -247,6 +258,7 @@ File: `tests/reviews.test.ts`
 ## 3. Module 3: SOS & Safety Incident Management (`sosIncidents`)
 
 ### 3.1 Context & Mobile App Alignment
+
 - **Rider & Driver SOS Trigger**:
   - `app/sos/hold.tsx`: Press and hold button for 3 seconds to trigger panic.
   - `app/sos/confirm.tsx`: Confirmation / immediate dispatch cancellation within 10-second grace window.
@@ -260,6 +272,7 @@ File: `tests/reviews.test.ts`
 ---
 
 ### 3.2 Database Schema & Migration
+
 File: `src/database/migrations/20261002235500_create_sos_incidents_table.ts`
 
 ```sql
@@ -268,7 +281,7 @@ CREATE TABLE "sosIncidents" (
   "userId" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
   "tripId" uuid REFERENCES "trips"("id") ON DELETE SET NULL,
   "role" text NOT NULL CHECK ("role" IN ('rider', 'driver')),
-  "status" text NOT NULL DEFAULT 'triggered' 
+  "status" text NOT NULL DEFAULT 'triggered'
     CHECK ("status" IN ('triggered', 'underReview', 'servicesContacted', 'resolved', 'cancelledByUser')),
   "latitude" numeric(9,6) NOT NULL,
   "longitude" numeric(9,6) NOT NULL,
@@ -292,6 +305,7 @@ CREATE INDEX "idx_sosIncidents_createdAt" ON "sosIncidents" ("createdAt" DESC);
 ---
 
 ### 3.3 Zod Validation Schemas
+
 File: `src/schemas/sosIncident.schema.ts`
 
 ```ts
@@ -301,7 +315,12 @@ export const triggerSosSchema = z.object({
   tripId: z.uuid().optional().meta({ description: "Trip in progress when SOS was pressed" }),
   latitude: z.coerce.number().min(-90).max(90).meta({ example: 5.6037 }),
   longitude: z.coerce.number().min(-180).max(180).meta({ example: -0.187 }),
-  address: z.string().trim().max(255).optional().meta({ example: "Liberation Rd, near Accra Mall" }),
+  address: z
+    .string()
+    .trim()
+    .max(255)
+    .optional()
+    .meta({ example: "Liberation Rd, near Accra Mall" }),
   reason: z
     .enum(["Personal/Medical Emergency", "Vehicle Collision", "Physical Danger", "Other"])
     .optional()
@@ -312,7 +331,12 @@ export const triggerSosSchema = z.object({
 export type TriggerSosInput = z.infer<typeof triggerSosSchema>;
 
 export const cancelSosSchema = z.object({
-  cancellationReason: z.string().trim().max(255).optional().meta({ example: "False alarm - pressed by accident" }),
+  cancellationReason: z
+    .string()
+    .trim()
+    .max(255)
+    .optional()
+    .meta({ example: "False alarm - pressed by accident" }),
 });
 
 export const updateSosStatusSchema = z.object({
@@ -323,7 +347,9 @@ export const updateSosStatusSchema = z.object({
 });
 
 export const listSosIncidentsQuerySchema = z.object({
-  status: z.enum(["triggered", "underReview", "servicesContacted", "resolved", "cancelledByUser"]).optional(),
+  status: z
+    .enum(["triggered", "underReview", "servicesContacted", "resolved", "cancelledByUser"])
+    .optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -352,6 +378,7 @@ export const sosIncidentResponseSchema = z.object({
 ---
 
 ### 3.4 Model Layer
+
 File: `src/models/sosIncident.model.ts`
 
 - Extends `BaseModel<SosIncident>`.
@@ -365,6 +392,7 @@ File: `src/models/sosIncident.model.ts`
 ---
 
 ### 3.5 Controller & Business Logic
+
 File: `src/controllers/sosIncident.controller.ts`
 
 1. **`triggerSos`**:
@@ -385,6 +413,7 @@ File: `src/controllers/sosIncident.controller.ts`
 ---
 
 ### 3.6 REST Routes & Authorization
+
 File: `src/routes/sosIncident.routes.ts`
 
 ```ts
@@ -402,7 +431,9 @@ PATCH  /admin/safety/incidents/:id  -> authenticate, requirePermission("users", 
 ---
 
 ### 3.7 OpenAPI Docs & Examples
+
 File: `src/docs/sosIncident.docs.ts`
+
 - Registered in `src/docs/openapi.ts`.
 - Tags: `["Safety & SOS"]`.
 - Includes request coordinates, contact snapshots, and status transition workflows.
@@ -410,7 +441,9 @@ File: `src/docs/sosIncident.docs.ts`
 ---
 
 ### 3.8 Testing Strategy
+
 File: `tests/sosIncidents.test.ts`
+
 - Tests triggering SOS by rider and driver with valid GPS coordinates.
 - Tests automatic snapshotting of user's emergency contacts.
 - Tests user self-cancellation (`cancelledByUser`).
@@ -447,6 +480,7 @@ flowchart TD
 ```
 
 ### Execution Rules (from `CLAUDE.md`)
+
 - Migrations: Create clean, non-conflicting migrations with unique timestamps; never edit previously run migrations.
 - Tests: Run tests exclusively for the module being modified (`pnpm test reviews`, `pnpm test sosIncidents`).
 - Docs: Ensure OpenAPI documentation tags and schemas precisely match controller responses.

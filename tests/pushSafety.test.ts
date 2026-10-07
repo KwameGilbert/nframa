@@ -1,12 +1,14 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { notifyReportCreated, notifyReport, notifyReportsDesk, notifySafetyDesk, notifySos } from "../src/services/notificationEvents.service.js";
+import {
+  notifyReportCreated,
+  notifyReport,
+  notifyReportsDesk,
+  notifySafetyDesk,
+  notifySos,
+} from "../src/services/notificationEvents.service.js";
 import { emitToSafetyDesk, emitToReportsDesk } from "../src/services/socket.service.js";
 import { api, auth, expectStatus } from "./helpers/api.js";
-import {
-  createSignedInAdmin,
-  loginAsSuperAdmin,
-  signUpByPhone,
-} from "./helpers/actors.js";
+import { createSignedInAdmin, loginAsSuperAdmin, signUpByPhone } from "./helpers/actors.js";
 import { trackForCleanup } from "./helpers/cleanup.js";
 import { bookableCommute, bookingRider, insertTrip } from "./helpers/trips.js";
 import { addDays, today } from "../src/utils/tripTime.js";
@@ -22,7 +24,11 @@ let trip: Awaited<ReturnType<typeof insertTrip>>;
 
 // Accepted trips on distinct future days: one dated today would be settled (cancelled) once its departure passes.
 let dayOffset = 10;
-const accepted = () => ({ status: "accepted", tripDate: addDays(today(), ++dayOffset), acceptedAt: new Date() });
+const accepted = () => ({
+  status: "accepted",
+  tripDate: addDays(today(), ++dayOffset),
+  acceptedAt: new Date(),
+});
 let tripRider: Person;
 
 const point = () => ({
@@ -53,7 +59,11 @@ function cancelIncident(admin: { token: string }, id: string, body: object) {
   return api.post(`/admin/safety/incidents/${id}/cancel`).set(auth(admin.token)).send(body);
 }
 
-function fileReport(caller: { token: string }, tripId: string, body: object = { category: "harassment", description: "Test report" }) {
+function fileReport(
+  caller: { token: string },
+  tripId: string,
+  body: object = { category: "harassment", description: "Test report" },
+) {
   return api.post(`/trips/${tripId}/reports`).set(auth(caller.token)).send(body);
 }
 
@@ -95,7 +105,11 @@ describe("Push notifications for SOS incidents", () => {
     // Desktop socket event should still be sent
     const deskEvents = vi
       .mocked(emitToSafetyDesk)
-      .mock.calls.filter(([name, payload]) => name === "sos:triggered" && (payload as { incidentId: string }).incidentId === incident.id);
+      .mock.calls.filter(
+        ([name, payload]) =>
+          name === "sos:triggered" &&
+          (payload as { incidentId: string }).incidentId === incident.id,
+      );
     expect(deskEvents).toHaveLength(1);
 
     // Push notification should be sent to desk
@@ -204,16 +218,14 @@ describe("Push notifications for trip reports", () => {
     // Desk should get an urgent alert (assault is in URGENT_REPORT_CATEGORIES)
     const urgentAlerts = vi
       .mocked(notifyReportsDesk)
-      .mock.calls.filter(([reportData]: [{ severity: string }]) => reportData.severity === "urgent");
+      .mock.calls.filter(
+        ([reportData]: [{ severity: string }]) => reportData.severity === "urgent",
+      );
     expect(urgentAlerts.length).toBeGreaterThan(0);
 
     // Now test a normal report
     vi.clearAllMocks();
-    const trip2 = await insertTrip(
-      (await bookableCommute()).commute,
-      tripRider.userId,
-      accepted()
-    );
+    const trip2 = await insertTrip((await bookableCommute()).commute, tripRider.userId, accepted());
     const normalReport = await report(tripRider, trip2.id, {
       category: "harassment",
       description: "Normal issue",
@@ -223,7 +235,9 @@ describe("Push notifications for trip reports", () => {
     // The function should still be called but won't send (it returns early)
     // So we check that it was called with normal severity
     expect(
-      vi.mocked(notifyReportsDesk).mock.calls.some(([r]: [{ id: string }]) => r.id === normalReport.id)
+      vi
+        .mocked(notifyReportsDesk)
+        .mock.calls.some(([r]: [{ id: string }]) => r.id === normalReport.id),
     ).toBe(true);
   });
 
@@ -232,7 +246,7 @@ describe("Push notifications for trip reports", () => {
     const freshTrip = await insertTrip(
       (await bookableCommute()).commute,
       tripRider.userId,
-      accepted()
+      accepted(),
     );
     const filed = await report(tripRider, freshTrip.id);
     vi.clearAllMocks();
@@ -264,7 +278,7 @@ describe("Push notifications for trip reports", () => {
     const freshTrip = await insertTrip(
       (await bookableCommute()).commute,
       tripRider.userId,
-      accepted()
+      accepted(),
     );
     const filed = await report(tripRider, freshTrip.id);
     const resolutionStatuses = ["underReview", "resolved", "dismissed"];
@@ -316,7 +330,7 @@ describe("Sign-up scenario: ~5 sign-ups with various status transitions", () => 
 
     // Check notifications were sent
     expect(
-      vi.mocked(notifySafetyDesk).mock.calls.filter(([id]) => id === incident.id)
+      vi.mocked(notifySafetyDesk).mock.calls.filter(([id]) => id === incident.id),
     ).toHaveLength(1);
 
     // 2. Admin moves to under review
@@ -327,7 +341,7 @@ describe("Sign-up scenario: ~5 sign-ups with various status transitions", () => 
     });
 
     expect(
-      vi.mocked(notifySos).mock.calls.filter(([userId]) => userId === rider.userId)
+      vi.mocked(notifySos).mock.calls.filter(([userId]) => userId === rider.userId),
     ).toHaveLength(1);
 
     // 3. Admin moves to services contacted
@@ -338,7 +352,7 @@ describe("Sign-up scenario: ~5 sign-ups with various status transitions", () => 
     });
 
     expect(
-      vi.mocked(notifySos).mock.calls.filter(([userId]) => userId === rider.userId)
+      vi.mocked(notifySos).mock.calls.filter(([userId]) => userId === rider.userId),
     ).toHaveLength(1);
 
     // 4. Admin resolves
@@ -349,17 +363,13 @@ describe("Sign-up scenario: ~5 sign-ups with various status transitions", () => 
     });
 
     expect(
-      vi.mocked(notifySos).mock.calls.filter(([userId]) => userId === rider.userId)
+      vi.mocked(notifySos).mock.calls.filter(([userId]) => userId === rider.userId),
     ).toHaveLength(1);
   });
 
   it("handles a full report lifecycle from filing to resolution", async () => {
     const rider = await newRider();
-    const trip2 = await insertTrip(
-      (await bookableCommute()).commute,
-      rider.userId,
-      accepted()
-    );
+    const trip2 = await insertTrip((await bookableCommute()).commute, rider.userId, accepted());
 
     vi.clearAllMocks();
 
@@ -371,7 +381,7 @@ describe("Sign-up scenario: ~5 sign-ups with various status transitions", () => 
 
     expect(filed.status).toBe("open");
     expect(
-      vi.mocked(notifyReportCreated).mock.calls.filter(([userId]) => userId === rider.userId)
+      vi.mocked(notifyReportCreated).mock.calls.filter(([userId]) => userId === rider.userId),
     ).toHaveLength(1);
 
     // 2. Admin moves to under review
@@ -382,7 +392,7 @@ describe("Sign-up scenario: ~5 sign-ups with various status transitions", () => 
     });
 
     expect(
-      vi.mocked(notifyReport).mock.calls.filter(([userId]) => userId === rider.userId)
+      vi.mocked(notifyReport).mock.calls.filter(([userId]) => userId === rider.userId),
     ).toHaveLength(1);
 
     // 3. Admin resolves
@@ -394,18 +404,12 @@ describe("Sign-up scenario: ~5 sign-ups with various status transitions", () => 
     });
 
     expect(
-      vi.mocked(notifyReport).mock.calls.filter(([userId]) => userId === rider.userId)
+      vi.mocked(notifyReport).mock.calls.filter(([userId]) => userId === rider.userId),
     ).toHaveLength(1);
   });
 
   it("processes multiple concurrent sign-ups with notifications", async () => {
-    const riders = await Promise.all([
-      newRider(),
-      newRider(),
-      newRider(),
-      newRider(),
-      newRider(),
-    ]);
+    const riders = await Promise.all([newRider(), newRider(), newRider(), newRider(), newRider()]);
 
     vi.clearAllMocks();
 

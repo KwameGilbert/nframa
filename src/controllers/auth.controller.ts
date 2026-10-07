@@ -40,7 +40,7 @@ import type {
 } from "../schemas/auth.schema.js";
 
 const logger = createLogger("app");
-const REFRESH_TOKEN_EXPIRES_IN_DAYS =Number(process.env.REFRESH_TOKEN_EXPIRES_IN_DAYS ?? 30);
+const REFRESH_TOKEN_EXPIRES_IN_DAYS = Number(process.env.REFRESH_TOKEN_EXPIRES_IN_DAYS ?? 30);
 const PASSWORD_RESET_PURPOSE = "passwordReset";
 const ADD_PHONE_PURPOSE = "addPhone";
 

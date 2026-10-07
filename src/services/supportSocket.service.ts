@@ -6,13 +6,26 @@ import { rolePermissionModel } from "../models/rolePermission.model.js";
 import { supportTicketModel, type SupportTicket } from "../models/supportTicket.model.js";
 import { userModel } from "../models/user.model.js";
 import { emitToSupportDesk, emitToUser } from "./socket.service.js";
-import { announceMessage, announceRead, postTicketMessage, ticketNotFound } from "./support.service.js";
-import { firstName, staffMessageView, staffTicketView, userMessageView, userTicketView } from "./supportViews.js";
+import {
+  announceMessage,
+  announceRead,
+  postTicketMessage,
+  ticketNotFound,
+} from "./support.service.js";
+import {
+  firstName,
+  staffMessageView,
+  staffTicketView,
+  userMessageView,
+  userTicketView,
+} from "./supportViews.js";
 import { AppError } from "../utils/AppError.js";
 
 // The socket twin of the chat routes: text messages and notes, read markers and typing, for both sides. Files and
 // deletes stay HTTP-only (uploads are too big for a socket; deletes are audited, which needs the HTTP request).
-export type Ack = (reply: { ok: true; data: unknown } | { ok: false; error: string; status: number }) => void;
+export type Ack = (
+  reply: { ok: true; data: unknown } | { ok: false; error: string; status: number },
+) => void;
 
 export interface ClientToServerEvents {
   "support:send": (payload: unknown, ack?: Ack) => void;
@@ -20,7 +33,12 @@ export interface ClientToServerEvents {
   "support:typing": (payload: unknown) => void;
 }
 
-type SupportSocket = Socket<ClientToServerEvents, Record<string, never>, Record<string, never>, SocketData>;
+type SupportSocket = Socket<
+  ClientToServerEvents,
+  Record<string, never>,
+  Record<string, never>,
+  SocketData
+>;
 
 const logger = createLogger("socket");
 
@@ -31,7 +49,11 @@ const sendSchema = z.object({
   internal: z.boolean().optional(), // staff only: a note
 });
 const readSchema = z.object({ ticketId: z.uuid() });
-const typingSchema = z.object({ ticketId: z.uuid(), isTyping: z.boolean(), internal: z.boolean().optional() });
+const typingSchema = z.object({
+  ticketId: z.uuid(),
+  isTyping: z.boolean(),
+  internal: z.boolean().optional(),
+});
 
 // Per account across all its sockets, like the HTTP limiters (which never see socket traffic).
 const LIMITS = { send: 120, read: 300 } as const;
@@ -58,10 +80,12 @@ async function actorFor(socket: SupportSocket, ticketId: string, need: "read" | 
   let ticket: SupportTicket | undefined;
   if (userType === "admin") {
     const permissions = await rolePermissionModel.findForActiveAdmin(userId);
-    if (!permissions.support?.[need]) throw AppError.forbidden(`Missing permission: ${need} on support`);
+    if (!permissions.support?.[need])
+      throw AppError.forbidden(`Missing permission: ${need} on support`);
     ticket = await supportTicketModel.findById(ticketId);
   } else {
-    if (role !== "rider" && role !== "driver") throw AppError.forbidden("Only riders and drivers can use support tickets");
+    if (role !== "rider" && role !== "driver")
+      throw AppError.forbidden("Only riders and drivers can use support tickets");
     ticket = await supportTicketModel.findOwned(ticketId, userId);
   }
   if (!ticket) throw ticketNotFound(ticketId);
@@ -69,7 +93,9 @@ async function actorFor(socket: SupportSocket, ticketId: string, need: "read" | 
 }
 
 const zodMessage = (err: ZodError) =>
-  err.issues.map((i) => (i.path.length ? `${i.path.join(".")}: ${i.message}` : i.message)).join("; ");
+  err.issues
+    .map((i) => (i.path.length ? `${i.path.join(".")}: ${i.message}` : i.message))
+    .join("; ");
 
 // Never lets a handler reject (an unhandled rejection exits the process); the ack carries the outcome.
 function handle(socket: SupportSocket, run: (payload: unknown) => Promise<unknown>) {
@@ -105,7 +131,8 @@ export function registerSupportSocket(socket: SupportSocket) {
       allow(socket.data.userId, "send");
       const input = sendSchema.parse(payload);
       const { ticket, userId, side } = await actorFor(socket, input.ticketId, "update");
-      const userName = side === "staff" ? ((await userModel.findById(userId))?.fullName ?? null) : null;
+      const userName =
+        side === "staff" ? ((await userModel.findById(userId))?.fullName ?? null) : null;
       const kind = side === "staff" && input.internal ? "note" : "message";
       const posted = await postTicketMessage(ticket, { side, userId, userName, kind }, input, []);
 
@@ -123,7 +150,11 @@ export function registerSupportSocket(socket: SupportSocket) {
       const { ticketId } = readSchema.parse(payload);
       const { ticket, userId, side } = await actorFor(socket, ticketId, "read");
       const lastReadSeq =
-        (await supportTicketModel.markRead(ticket.id, side, side === "user" ? userId : undefined)) ?? 0;
+        (await supportTicketModel.markRead(
+          ticket.id,
+          side,
+          side === "user" ? userId : undefined,
+        )) ?? 0;
 
       announceRead(ticket, side, lastReadSeq);
       return { lastReadSeq };
@@ -140,7 +171,10 @@ export function registerSupportSocket(socket: SupportSocket) {
       if (!parsed.success) return;
       const { ticketId, isTyping, internal = false } = parsed.data;
       const last = typingSince.get(ticketId);
-      if (isTyping ? last !== undefined && Date.now() - last < TYPING_THROTTLE_MS : last === undefined) return;
+      if (
+        isTyping ? last !== undefined && Date.now() - last < TYPING_THROTTLE_MS : last === undefined
+      )
+        return;
 
       const { ticket, userId, side } = await actorFor(socket, ticketId, "update");
       if (ticket.status === "closed" || ticket.detachedAt) return;
@@ -153,7 +187,13 @@ export function registerSupportSocket(socket: SupportSocket) {
       }
       const name = (await userModel.findById(userId))?.fullName ?? null;
       emitToSupportDesk("support:typing", { ticketId, side, userId, name, isTyping, internal });
-      if (!internal) emitToUser(ticket.userId, "support:typing", { ticketId, side, name: firstName(name), isTyping });
+      if (!internal)
+        emitToUser(ticket.userId, "support:typing", {
+          ticketId,
+          side,
+          name: firstName(name),
+          isTyping,
+        });
     }),
   );
 }

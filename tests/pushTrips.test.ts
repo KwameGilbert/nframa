@@ -119,8 +119,12 @@ describe("Trip notification hooks (pushTrips)", () => {
       // Both should have inbox notifications
       const riderInbox = await inboxOf(rider.userId);
       const driverInbox = await inboxOf(driver.userId);
-      expect((riderInbox as Notification[]).some((n: Notification) => n.type === "trip.completed")).toBe(true);
-      expect((driverInbox as Notification[]).some((n: Notification) => n.type === "trip.completed")).toBe(true);
+      expect(
+        (riderInbox as Notification[]).some((n: Notification) => n.type === "trip.completed"),
+      ).toBe(true);
+      expect(
+        (driverInbox as Notification[]).some((n: Notification) => n.type === "trip.completed"),
+      ).toBe(true);
     });
   });
 
@@ -145,7 +149,9 @@ describe("Trip notification hooks (pushTrips)", () => {
 
       // cancelled has inbox: true
       const driverInbox = await inboxOf(driver.userId);
-      expect((driverInbox as Notification[]).some((n: Notification) => n.type === "trip.cancelled")).toBe(true);
+      expect(
+        (driverInbox as Notification[]).some((n: Notification) => n.type === "trip.cancelled"),
+      ).toBe(true);
     });
 
     it("sends cancelled push when driver cancels", async () => {
@@ -168,7 +174,9 @@ describe("Trip notification hooks (pushTrips)", () => {
 
       // cancelled has inbox: true
       const riderInbox = await inboxOf(rider.userId);
-      expect((riderInbox as Notification[]).some((n: Notification) => n.type === "trip.cancelled")).toBe(true);
+      expect(
+        (riderInbox as Notification[]).some((n: Notification) => n.type === "trip.cancelled"),
+      ).toBe(true);
     });
   });
 
@@ -205,8 +213,12 @@ describe("Trip notification hooks (pushTrips)", () => {
       // Both should have inbox notifications
       const riderInbox = await inboxOf(rider.userId);
       const driverInbox = await inboxOf(driver.userId);
-      expect((riderInbox as Notification[]).some((n: Notification) => n.type === "trip.cancelled")).toBe(true);
-      expect((driverInbox as Notification[]).some((n: Notification) => n.type === "trip.cancelled")).toBe(true);
+      expect(
+        (riderInbox as Notification[]).some((n: Notification) => n.type === "trip.cancelled"),
+      ).toBe(true);
+      expect(
+        (driverInbox as Notification[]).some((n: Notification) => n.type === "trip.cancelled"),
+      ).toBe(true);
     });
   });
 

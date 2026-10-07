@@ -1,5 +1,9 @@
 import type { StoredAttachment } from "./storage.service.js";
-import type { supportTicketModel, SupportTicket, TicketActivity } from "../models/supportTicket.model.js";
+import type {
+  supportTicketModel,
+  SupportTicket,
+  TicketActivity,
+} from "../models/supportTicket.model.js";
 import type { MessageRow } from "../models/supportMessage.model.js";
 
 const PREVIEW_LENGTH = 120;
@@ -7,9 +11,30 @@ const DAY = 86_400_000;
 
 // Where a file lives in storage is the server's business alone.
 export function attachmentView(attachment: StoredAttachment) {
-  const { id, kind, fileUrl, thumbnailUrl, mimeType, fileName, sizeBytes, durationSeconds, width, height } =
-    attachment;
-  return { id, kind, fileUrl, thumbnailUrl, mimeType, fileName, sizeBytes, durationSeconds, width, height };
+  const {
+    id,
+    kind,
+    fileUrl,
+    thumbnailUrl,
+    mimeType,
+    fileName,
+    sizeBytes,
+    durationSeconds,
+    width,
+    height,
+  } = attachment;
+  return {
+    id,
+    kind,
+    fileUrl,
+    thumbnailUrl,
+    mimeType,
+    fileName,
+    sizeBytes,
+    durationSeconds,
+    width,
+    height,
+  };
 }
 
 function lastMessageView(last: TicketActivity["lastMessage"]) {
@@ -80,12 +105,25 @@ export function ticketAuditView(ticket: SupportTicket) {
 }
 
 // Events as the raiser sees them: public ones only, and only what changed, never who did it.
-export function userEventView(event: { id: string; seq: number; eventType: string | null; eventData: Record<string, unknown> | null; internal: boolean; createdAt: Date }) {
+export function userEventView(event: {
+  id: string;
+  seq: number;
+  eventType: string | null;
+  eventData: Record<string, unknown> | null;
+  internal: boolean;
+  createdAt: Date;
+}) {
   const data = event.eventData ?? {};
   const visible = Object.fromEntries(
     ["from", "to", "reason", "rating"].filter((key) => key in data).map((key) => [key, data[key]]),
   );
-  return { id: event.id, seq: event.seq, type: event.eventType, data: visible, createdAt: event.createdAt };
+  return {
+    id: event.id,
+    seq: event.seq,
+    type: event.eventType,
+    data: visible,
+    createdAt: event.createdAt,
+  };
 }
 
 const person = (id: string | null, fullName: string | null) => (id ? { id, fullName } : null);
@@ -125,7 +163,11 @@ export function staffTicketView(ticket: SupportTicket, activity?: TicketActivity
 
 type StaffDetail = Awaited<ReturnType<typeof supportTicketModel.staffDetail>>;
 
-export function staffTicketDetailView(ticket: SupportTicket, activity: TicketActivity | undefined, detail: StaffDetail) {
+export function staffTicketDetailView(
+  ticket: SupportTicket,
+  activity: TicketActivity | undefined,
+  detail: StaffDetail,
+) {
   const { raiser, trip, transaction, payout, relatedTicket, history } = detail;
   return {
     ...staffTicketView(ticket, activity),
@@ -133,7 +175,9 @@ export function staffTicketDetailView(ticket: SupportTicket, activity: TicketAct
       id: ticket.userId,
       fullName: raiser?.fullName ?? null,
       role: ticket.raiserRole,
-      phoneNumber: raiser?.phoneNumber ? `${raiser.phoneCountryCode ?? ""}${raiser.phoneNumber}` : null,
+      phoneNumber: raiser?.phoneNumber
+        ? `${raiser.phoneCountryCode ?? ""}${raiser.phoneNumber}`
+        : null,
       email: raiser?.email ?? null,
       status: raiser?.status ?? "unknown",
       deleted: Boolean(raiser?.deletedAt),
@@ -158,7 +202,11 @@ function messageBase(m: MessageRow) {
     from: SIDE_LABEL[m.senderSide],
     replyToMessageId: m.replyToMessageId,
     deleted,
-    removedBy: deleted ? (m.deletedBySide === "user" ? ("user" as const) : ("support" as const)) : null,
+    removedBy: deleted
+      ? m.deletedBySide === "user"
+        ? ("user" as const)
+        : ("support" as const)
+      : null,
     createdAt: m.createdAt,
   };
 }

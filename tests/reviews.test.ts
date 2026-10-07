@@ -36,7 +36,7 @@ let unratedDriver: Person;
 // past its drop-off becomes a no-show, a boarded one completes).
 let dayOffset = 0;
 const nextDate = (status: string) =>
-  addDays(today(), status === "completed" ? -(++dayOffset) : ++dayOffset);
+  addDays(today(), status === "completed" ? -++dayOffset : ++dayOffset);
 
 function tripFor(commuteOf: TestCommute, riderOf: Person, status = "completed") {
   return insertTrip(commuteOf, riderOf.userId, { status, tripDate: nextDate(status) });
@@ -330,9 +330,7 @@ describe("ratings", () => {
     const admin = await api
       .get(`/users/${lone.userId}/ratings/summary`)
       .set(auth(userReader.token));
-    const other = await api
-      .get(`/users/${lone.userId}/ratings/summary`)
-      .set(auth(stranger.token));
+    const other = await api.get(`/users/${lone.userId}/ratings/summary`).set(auth(stranger.token));
 
     expectStatus(own, 200);
     expect(own.body.data).toMatchObject({ averageRating: 2, totalReviews: 1 });
@@ -354,9 +352,7 @@ describe("ratings", () => {
   });
 
   it("gives admins with users: read the full reviewer name, and refuses other people", async () => {
-    const admin = await api
-      .get(`/users/${ratedDriver.userId}/reviews`)
-      .set(auth(userReader.token));
+    const admin = await api.get(`/users/${ratedDriver.userId}/reviews`).set(auth(userReader.token));
     const other = await api.get(`/users/${ratedDriver.userId}/reviews`).set(auth(stranger.token));
 
     expectStatus(admin, 200);

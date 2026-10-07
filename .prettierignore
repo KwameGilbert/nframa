@@ -1,2 +1,5 @@
 dist
 pnpm-lock.yaml
+# Applied migrations keep their exact content (Knex records them by filename; CLAUDE.md: never edit one). Format a new
+# migration by hand before it's first run: pnpm exec prettier --write <file>
+src/database/migrations

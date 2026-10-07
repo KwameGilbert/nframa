@@ -11,7 +11,10 @@ const app = express();
 app.use(express.json());
 app.post("/echo", uploadAttachments(), (req: Request, res: Response) => {
   const files = (req.files ?? []) as Express.Multer.File[];
-  res.json({ body: req.body, files: files.map((f) => ({ mimetype: f.mimetype, size: f.size, path: f.path })) });
+  res.json({
+    body: req.body,
+    files: files.map((f) => ({ mimetype: f.mimetype, size: f.size, path: f.path })),
+  });
 });
 let failedPaths: string[] = [];
 app.post("/fail", uploadAttachments(), (req: Request) => {
@@ -69,13 +72,18 @@ describe("uploadAttachments", () => {
       contentType: "application/x-msdownload",
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/^Unsupported file type: application\/x-msdownload\. Allowed: images/);
+    expect(res.body.error).toMatch(
+      /^Unsupported file type: application\/x-msdownload\. Allowed: images/,
+    );
   });
 
   it("refuses a sixth file and a file under another field", async () => {
     let six = post();
     for (let i = 0; i < 6; i++) {
-      six = six.attach("attachments", bytes(10), { filename: `p${i}.jpg`, contentType: "image/jpeg" });
+      six = six.attach("attachments", bytes(10), {
+        filename: `p${i}.jpg`,
+        contentType: "image/jpeg",
+      });
     }
     const tooMany = await six;
     expect(tooMany.status).toBe(400);
@@ -85,7 +93,9 @@ describe("uploadAttachments", () => {
       filename: "p.jpg",
       contentType: "image/jpeg",
     });
-    expect(wrongField.body.error).toBe("You can attach up to 5 files, under the 'attachments' field");
+    expect(wrongField.body.error).toBe(
+      "You can attach up to 5 files, under the 'attachments' field",
+    );
   });
 
   it.each([

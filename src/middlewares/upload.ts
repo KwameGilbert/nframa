@@ -88,9 +88,7 @@ export function uploadSingleFile(fieldName: string) {
       // Validate MIME type
       if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
         return next(
-          AppError.badRequest(
-            `Unsupported file type: ${mimeType}. Allowed: JPEG, PNG, WEBP, PDF`,
-          ),
+          AppError.badRequest(`Unsupported file type: ${mimeType}. Allowed: JPEG, PNG, WEBP, PDF`),
         );
       }
 
@@ -159,7 +157,9 @@ export function uploadImages(fieldName: string, maxCount: number) {
     limits: { fileSize: MAX_IMAGE_BYTES, files: maxCount },
     fileFilter: (_req, file, cb) => {
       if (!IMAGE_MIME_TYPES.includes(file.mimetype)) {
-        cb(AppError.badRequest(`Unsupported file type: ${file.mimetype}. Allowed: JPEG, PNG, WEBP`));
+        cb(
+          AppError.badRequest(`Unsupported file type: ${file.mimetype}. Allowed: JPEG, PNG, WEBP`),
+        );
         return;
       }
       cb(null, true);
@@ -201,7 +201,9 @@ export function uploadImageFields(fields: readonly string[]) {
     limits: { fileSize: MAX_IMAGE_BYTES, files: fields.length },
     fileFilter: (_req, file, cb) => {
       if (!IMAGE_MIME_TYPES.includes(file.mimetype)) {
-        cb(AppError.badRequest(`Unsupported file type: ${file.mimetype}. Allowed: JPEG, PNG, WEBP`));
+        cb(
+          AppError.badRequest(`Unsupported file type: ${file.mimetype}. Allowed: JPEG, PNG, WEBP`),
+        );
         return;
       }
       cb(null, true);
@@ -229,8 +231,13 @@ export function uploadImageFields(fields: readonly string[]) {
   };
 }
 
-const LARGEST_ATTACHMENT =Math.max(...Object.values(ATTACHMENT_MAX_BYTES));
-const KIND_PLURAL = { image: "Images", video: "Videos", audio: "Audio files", document: "Documents" };
+const LARGEST_ATTACHMENT = Math.max(...Object.values(ATTACHMENT_MAX_BYTES));
+const KIND_PLURAL = {
+  image: "Images",
+  video: "Videos",
+  audio: "Audio files",
+  document: "Documents",
+};
 
 // Support message attachments (images, video, voice notes, documents) in one multipart request, under the same
 // field. Written to temp files, not memory: five 50MB videos per request would sink a small host. The temp files
