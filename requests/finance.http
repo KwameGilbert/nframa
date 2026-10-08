@@ -1,0 +1,55 @@
+@baseUrl = http://localhost:3000
+@token = PASTE_ADMIN_ACCESS_TOKEN_HERE
+@transactionId = PASTE_TRANSACTION_ID_HERE
+@userId = PASTE_USER_ID_HERE
+
+### Overview: money stats, liabilities, payout queue and 7 days of cash flow
+GET {{baseUrl}}/admin/finance/overview
+Authorization: Bearer {{token}}
+
+### Transactions: every ledger row, newest first
+GET {{baseUrl}}/admin/finance/transactions?page=1&limit=20
+Authorization: Bearer {{token}}
+
+### Transactions: settled platform fees this month
+GET {{baseUrl}}/admin/finance/transactions?account=platform&type=platformFee&status=success&from=2026-10-01T00:00:00Z&to=2026-10-31T23:59:59Z
+Authorization: Bearer {{token}}
+
+### Transactions: search by owner name, phone, email or reference
+GET {{baseUrl}}/admin/finance/transactions?search=Ama&direction=credit
+Authorization: Bearer {{token}}
+
+### Transactions: one row
+GET {{baseUrl}}/admin/finance/transactions/{{transactionId}}
+Authorization: Bearer {{token}}
+
+### Transactions: unknown id (404)
+GET {{baseUrl}}/admin/finance/transactions/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}
+
+### Transactions: from after to (400)
+GET {{baseUrl}}/admin/finance/transactions?from=2026-10-02T00:00:00Z&to=2026-10-01T00:00:00Z
+Authorization: Bearer {{token}}
+
+### Wallets: drivers, largest balance first
+GET {{baseUrl}}/admin/finance/wallets?role=driver
+Authorization: Bearer {{token}}
+
+### Wallets: frozen ones
+GET {{baseUrl}}/admin/finance/wallets?status=frozen
+Authorization: Bearer {{token}}
+
+### Wallets: one user's ledger
+GET {{baseUrl}}/admin/finance/wallets/{{userId}}/transactions?type=topup
+Authorization: Bearer {{token}}
+
+### Wallets: unknown user (404)
+GET {{baseUrl}}/admin/finance/wallets/00000000-0000-0000-0000-000000000000/transactions
+Authorization: Bearer {{token}}
+
+### Payouts: the approval queue, oldest first
+GET {{baseUrl}}/admin/finance/payouts?status=pending
+Authorization: Bearer {{token}}
+
+### Payouts: no token (401)
+GET {{baseUrl}}/admin/finance/payouts

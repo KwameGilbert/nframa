@@ -10,6 +10,7 @@ import "./driverCommute.docs.js";
 import "./driverProfile.docs.js";
 import "./emergencyContact.docs.js";
 import "./fare.docs.js";
+import "./finance.docs.js";
 import "./notification.docs.js";
 import "./overview.docs.js";
 import "./paymentMethod.docs.js";

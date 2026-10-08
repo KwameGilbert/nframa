@@ -67,7 +67,7 @@ export const PAYOUT_STATUSES = [
   "cancelled",
 ] as const;
 
-const payoutStatusSchema = z.enum(PAYOUT_STATUSES).meta({
+export const payoutStatusSchema = z.enum(PAYOUT_STATUSES).meta({
   description:
     "pending: waiting for an admin (the driver can still cancel); approved: an admin approved it and is sending the money; paid: the money was sent; rejected / failed: it didn't go out and the amount is back in the balance; cancelled: the driver cancelled it and the amount is back in the balance",
   example: "pending",

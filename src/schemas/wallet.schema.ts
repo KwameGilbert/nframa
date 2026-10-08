@@ -19,19 +19,19 @@ export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 export type TransactionDirection = (typeof TRANSACTION_DIRECTIONS)[number];
 export type TransactionStatus = (typeof TRANSACTION_STATUSES)[number];
 
-const transactionTypeSchema = z.enum(TRANSACTION_TYPES).meta({
+export const transactionTypeSchema = z.enum(TRANSACTION_TYPES).meta({
   description:
     "topup: money added through Paystack; tripCharge / waitCharge: a trip's fare and wait time; driverEarning: a driver's share of a trip; refund: money returned; tip: a rider's tip to a driver (a debit on the rider's wallet and a credit on the driver's); platformFee: the platform's cut of a trip (platform account only); payout: money paid out to a driver's payout method; adjustmentCredit / adjustmentDebit: a correction made by an admin",
   example: "topup",
 });
 
-const transactionStatusSchema = z.enum(TRANSACTION_STATUSES).meta({
+export const transactionStatusSchema = z.enum(TRANSACTION_STATUSES).meta({
   description:
     "pending: not settled yet (a top-up waiting for Paystack, a driver's earning or tip on hold, or a payout waiting to be paid); success: the wallet balance changed; failed: the payment didn't go through, nothing changed",
   example: "success",
 });
 
-const moneySchema = z.number().meta({ description: "Amount in GHS", example: 50 });
+export const moneySchema = z.number().meta({ description: "Amount in GHS", example: 50 });
 
 export const topUpSchema = z.object({
   amount: z

@@ -27,6 +27,7 @@ import { paymentMethodRouter } from "./paymentMethod.routes.js";
 import { payoutRouter } from "./payout.routes.js";
 import { broadcastRouter } from "./broadcast.routes.js";
 import { overviewRouter } from "./overview.routes.js";
+import { financeRouter } from "./finance.routes.js";
 
 export const router = Router();
 
@@ -48,13 +49,14 @@ router.use(vehicleRouter);
 router.use(roleRouter);
 router.use(rolePermissionRouter);
 // Before adminUserRouter: GET /admin/:userId would otherwise match "/admin/payment-methods", "/admin/payout-methods",
-// "/admin/reports", "/admin/support", "/admin/broadcasts" and "/admin/overview".
+// "/admin/reports", "/admin/support", "/admin/broadcasts", "/admin/overview" and "/admin/finance".
 router.use(reportRouter);
 router.use(supportRouter);
 router.use(paymentMethodRouter);
 router.use(payoutRouter);
 router.use(broadcastRouter);
 router.use(overviewRouter);
+router.use(financeRouter);
 router.use(adminUserRouter);
 router.use(settingRouter);
 router.use(fareRouter);
