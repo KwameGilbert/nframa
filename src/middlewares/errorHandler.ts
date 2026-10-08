@@ -38,6 +38,7 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
   const { statusCode, message, stack, name } = toStatusAndMessage(err);
 
   req.log.child({ type: "error" }).error({ err }, err.message);
+  // 500s reach Sentry through its Express integration (instrument.ts), which skips errors with a 4xx status.
 
   // Errors are { success: false, error }; successes are { success: true, message, data } (utils/response.ts).
   // In debug mode, include stack trace and error name for easier debugging.

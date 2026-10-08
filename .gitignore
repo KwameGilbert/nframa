@@ -9,3 +9,7 @@ logs/
 client_418949022972-74no3srgtd5g5t8hofods6h6q14q2e63.apps.googleusercontent.com.plist
 coverage/coverage-summary.json
 client_secret_418949022972-8q8af8pr8atfeovd5fk625v6lqf8gf24.apps.googleusercontent.com.json
+client_secret_418949022972-8q8af8pr8atfeovd5fk625v6lqf8gf24.apps.googleusercontent.com.json
+
+# Test coverage (pnpm test --coverage)
+coverage/
