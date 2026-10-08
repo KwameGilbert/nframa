@@ -28,5 +28,11 @@ export default defineConfig({
     // Vitest clears mock history before each test by default, which with concurrent tests would wipe codes
     // another test has just been sent. helpers/outbox.ts looks messages up by recipient, so keep them all.
     clearMocks: false,
+    // Only collected with --coverage (CI does, and writes the totals to the job summary).
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.ts"],
+      reporter: ["text-summary", "json-summary"],
+    },
   },
 });
