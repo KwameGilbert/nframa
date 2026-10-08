@@ -6,9 +6,10 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "dev": "cross-env NODE_ENV=development tsx watch src/index.ts",
+    "test:coverage": "vitest run --coverage",
+    "dev": "cross-env NODE_ENV=development tsx watch --import ./src/instrument.ts src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node --import ./dist/instrument.js dist/index.js",
     "typecheck": "tsc --noEmit && tsc -p tests",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -34,6 +35,7 @@
   "type": "module",
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",
+    "@sentry/node": "^11.4.0",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.11.0",
     "cors": "^2.8.6",
@@ -65,6 +67,7 @@
     "@types/supertest": "^7.2.1",
     "@types/swagger-ui-express": "^4.1.8",
     "@types/web-push": "^3.6.4",
+    "@vitest/coverage-v8": "^5.0.3",
     "cross-env": "^10.1.0",
     "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",

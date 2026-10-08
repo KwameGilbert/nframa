@@ -9,7 +9,7 @@ describe("GET /health", () => {
     expect(res.body).toEqual({
       success: true,
       message: "Service is healthy",
-      data: { status: "ok" },
+      data: { status: "ok", database: "ok", version: "dev" },
     });
   });
 });
