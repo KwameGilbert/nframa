@@ -48,12 +48,9 @@ const transactionFilterFields = {
   ...pageFields,
   type: transactionTypeSchema.optional(),
   direction: z.enum(TRANSACTION_DIRECTIONS).optional(),
-  account: z
-    .enum(TRANSACTION_ACCOUNTS)
-    .optional()
-    .meta({
-      description: "user: a rider's or driver's wallet; platform: the platform's own money (fees)",
-    }),
+  account: z.enum(TRANSACTION_ACCOUNTS).optional().meta({
+    description: "user: a rider's or driver's wallet; platform: the platform's own money (fees)",
+  }),
   status: transactionStatusSchema.optional(),
   tripId: z.uuid().optional(),
   search: search(
