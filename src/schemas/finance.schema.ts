@@ -36,7 +36,10 @@ const rangeFields = {
   }),
 };
 
-const fromNotAfterTo: [(q: { from?: string; to?: string }) => boolean, { message: string; path: string[] }] = [
+const fromNotAfterTo: [
+  (q: { from?: string; to?: string }) => boolean,
+  { message: string; path: string[] },
+] = [
   (q) => !q.from || !q.to || new Date(q.from) <= new Date(q.to),
   { message: "from must not be after to", path: ["to"] },
 ];
@@ -48,10 +51,14 @@ const transactionFilterFields = {
   account: z
     .enum(TRANSACTION_ACCOUNTS)
     .optional()
-    .meta({ description: "user: a rider's or driver's wallet; platform: the platform's own money (fees)" }),
+    .meta({
+      description: "user: a rider's or driver's wallet; platform: the platform's own money (fees)",
+    }),
   status: transactionStatusSchema.optional(),
   tripId: z.uuid().optional(),
-  search: search("Case-insensitive search across the owner's name, email and phone, the provider reference and the admin note"),
+  search: search(
+    "Case-insensitive search across the owner's name, email and phone, the provider reference and the admin note",
+  ),
   ...rangeFields,
 };
 
@@ -61,7 +68,9 @@ export const listFinanceTransactionsQuerySchema = z
 
 export type ListFinanceTransactionsQuery = z.infer<typeof listFinanceTransactionsQuerySchema>;
 
-export const listWalletTransactionsQuerySchema = z.object(transactionFilterFields).refine(...fromNotAfterTo);
+export const listWalletTransactionsQuerySchema = z
+  .object(transactionFilterFields)
+  .refine(...fromNotAfterTo);
 
 export type ListWalletTransactionsQuery = z.infer<typeof listWalletTransactionsQuerySchema>;
 
@@ -71,7 +80,10 @@ export const financeWalletParamsSchema = z.object({ userId: z.uuid() });
 
 export const listFinanceWalletsQuerySchema = z.object({
   ...pageFields,
-  role: z.enum(["rider", "driver"]).optional().meta({ description: "Only riders' or drivers' wallets" }),
+  role: z
+    .enum(["rider", "driver"])
+    .optional()
+    .meta({ description: "Only riders' or drivers' wallets" }),
   status: z.enum(WALLET_STATUSES).optional(),
   search: search("Case-insensitive search across the owner's name, email and phone"),
 });
@@ -117,14 +129,18 @@ const payoutTotalSchema = z.object({
 export const financeOverviewResponseSchema = z.object({
   stats: z.object({
     gmv: moneySchema.meta({ description: "All successful trip and wait charges, in GHS" }),
-    revenue: moneySchema.meta({ description: "All platform fee rows (platform fee plus booking fee), in GHS" }),
+    revenue: moneySchema.meta({
+      description: "All platform fee rows (platform fee plus booking fee), in GHS",
+    }),
     gmvToday: moneySchema.meta({ description: "Trip and wait charges today (UTC)" }),
     revenueToday: moneySchema.meta({ description: "Platform fees today (UTC)" }),
   }),
   liabilities: z
     .object({
       riderBalances: moneySchema.meta({ description: "Sum of riders' wallet balances" }),
-      driverAvailable: moneySchema.meta({ description: "Sum of drivers' settled, withdrawable balances" }),
+      driverAvailable: moneySchema.meta({
+        description: "Sum of drivers' settled, withdrawable balances",
+      }),
       driverPending: moneySchema.meta({ description: "Sum of drivers' held earnings and tips" }),
       total: moneySchema,
     })
@@ -142,7 +158,9 @@ export const financeOverviewResponseSchema = z.object({
         outflow: moneySchema.meta({ description: "Payouts marked paid that day" }),
       }),
     )
-    .meta({ description: "The last 7 days, oldest first, ending today (UTC); days with nothing are 0" }),
+    .meta({
+      description: "The last 7 days, oldest first, ending today (UTC); days with nothing are 0",
+    }),
 });
 
 export const financeTransactionResponseSchema = transactionResponseSchema.extend({
@@ -154,14 +172,19 @@ export const financeTransactionResponseSchema = transactionResponseSchema.extend
 });
 
 export const financeTransactionListResponseSchema = z.object({
-  items: z.array(financeTransactionResponseSchema).meta({ description: "This page's transactions, newest first" }),
+  items: z
+    .array(financeTransactionResponseSchema)
+    .meta({ description: "This page's transactions, newest first" }),
   pagination: paginationSchema,
   totals: z
     .object({
       credits: moneySchema.meta({ description: "Sum of credit amounts" }),
       debits: moneySchema.meta({ description: "Sum of debit amounts" }),
     })
-    .meta({ description: "Over every page of the filtered set, whatever the status; filter status=success for settled money" }),
+    .meta({
+      description:
+        "Over every page of the filtered set, whatever the status; filter status=success for settled money",
+    }),
 });
 
 export const financeWalletResponseSchema = z.object({
@@ -174,13 +197,17 @@ export const financeWalletResponseSchema = z.object({
   frozenAt: z.iso.datetime().nullable(),
   frozenReason: z.string().nullable(),
   lifetimeTopUps: moneySchema.meta({ description: "Successful top-ups, ever" }),
-  lifetimeEarnings: moneySchema.meta({ description: "Driver earnings and tips received, held or released" }),
+  lifetimeEarnings: moneySchema.meta({
+    description: "Driver earnings and tips received, held or released",
+  }),
   lastActivityAt: z.iso.datetime().nullable().meta({ description: "The newest transaction" }),
   createdAt: z.iso.datetime(),
 });
 
 export const financeWalletListResponseSchema = z.object({
-  items: z.array(financeWalletResponseSchema).meta({ description: "This page's wallets, largest balance first" }),
+  items: z
+    .array(financeWalletResponseSchema)
+    .meta({ description: "This page's wallets, largest balance first" }),
   pagination: paginationSchema,
   totals: z
     .object({
@@ -205,9 +232,13 @@ export const financePayoutResponseSchema = payoutResponseSchema.extend({
 });
 
 export const financePayoutListResponseSchema = z.object({
-  items: z.array(financePayoutResponseSchema).meta({ description: "This page's payouts, oldest first" }),
+  items: z
+    .array(financePayoutResponseSchema)
+    .meta({ description: "This page's payouts, oldest first" }),
   pagination: paginationSchema,
-  totals: z.object({ amount: moneySchema }).meta({ description: "Over every page of the filtered set" }),
+  totals: z
+    .object({ amount: moneySchema })
+    .meta({ description: "Over every page of the filtered set" }),
 });
 
 export type FinanceOverview = z.infer<typeof financeOverviewResponseSchema>;

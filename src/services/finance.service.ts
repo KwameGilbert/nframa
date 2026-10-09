@@ -42,7 +42,8 @@ interface OwnerRow {
 }
 
 function splitOwner<R extends OwnerRow>(id: string, row: R) {
-  const { ownerFullName, ownerEmail, ownerPhoneCountryCode, ownerPhoneNumber, ownerRole, ...rest } = row;
+  const { ownerFullName, ownerEmail, ownerPhoneCountryCode, ownerPhoneNumber, ownerRole, ...rest } =
+    row;
   return {
     rest,
     owner: {
@@ -59,7 +60,9 @@ function splitOwner<R extends OwnerRow>(id: string, row: R) {
 function whereOwnerMatches(query: Knex.QueryBuilder, search: string, extra: string[] = []) {
   const like = pattern(search);
   return query.where((q) => {
-    q.whereILike("u.fullName", like).orWhereILike("u.email", like).orWhereILike("u.phoneNumber", like);
+    q.whereILike("u.fullName", like)
+      .orWhereILike("u.email", like)
+      .orWhereILike("u.phoneNumber", like);
     for (const column of extra) q.orWhereILike(column, like);
   });
 }
@@ -82,7 +85,12 @@ interface OverviewRow {
 }
 
 export async function getFinanceOverview(): Promise<FinanceOverview> {
-  const [{ rows: [totals] }, { rows: cashFlow }] = await Promise.all([
+  const [
+    {
+      rows: [totals],
+    },
+    { rows: cashFlow },
+  ] = await Promise.all([
     db.raw<{ rows: OverviewRow[] }>(`
       WITH charges AS (
         SELECT "amount", ${DAY_OF("createdAt")} AS day FROM "transactions"
@@ -172,9 +180,7 @@ export async function getFinanceTransaction(id: string) {
   return row && toFinanceTransaction(row);
 }
 
-export async function listFinanceTransactions(
-  query: ListFinanceTransactionsQuery,
-): Promise<{
+export async function listFinanceTransactions(query: ListFinanceTransactionsQuery): Promise<{
   items: ReturnType<typeof toFinanceTransaction>[];
   pagination: ReturnType<typeof pagination>;
   totals: { credits: number; debits: number };
@@ -198,8 +204,12 @@ export async function listFinanceTransactions(
   const [summary, rows] = await Promise.all([
     filtered().first(
       db.raw("count(*)::int as total"),
-      db.raw(`coalesce(sum(t."amount") FILTER (WHERE t."direction" = 'credit'), 0)::float8 as credits`),
-      db.raw(`coalesce(sum(t."amount") FILTER (WHERE t."direction" = 'debit'), 0)::float8 as debits`),
+      db.raw(
+        `coalesce(sum(t."amount") FILTER (WHERE t."direction" = 'credit'), 0)::float8 as credits`,
+      ),
+      db.raw(
+        `coalesce(sum(t."amount") FILTER (WHERE t."direction" = 'debit'), 0)::float8 as debits`,
+      ),
     ) as Promise<{ total: number; credits: number; debits: number }>,
     filtered()
       .select("t.*", ...OWNER_COLUMNS)
@@ -238,7 +248,13 @@ interface WalletRow extends OwnerRow {
   createdAt: Date;
 }
 
-export async function listFinanceWallets({ page, limit, role, status, search }: ListFinanceWalletsQuery) {
+export async function listFinanceWallets({
+  page,
+  limit,
+  role,
+  status,
+  search,
+}: ListFinanceWalletsQuery) {
   const filtered = () => {
     const q = db("wallets as w").join("users as u", "u.id", "w.userId");
     q.whereIn("u.role", role ? [role] : ["rider", "driver"]);
@@ -274,7 +290,9 @@ export async function listFinanceWallets({ page, limit, role, status, search }: 
           WHERE x."userId" = w."userId" AND x."type" IN ('driverEarning', 'tip')
             AND x."direction" = 'credit' AND x."status" <> 'failed'
         )::float8 as "lifetimeEarnings"`),
-        db.raw(`(SELECT max(x."createdAt") FROM "transactions" x WHERE x."userId" = w."userId") as "lastActivityAt"`),
+        db.raw(
+          `(SELECT max(x."createdAt") FROM "transactions" x WHERE x."userId" = w."userId") as "lastActivityAt"`,
+        ),
       )
       .orderBy([
         { column: "w.balance", order: "desc" },
@@ -317,7 +335,14 @@ interface PayoutRow extends OwnerRow {
   paymentDisplayName: string | null;
 }
 
-export async function listFinancePayouts({ page, limit, status, search, from, to }: ListFinancePayoutsQuery) {
+export async function listFinancePayouts({
+  page,
+  limit,
+  status,
+  search,
+  from,
+  to,
+}: ListFinancePayoutsQuery) {
   const filtered = () => {
     const q = db("payouts as p").join("users as u", "u.id", "p.driverUserId");
     if (status) q.where("p.status", status);
@@ -335,7 +360,12 @@ export async function listFinancePayouts({ page, limit, status, search, from, to
     filtered()
       .leftJoin("payoutMethods as pm", "pm.id", "p.payoutMethodId")
       .leftJoin("paymentMethods as pay", "pay.id", "pm.paymentMethodId")
-      .select("p.*", ...OWNER_COLUMNS, "pay.type as paymentType", "pay.displayName as paymentDisplayName")
+      .select(
+        "p.*",
+        ...OWNER_COLUMNS,
+        "pay.type as paymentType",
+        "pay.displayName as paymentDisplayName",
+      )
       // Oldest first: the queue is worked from the front.
       .orderBy([
         { column: "p.createdAt", order: "asc" },

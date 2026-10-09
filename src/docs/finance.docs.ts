@@ -44,7 +44,10 @@ registry.registerPath({
     "The whole ledger, every user's wallet plus the platform's fee rows, newest first, with credit and debit totals over the filtered set. Needs finance: read.",
   request: { query: listFinanceTransactionsQuerySchema },
   responses: {
-    200: successResponse("Transactions retrieved successfully", financeTransactionListResponseSchema),
+    200: successResponse(
+      "Transactions retrieved successfully",
+      financeTransactionListResponseSchema,
+    ),
     400: errorResponse("A filter is invalid, or from is after to"),
     401: unauthorized,
     403: forbidden,
@@ -92,7 +95,10 @@ registry.registerPath({
     "The same list as GET /admin/finance/transactions, for one user's wallet. Needs finance: read.",
   request: { params: financeWalletParamsSchema, query: listWalletTransactionsQuerySchema },
   responses: {
-    200: successResponse("Transactions retrieved successfully", financeTransactionListResponseSchema),
+    200: successResponse(
+      "Transactions retrieved successfully",
+      financeTransactionListResponseSchema,
+    ),
     400: errorResponse("userId is not a UUID, a filter is invalid, or from is after to"),
     401: unauthorized,
     403: forbidden,

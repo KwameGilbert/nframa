@@ -84,7 +84,10 @@ describe("GET /admin/overview", () => {
     const rider = await newRider();
     const before = (await getOverview(viewer.token)).body.data;
 
-    const trip = await insertTrip(commute, rider.userId, { status: "completed", completedAt: new Date() });
+    const trip = await insertTrip(commute, rider.userId, {
+      status: "completed",
+      completedAt: new Date(),
+    });
     // Revenue comes from the ledger: completing a trip records platformFee 2.64 + bookingFee 1 for the platform.
     await db.transaction((trx) =>
       walletModel.recordPlatformIn(trx, { tripId: trip.id, type: "platformFee", amount: 3.64 }),
@@ -93,7 +96,9 @@ describe("GET /admin/overview", () => {
     const after = (await getOverview(viewer.token)).body.data;
     expect(after.stats.tripsToday).toBeGreaterThanOrEqual(before.stats.tripsToday + 1);
     expect(after.stats.revenue).toBeGreaterThanOrEqual(before.stats.revenue + 3.64 - 0.001);
-    expect(after.tripActivity.at(-1).completed).toBeGreaterThanOrEqual(before.tripActivity.at(-1).completed + 1);
+    expect(after.tripActivity.at(-1).completed).toBeGreaterThanOrEqual(
+      before.tripActivity.at(-1).completed + 1,
+    );
   });
 
   it("returns up to 30 days of trip activity", async () => {

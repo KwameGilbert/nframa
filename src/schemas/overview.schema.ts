@@ -14,7 +14,9 @@ export type OverviewQuery = z.infer<typeof overviewQuerySchema>;
 
 const statTrendSchema = z.object({
   direction: z.enum(["up", "down"]).meta({ description: "up when today is at or above yesterday" }),
-  value: z.string().meta({ description: "Change since yesterday, as a percentage", example: "+12.5%" }),
+  value: z
+    .string()
+    .meta({ description: "Change since yesterday, as a percentage", example: "+12.5%" }),
 });
 
 export const overviewResponseSchema = z.object({
@@ -26,9 +28,18 @@ export const overviewResponseSchema = z.object({
       description: "Platform fee plus booking fee on trips completed today, in GHS",
       example: 182.4,
     }),
-    openIncidents: z.number().int().meta({ description: "SOS incidents not yet resolved or cancelled" }),
-    pendingVerification: z.number().int().meta({ description: "Documents pending or under review" }),
-    openTickets: z.number().int().meta({ description: "Support tickets open, in progress or awaiting the user" }),
+    openIncidents: z
+      .number()
+      .int()
+      .meta({ description: "SOS incidents not yet resolved or cancelled" }),
+    pendingVerification: z
+      .number()
+      .int()
+      .meta({ description: "Documents pending or under review" }),
+    openTickets: z
+      .number()
+      .int()
+      .meta({ description: "Support tickets open, in progress or awaiting the user" }),
   }),
   trends: z
     .object({
@@ -49,7 +60,9 @@ export const overviewResponseSchema = z.object({
         cancelled: z.number().int().meta({ description: "Trips cancelled that day" }),
       }),
     )
-    .meta({ description: "One entry per day, oldest first, ending today (UTC); days with no trips are 0" }),
+    .meta({
+      description: "One entry per day, oldest first, ending today (UTC); days with no trips are 0",
+    }),
   verificationQueue: z
     .array(
       z.object({

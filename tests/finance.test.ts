@@ -113,7 +113,11 @@ describe("GET /admin/finance/overview", () => {
     expect(cashFlow).toHaveLength(7);
     expect(cashFlow.at(-1).date).toBe(todayUtc());
     for (const day of cashFlow) {
-      expect(day).toEqual({ date: expect.any(String), inflow: expect.any(Number), outflow: expect.any(Number) });
+      expect(day).toEqual({
+        date: expect.any(String),
+        inflow: expect.any(Number),
+        outflow: expect.any(Number),
+      });
     }
   });
 });
@@ -162,7 +166,11 @@ describe("GET /admin/finance/transactions/:id", () => {
 
     const res = await get(`/admin/finance/transactions/${id}`, viewer.token);
     expectStatus(res, 200);
-    expect(res.body.data).toMatchObject({ id, amount: 40, user: { id: rider.userId, role: "rider" } });
+    expect(res.body.data).toMatchObject({
+      id,
+      amount: 40,
+      user: { id: rider.userId, role: "rider" },
+    });
   });
 
   it("404s on an unknown id", async () => {
@@ -172,7 +180,10 @@ describe("GET /admin/finance/transactions/:id", () => {
 
 describe("GET /admin/finance/wallets", () => {
   it("lists wallets by role and search, with lifetime figures", async () => {
-    const res = await get("/admin/finance/wallets", viewer.token, { role: "driver", search: driver.fullName });
+    const res = await get("/admin/finance/wallets", viewer.token, {
+      role: "driver",
+      search: driver.fullName,
+    });
     expectStatus(res, 200);
     const wallet = res.body.data.items.find((w: { userId: string }) => w.userId === driver.userId);
     expect(wallet).toMatchObject({
@@ -186,7 +197,10 @@ describe("GET /admin/finance/wallets", () => {
   });
 
   it("leaves riders out of a driver search", async () => {
-    const res = await get("/admin/finance/wallets", viewer.token, { role: "driver", search: rider.fullName });
+    const res = await get("/admin/finance/wallets", viewer.token, {
+      role: "driver",
+      search: rider.fullName,
+    });
     expectStatus(res, 200);
     const ids = res.body.data.items.map((w: { userId: string }) => w.userId);
     expect(ids).not.toContain(rider.userId);
@@ -202,13 +216,19 @@ describe("GET /admin/finance/wallets/:userId/transactions", () => {
   });
 
   it("404s on a user without a wallet", async () => {
-    expectStatus(await get(`/admin/finance/wallets/${randomUUID()}/transactions`, viewer.token), 404);
+    expectStatus(
+      await get(`/admin/finance/wallets/${randomUUID()}/transactions`, viewer.token),
+      404,
+    );
   });
 });
 
 describe("GET /admin/finance/payouts", () => {
   it("lists the pending queue with the driver and payout method", async () => {
-    const res = await get("/admin/finance/payouts", viewer.token, { status: "pending", search: driver.fullName });
+    const res = await get("/admin/finance/payouts", viewer.token, {
+      status: "pending",
+      search: driver.fullName,
+    });
     expectStatus(res, 200);
     const payout = res.body.data.items.find((p: { id: string }) => p.id === payoutId);
     expect(payout).toMatchObject({
@@ -221,7 +241,10 @@ describe("GET /admin/finance/payouts", () => {
   });
 
   it("leaves it out of other statuses", async () => {
-    const res = await get("/admin/finance/payouts", viewer.token, { status: "paid", search: driver.fullName });
+    const res = await get("/admin/finance/payouts", viewer.token, {
+      status: "paid",
+      search: driver.fullName,
+    });
     expectStatus(res, 200);
     expect(res.body.data.items.map((p: { id: string }) => p.id)).not.toContain(payoutId);
   });

@@ -45,7 +45,11 @@ export async function listWalletTransactions(req: Request, res: Response) {
   if (!(await walletExists(userId))) {
     throw AppError.notFound(`Wallet not found for user: ${userId}`);
   }
-  sendSuccess(res, "Transactions retrieved successfully", await findTransactions({ ...query, userId }));
+  sendSuccess(
+    res,
+    "Transactions retrieved successfully",
+    await findTransactions({ ...query, userId }),
+  );
 }
 
 export async function listFinancePayouts(req: Request, res: Response) {
