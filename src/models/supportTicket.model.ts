@@ -68,7 +68,7 @@ export type Outcome<T> =
 export const LINKS = {
   tripId: { table: "trips", owner: ["riderUserId", "driverUserId"], label: "Trip" },
   transactionId: { table: "transactions", owner: ["userId"], label: "Transaction" },
-  payoutId: { table: "payoutHistory", owner: ["driverUserId"], label: "Payout" },
+  payoutId: { table: "payouts", owner: ["driverUserId"], label: "Payout" },
   relatedTicketId: { table: "supportTickets", owner: ["userId"], label: "Support ticket" },
 } as const;
 
@@ -461,9 +461,7 @@ export const supportTicketModel = {
             .first("id", "type", "direction", "amount", "status", "createdAt")
         : undefined,
       ticket.payoutId
-        ? db("payoutHistory")
-            .where({ id: ticket.payoutId })
-            .first("id", "amount", "status", "createdAt")
+        ? db("payouts").where({ id: ticket.payoutId }).first("id", "amount", "status", "createdAt")
         : undefined,
       ticket.relatedTicketId
         ? db("supportTickets")

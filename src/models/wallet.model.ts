@@ -4,12 +4,22 @@ import { BaseModel } from "./BaseModel.js";
 import { toTransaction, type Transaction } from "./transaction.model.js";
 import { roundMoney } from "../utils/money.js";
 import { AppError } from "../utils/AppError.js";
+import { transition } from "../utils/transition.js";
+import { settingModel } from "./setting.model.js";
 import type { TransactionDirection, TransactionType } from "../schemas/wallet.schema.js";
+import { createLogger } from "../config/logger.js";
 
 export interface Wallet {
   userId: string;
   balance: number;
   heldAmount: number;
+  // Driver credits (earnings, tips) still in their hold period: not withdrawable until released into balance.
+  pendingBalance: number;
+  // An admin can freeze a wallet: money still comes in and held credits still release, nothing goes out.
+  status: "active" | "frozen";
+  frozenAt: Date | null;
+  frozenBy: string | null;
+  frozenReason: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,35 +35,46 @@ export interface LedgerEntry {
   metadata?: Record<string, unknown>;
 }
 
+// What a move writes to the ledger: a new row, or the settlement of one of the user's pending rows.
+export type MoveRow =
+  | (Omit<LedgerEntry, "userId"> & {
+      status: "pending" | "success";
+      availableAt?: Date;
+      actorId?: string;
+      note?: string;
+    })
+  | { id: string; status: "success" | "failed" };
+
+export interface Move {
+  userId: string;
+  // Signed amounts added to the wallet's columns.
+  delta?: { balance?: number; pendingBalance?: number };
+  // Set on outflows: a frozen wallet refuses them with 423.
+  requireActive?: boolean;
+  row: MoveRow;
+}
+
 // Creates the wallet if needed, then locks its row until the transaction ends, so concurrent balance
 // changes queue up instead of overwriting each other.
-async function lockWallet(trx: Knex.Transaction, userId: string) {
+async function lockWallet(trx: Knex.Transaction, userId: string): Promise<Wallet> {
   await trx("wallets").insert({ userId }).onConflict("userId").ignore();
-  await trx("wallets").where({ userId }).forUpdate().first();
+  return trx("wallets").where({ userId }).forUpdate().first();
 }
 
-// Returns the new balance. Arithmetic happens in SQL on numeric, so there's no float rounding drift.
-async function applyToBalance(
-  trx: Knex.Transaction,
-  userId: string,
-  direction: TransactionDirection,
-  amount: number,
-): Promise<number> {
-  const [row] = await trx("wallets")
-    .where({ userId })
-    .update({
-      balance: trx.raw(`"balance" ${direction === "credit" ? "+" : "-"} ?`, [amount]),
-      updatedAt: new Date(),
-    })
-    .returning("balance");
-  return Number(row.balance);
-}
-
-// A zero or negative hold/release would silently move other trips' held money: that's a caller bug.
+// A zero or negative amount would silently move the wrong money: that's a caller bug.
 function positiveMoney(amount: number): number {
   const rounded = roundMoney(amount);
-  if (!(rounded > 0)) throw new Error(`Trip money amounts must be positive, got ${amount}`);
+  if (!(rounded > 0)) throw new Error(`Money amounts must be positive, got ${amount}`);
   return rounded;
+}
+
+const logger = createLogger("app");
+const RELEASE_BATCH = 500;
+
+// When a driver credit written at `from` (an earning or a tip) is released into the driver's balance.
+export async function heldUntil(from: Date = new Date()): Promise<Date> {
+  const hours = await settingModel.getValue("finance.earningsHoldHours");
+  return new Date(from.getTime() + hours * 3_600_000);
 }
 
 // The only code that changes a wallet balance or hold. Every balance change locks the wallet and writes its ledger row
@@ -63,42 +84,115 @@ class WalletModel extends BaseModel<Wallet> {
   protected readonly primaryKey = "userId";
 
   protected sanitize(row: Wallet): Wallet {
-    return { ...row, balance: Number(row.balance), heldAmount: Number(row.heldAmount) };
+    return {
+      ...row,
+      balance: Number(row.balance),
+      heldAmount: Number(row.heldAmount),
+      pendingBalance: Number(row.pendingBalance),
+    };
   }
 
-  // A user who has never had money moved has no row yet: their wallet is empty.
+  // Every wallet balance change goes through here. Locks the wallet, refuses an outflow from a frozen wallet (423),
+  // applies the deltas, then writes or settles the ledger row with the new balance. The deltas apply in one UPDATE
+  // that only matches while pendingBalance stays >= 0 and a debit leaves spendable (balance - heldAmount) >= 0;
+  // otherwise 409. Arithmetic happens in SQL on numeric, so there's no float rounding drift.
+  async move(
+    trx: Knex.Transaction,
+    { userId, delta = {}, requireActive = false, row }: Move,
+  ): Promise<{ wallet: Wallet; transaction: Transaction }> {
+    const balance = roundMoney(delta.balance ?? 0);
+    const pendingBalance = roundMoney(delta.pendingBalance ?? 0);
+    const locked = await lockWallet(trx, userId);
+    if (requireActive && locked.status === "frozen") throw AppError.locked("This wallet is frozen");
+
+    const [updated] = await trx("wallets")
+      .where({ userId })
+      .andWhereRaw(`"pendingBalance" + ? >= 0`, [pendingBalance])
+      .andWhereRaw(`(?::numeric >= 0 OR "balance" + ? >= "heldAmount")`, [balance, balance])
+      .update({
+        balance: trx.raw(`"balance" + ?`, [balance]),
+        pendingBalance: trx.raw(`"pendingBalance" + ?`, [pendingBalance]),
+        updatedAt: new Date(),
+      })
+      .returning("*");
+    if (!updated) throw AppError.conflict("Insufficient wallet balance");
+    const wallet = this.sanitize(updated);
+
+    if ("id" in row) {
+      const settled = await transition<Transaction>(
+        trx,
+        "transactions",
+        row.id,
+        ["pending"],
+        row.status,
+        {
+          balanceAfter: wallet.balance,
+        },
+      );
+      if (settled.userId !== userId) throw new Error(`Transaction ${row.id} isn't ${userId}'s`);
+      return { wallet, transaction: toTransaction(settled) };
+    }
+
+    const { metadata, ...fields } = row;
+    const [inserted] = await trx("transactions")
+      .insert({
+        ...fields,
+        userId,
+        amount: positiveMoney(row.amount),
+        balanceAfter: wallet.balance,
+        metadata: metadata ? JSON.stringify(metadata) : null,
+      })
+      .returning("*");
+    return { wallet, transaction: toTransaction(inserted) };
+  }
+
+  // A user who has never had money moved has no row yet: their wallet is empty. nextReleaseAt is when the
+  // earliest held credit moves into balance (null when nothing is held).
   async getWallet(userId: string) {
-    const wallet = await this.findById(userId);
+    const [wallet, next] = await Promise.all([
+      this.findById(userId),
+      db("transactions")
+        .where({ userId, status: "pending", direction: "credit" })
+        .whereNotNull("availableAt")
+        .min<{ nextReleaseAt: Date | null }>("availableAt as nextReleaseAt")
+        .first(),
+    ]);
     const balance = wallet?.balance ?? 0;
     const heldAmount = wallet?.heldAmount ?? 0;
-    return { balance, heldAmount, availableBalance: roundMoney(balance - heldAmount) };
+    return {
+      balance,
+      heldAmount,
+      availableBalance: roundMoney(balance - heldAmount),
+      pendingBalance: wallet?.pendingBalance ?? 0,
+      status: wallet?.status ?? "active",
+      nextReleaseAt: next?.nextReleaseAt ?? null,
+    };
   }
 
   async getAvailableBalance(userId: string) {
     return (await this.getWallet(userId)).availableBalance;
   }
 
+  // What the user can spend right now (balance - heldAmount), read under the wallet lock the caller's trx holds.
+  async spendableIn(trx: Knex.Transaction, userId: string): Promise<number> {
+    const wallet = await lockWallet(trx, userId);
+    return Math.max(0, roundMoney(Number(wallet.balance) - Number(wallet.heldAmount)));
+  }
+
   // Credits or debits a wallet and records it as a successful transaction, in its own database transaction or
-  // in trx. A debit may take the balance below zero on purpose (a wait charge after boarding); callers that must
-  // not overdraw check getAvailableBalance first, or hold the money.
+  // in trx. A debit never takes the wallet below what the user can spend (balance - heldAmount): it's refused with 409.
   record(entry: LedgerEntry, trx?: Knex.Transaction): Promise<Transaction> {
     return trx ? this.recordIn(trx, entry) : db.transaction((t) => this.recordIn(t, entry));
   }
 
-  async recordIn(trx: Knex.Transaction, { metadata, ...entry }: LedgerEntry): Promise<Transaction> {
-    const amount = roundMoney(entry.amount);
-    await lockWallet(trx, entry.userId);
-    const balanceAfter = await applyToBalance(trx, entry.userId, entry.direction, amount);
-    const [row] = await trx("transactions")
-      .insert({
-        ...entry,
-        amount,
-        status: "success",
-        balanceAfter,
-        metadata: metadata ? JSON.stringify(metadata) : null,
-      })
-      .returning("*");
-    return toTransaction(row);
+  async recordIn(trx: Knex.Transaction, { userId, ...entry }: LedgerEntry): Promise<Transaction> {
+    const amount = positiveMoney(entry.amount);
+    const { transaction } = await this.move(trx, {
+      userId,
+      delta: { balance: entry.direction === "credit" ? amount : -amount },
+      row: { ...entry, amount, status: "success" },
+    });
+    return transaction;
   }
 
   // Trip money: hold on accept, then capture at boarding or release on cancel/decline/no-show. Each takes the
@@ -108,10 +202,12 @@ class WalletModel extends BaseModel<Wallet> {
   // the driver's wallet. Taking locks in one fixed order means two transactions can never deadlock.
 
   // Reserves amount out of what the rider can spend. The check and the reservation are one UPDATE, so
-  // simultaneous holds can't reserve the same money twice. No wallet yet means nothing to hold.
+  // simultaneous holds can't reserve the same money twice. No wallet yet means nothing to hold. A frozen wallet
+  // can't take on new trips (423).
   async hold(trx: Knex.Transaction, userId: string, amount: number): Promise<void> {
     const rounded = positiveMoney(amount);
-    await trx("wallets").where({ userId }).forUpdate().first();
+    const wallet: Wallet | undefined = await trx("wallets").where({ userId }).forUpdate().first();
+    if (wallet?.status === "frozen") throw AppError.locked("This wallet is frozen");
     const updated = await trx("wallets")
       .where({ userId })
       .andWhereRaw(`"balance" - "heldAmount" >= ?`, [rounded])
@@ -131,17 +227,18 @@ class WalletModel extends BaseModel<Wallet> {
       });
   }
 
-  // Turns a trip's hold into its charge: releases amount and debits the same amount as the trip_charge.
+  // Turns a trip's hold into its charge: releases amount and debits the same amount as the tripCharge.
   async capture(
     trx: Knex.Transaction,
     { userId, tripId, amount }: { userId: string; tripId: string; amount: number },
   ): Promise<Transaction> {
     await this.release(trx, userId, amount);
-    return this.recordIn(trx, { userId, tripId, type: "trip_charge", direction: "debit", amount });
+    return this.recordIn(trx, { userId, tripId, type: "tripCharge", direction: "debit", amount });
   }
 
-  // A rider's tip to a driver for a trip: a debit and a credit in one database transaction. Unlike a wait charge, a tip
-  // never takes the rider below what they can spend (balance - heldAmount), and the check runs under the wallet lock.
+  // A rider's tip to a driver for a trip, in the caller's trx. The rider's debit settles at once and never takes them
+  // below what they can spend (409); a frozen rider can't tip (423). The driver's credit is held like an earning:
+  // pending until heldUntil, counted in their pendingBalance. The rider's wallet is locked first, then the driver's.
   async transferTip(
     trx: Knex.Transaction,
     {
@@ -152,27 +249,90 @@ class WalletModel extends BaseModel<Wallet> {
     }: { fromUserId: string; toUserId: string; tripId: string; amount: number },
   ): Promise<void> {
     const rounded = positiveMoney(amount);
-    await lockWallet(trx, fromUserId);
-    const wallet = await trx("wallets")
-      .where({ userId: fromUserId })
-      .first("balance", "heldAmount");
-    if (roundMoney(Number(wallet.balance) - Number(wallet.heldAmount)) < rounded) {
-      throw AppError.conflict("Insufficient wallet balance");
-    }
-    await this.recordIn(trx, {
+    await this.move(trx, {
       userId: fromUserId,
-      tripId,
-      type: "tip",
-      direction: "debit",
-      amount: rounded,
+      delta: { balance: -rounded },
+      requireActive: true,
+      row: { tripId, type: "tip", direction: "debit", amount: rounded, status: "success" },
     });
-    await this.recordIn(trx, {
+    await this.move(trx, {
       userId: toUserId,
-      tripId,
-      type: "tip",
-      direction: "credit",
-      amount: rounded,
+      delta: { pendingBalance: rounded },
+      row: {
+        tripId,
+        type: "tip",
+        direction: "credit",
+        amount: rounded,
+        status: "pending",
+        availableAt: await heldUntil(),
+      },
     });
+  }
+
+  // The platform's own income for a trip (its platformFee row). The platform has no wallet, so this is a plain
+  // insert: account platform, no user, no balanceAfter. One per trip (transactions_one_per_trip_type).
+  async recordPlatformIn(
+    trx: Knex.Transaction,
+    { tripId, type, amount }: { tripId: string; type: "platformFee"; amount: number },
+  ): Promise<Transaction> {
+    const [inserted] = await trx("transactions")
+      .insert({
+        account: "platform",
+        userId: null,
+        tripId,
+        type,
+        direction: "credit",
+        amount: positiveMoney(amount),
+        status: "success",
+      })
+      .returning("*");
+    return toTransaction(inserted);
+  }
+
+  // Moves every held driver credit (earning or tip) whose availableAt has passed into balance: each in its own
+  // database transaction, so one bad row can't hold the rest back. Runs on frozen wallets too: a release isn't an
+  // outflow. A row someone else released first fails transition with 409 and is skipped; a row that fails
+  // any other way is logged and skipped. Returns how many released.
+  async releaseDueEarnings(userId?: string): Promise<number> {
+    const now = new Date();
+    let released = 0;
+    // Walks (availableAt, id) forward, so a skipped row is never picked up again in this run.
+    let after: { availableAt: Date; id: string } | undefined;
+    for (;;) {
+      const due: Pick<Transaction, "id" | "userId" | "amount" | "availableAt">[] = await db(
+        "transactions",
+      )
+        .where({ status: "pending", direction: "credit" })
+        .whereNotNull("availableAt")
+        .where("availableAt", "<=", now)
+        .modify((q) => {
+          if (userId) q.where({ userId });
+          if (after) q.whereRaw(`("availableAt", "id") > (?, ?)`, [after.availableAt, after.id]);
+        })
+        .orderBy([{ column: "availableAt" }, { column: "id" }])
+        .limit(RELEASE_BATCH)
+        .select("id", "userId", "amount", "availableAt");
+
+      for (const row of due) {
+        after = { availableAt: row.availableAt as Date, id: row.id };
+        try {
+          await db.transaction((trx) =>
+            this.move(trx, {
+              userId: row.userId as string,
+              delta: { balance: Number(row.amount), pendingBalance: -Number(row.amount) },
+              row: { id: row.id, status: "success" },
+            }),
+          );
+          released++;
+        } catch (err) {
+          // Released by someone else first: nothing to do. Anything else is logged and the sweep moves on.
+          if (!(err instanceof AppError && err.statusCode === 409)) {
+            logger.error({ err, transactionId: row.id }, "Failed to release a held driver credit");
+          }
+        }
+      }
+      if (due.length < RELEASE_BATCH) return released;
+    }
   }
 
   // Credits a pending top-up once its payment is confirmed. Idempotent: the transaction row is locked first,
@@ -191,18 +351,12 @@ class WalletModel extends BaseModel<Wallet> {
         return { transaction: toTransaction(pending), credited: false };
       }
 
-      await lockWallet(trx, pending.userId);
-      const balanceAfter = await applyToBalance(
-        trx,
-        pending.userId,
-        "credit",
-        Number(pending.amount),
-      );
-      const [row] = await trx("transactions")
-        .where({ id: pending.id })
-        .update({ status: "success", balanceAfter, updatedAt: new Date() })
-        .returning("*");
-      return { transaction: toTransaction(row), credited: true };
+      const { transaction } = await this.move(trx, {
+        userId: pending.userId as string,
+        delta: { balance: Number(pending.amount) },
+        row: { id: pending.id, status: "success" },
+      });
+      return { transaction, credited: true };
     });
   }
 }

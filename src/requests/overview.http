@@ -1,0 +1,16 @@
+@baseUrl = http://localhost:3000
+
+# Sign in as an admin with overview: read and paste the access token here.
+@token = PASTE_ADMIN_ACCESS_TOKEN_HERE
+
+### Overview with the default 7 days of trip activity
+GET {{baseUrl}}/admin/overview
+Authorization: Bearer {{token}}
+
+### Overview with 30 days of trip activity
+GET {{baseUrl}}/admin/overview?days=30
+Authorization: Bearer {{token}}
+
+### Invalid: days above 30 (400)
+GET {{baseUrl}}/admin/overview?days=31
+Authorization: Bearer {{token}}

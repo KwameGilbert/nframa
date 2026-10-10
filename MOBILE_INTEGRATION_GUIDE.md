@@ -16,11 +16,12 @@ Every response has the shape `{ "success": true, "message": "...", "data": ... }
 5. [Driver Approval & Verification Status](#driver-approval--verification-status)
 6. [Trips (Rider Booking)](#trips-rider-booking)
 7. [Trips (Driver Side)](#trips-driver-side)
-8. [Admin Document Review](#admin-document-review)
-9. [Push Notifications & Inbox](#push-notifications--inbox)
-10. [Support & Chat](#support--chat)
-11. [Error Codes & Handling](#error-codes--handling)
-12. [Rate Limiting](#rate-limiting)
+8. [Driver Earnings & Payouts](#driver-earnings--payouts)
+9. [Admin Document Review](#admin-document-review)
+10. [Push Notifications & Inbox](#push-notifications--inbox)
+11. [Support & Chat](#support--chat)
+12. [Error Codes & Handling](#error-codes--handling)
+13. [Rate Limiting](#rate-limiting)
 
 ---
 
@@ -743,7 +744,7 @@ A trip is one rider's seat on one date's run of a driver's commute. Riders find 
 | `no_show`   | The rider was never boarded (`cancelledBy` `driver` or `system`). The hold is released.              |
 | `expired`   | The driver didn't answer a pending request in time (`trips.requestExpiryMinutes`, or by the pickup). |
 
-**Holds:** while a trip is `accepted`, its total is reserved: `GET /wallet` shows it in `heldAmount`, and `availableBalance` (`balance - heldAmount`) is what the rider can still spend. The `balance` itself only drops when the rider boards. A request needs `availableBalance` at least the trip's total. A wait charge at boarding can take the balance below zero; the rider then can't request trips until they top up.
+**Holds:** while a trip is `accepted`, its total is reserved: `GET /wallet` shows it in `heldAmount`, and `availableBalance` (`balance - heldAmount`) is what the rider can still spend. The `balance` itself only drops when the rider boards. A request needs `availableBalance` at least the trip's total. A wait charge at boarding is capped at what the rider can still spend, so the balance never goes below zero.
 
 ### 1. Find Commutes
 
@@ -1098,7 +1099,7 @@ Money moves only at the scan. Around the scheduled pickup:
 
 **Boarding window:** from `trips.boardingEarlyMinutes` (default 30) before `scheduledPickupAt` to `trips.boardingLateMinutes` (default 60) after it, whatever the date (a pickup may fall after midnight). **Proximity:** the driver must be within `trips.boardingRadiusMeters` (default 100 m) of the trip's pickup point, and the rider's last shared location must be at most `trips.locationMaxAgeSeconds` (default 120 s) old and within the same radius of the driver.
 
-**Wait charge:** if the driver marked arrival, the wait runs from the later of the arrival and `scheduledPickupAt` to the scan, in whole minutes (`waitMinutes`). Minutes beyond `fares.waitGraceMinutes` (default 5) are charged at `fares.waitPerMinuteRate` (default GHS 0.50) as `waitCharge`: no platform or booking fee, all of it to the driver (`driverEarnings` becomes `fare + waitCharge`). No arrival mark, no wait charge.
+**Wait charge:** if the driver marked arrival, the wait runs from the later of the arrival and `scheduledPickupAt` to the scan, in whole minutes (`waitMinutes`). Minutes beyond `fares.waitGraceMinutes` (default 5) are charged at `fares.waitPerMinuteRate` (default GHS 0.50) as `waitCharge`: no platform or booking fee, all of it to the driver (`driverEarnings` becomes `fare + waitCharge`). The charge is capped at what the rider can still spend at the scan; anything beyond that is waived. No arrival mark, no wait charge.
 
 **Unfinished trips:** there is no background job. When a trip is next read (lists, detail, manifest, any action), one still `accepted` `trips.staleAfterHours` (default 12) after its `scheduledDropoffAt` becomes `no_show` with `cancelledBy: "system"` (hold released), and one still `boarded` becomes `completed` (the driver is paid).
 
@@ -1160,7 +1161,7 @@ Content-Type: application/json
 { "code": "TR-7KQ2MX", "lat": 5.6051, "lng": -0.1757 }
 ```
 
-**Drivers.** `code` is the rider's boarding code (any case). Only codes on the caller's own trips are found: any other code, including another driver's, answers the same `404`. In one step: the held total becomes a `trip_charge`, any wait charge is debited as a `wait_charge`, and the trip becomes `boarded` with `boardedAt`, `waitMinutes`, `waitCharge` and the new `driverEarnings`. Scanning twice charges once (the second answers `409`). Returns the trip (`200`, "Rider boarded successfully") as the driver sees it: no boarding code. The rider gets `trip:boarded`. Limit: 60 scans per 15 minutes per driver.
+**Drivers.** `code` is the rider's boarding code (any case). Only codes on the caller's own trips are found: any other code, including another driver's, answers the same `404`. In one step: the held total becomes a `tripCharge`, any wait charge is debited as a `waitCharge`, and the trip becomes `boarded` with `boardedAt`, `waitMinutes`, `waitCharge` and the new `driverEarnings`. Scanning twice charges once (the second answers `409`). Returns the trip (`200`, "Rider boarded successfully") as the driver sees it: no boarding code. The rider gets `trip:boarded`. Limit: 60 scans per 15 minutes per driver.
 
 **Errors** (checked in this order):
 
@@ -1181,7 +1182,7 @@ POST /trips/{id}/complete
 Authorization: Bearer <accessToken>
 ```
 
-**The trip's driver only**, for a `boarded` trip. Credits the driver's wallet with `driverEarnings` (a `driver_earning` transaction), once; the rider isn't charged again. Returns the trip (`200`, "Trip completed successfully", `status: "completed"`, `completedAt`). The rider gets `trip:completed`. Errors: `403` `Only the trip's driver can complete it`, `404`, `409` `Can't complete a trip that is completed` (or any status but `boarded`).
+**The trip's driver only**, for a `boarded` trip. Credits `driverEarnings` to the driver's wallet once, as a `pending` `driverEarning` transaction held in `pendingBalance` until its `availableAt` (see [Driver Earnings & Payouts](#driver-earnings--payouts)); the rider isn't charged again. Returns the trip (`200`, "Trip completed successfully", `status: "completed"`, `completedAt`). The rider gets `trip:completed`. Errors: `403` `Only the trip's driver can complete it`, `404`, `409` `Can't complete a trip that is completed` (or any status but `boarded`).
 
 ### 5. Report a No-Show (Driver)
 
@@ -1191,6 +1192,80 @@ Authorization: Bearer <accessToken>
 ```
 
 **The trip's driver only**, for an `accepted` trip, once the boarding window has closed (`trips.boardingLateMinutes` after `scheduledPickupAt`). Releases the hold; nobody is charged or paid. Returns the trip (`200`, "No-show reported successfully", `status: "no_show"`, `cancelledBy: "driver"`, `cancellationReason: "Rider did not show up"`). The rider gets `trip:no_show`. Errors: `403` `Only the trip's driver can report a no-show for it`, `404`, `409` `You can report a no-show from 2026-10-01T08:31:00.000Z` (the window is still open), `409` `Can't report a no-show for a trip that is boarded` (or any status but `accepted`).
+
+---
+
+## Driver Earnings & Payouts
+
+### Wallet Balances
+
+```http
+GET /wallet
+Authorization: Bearer <accessToken>
+```
+
+```json
+{
+  "balance": 120.5,
+  "heldAmount": 20,
+  "availableBalance": 100.5,
+  "pendingBalance": 45,
+  "status": "active",
+  "nextReleaseAt": "2026-10-08T09:30:00.000Z",
+  "currency": "GHS"
+}
+```
+
+- `availableBalance` (`balance - heldAmount`) is what can be spent or withdrawn; it never goes below zero.
+- `pendingBalance` is a driver's trip earnings and tips still on hold (24 hours by default, the `finance.earningsHoldHours` setting). Each held credit is a `pending` transaction whose `availableAt` says when it moves into `balance`; `nextReleaseAt` is the earliest one (`null` when nothing is held). Show it as "available on …", not as withdrawable money.
+- `status: "frozen"` means an admin froze the wallet: money still comes in and held credits still release, but anything that takes money out (requesting or paying for a trip, tipping, a payout) answers `423`.
+
+### 1. Request a Payout
+
+```http
+POST /drivers/me/payouts
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{ "payoutMethodId": "<uuid>", "amount": 80 }
+```
+
+**Drivers only.** `amount` is in GHS, at most 2 decimal places. The amount leaves `balance` at once (a `pending` `payout` transaction), so it can't be spent or requested twice while an admin pays it. Returns the payout (`201`, "Payout requested successfully"):
+
+```json
+{
+  "id": "<uuid>",
+  "driverUserId": "<uuid>",
+  "payoutMethodId": "<uuid>",
+  "amount": 80,
+  "status": "pending",
+  "transactionId": "<uuid>",
+  "decidedAt": null,
+  "note": null,
+  "createdAt": "2026-10-07T10:00:00.000Z",
+  "updatedAt": "2026-10-07T10:00:00.000Z"
+}
+```
+
+Errors: `403` `Only drivers can request payouts`; `404` `Payout method not found: <id>` (not the caller's); `409` `Verify this payout method's payment method before requesting a payout`; `409` `The minimum payout to this method is GHS 20` (below the method's `minimumThreshold`); `409` `You already have a payout waiting to be paid` (one `pending` or `approved` payout at a time); `409` `Insufficient wallet balance`; `423` (frozen wallet).
+
+### 2. List My Payouts
+
+```http
+GET /drivers/me/payouts?status=pending&page=1&limit=20
+Authorization: Bearer <accessToken>
+```
+
+Newest first, `{ items, pagination }`. `status` (optional) is one of `pending` (waiting for an admin), `approved` (being paid), `paid`, `rejected`, `failed` (the money is back in the balance for these two; `note` says why) or `cancelled`. `limit` is 1-100 (default 20).
+
+### 3. Cancel a Payout
+
+```http
+POST /drivers/me/payouts/{id}/cancel
+Authorization: Bearer <accessToken>
+```
+
+Only while it's `pending`: the amount goes back to `balance` and the payout becomes `cancelled` (`200`, "Payout cancelled successfully"). Errors: `404` `Payout not found: <id>` (not the caller's), `409` once an admin has acted on it.
 
 ---
 

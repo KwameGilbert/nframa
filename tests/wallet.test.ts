@@ -192,6 +192,9 @@ describe("POST /webhooks/paystack", () => {
       balance: 40,
       heldAmount: 0,
       availableBalance: 40,
+      pendingBalance: 0,
+      status: "active",
+      nextReleaseAt: null,
       currency: "GHS",
     });
 
@@ -370,6 +373,9 @@ describe("GET /wallet and /wallet/transactions", () => {
       balance: 0,
       heldAmount: 0,
       availableBalance: 0,
+      pendingBalance: 0,
+      status: "active",
+      nextReleaseAt: null,
       currency: "GHS",
     });
   });
@@ -386,7 +392,7 @@ describe("GET /wallet and /wallet/transactions", () => {
     }
     await walletModel.record({
       userId: rider.userId,
-      type: "trip_charge",
+      type: "tripCharge",
       direction: "debit",
       amount: 5,
     });
@@ -408,7 +414,7 @@ describe("GET /wallet and /wallet/transactions", () => {
     expect(page1.body.data.pagination).toEqual({ page: 1, limit: 2, totalItems: 5, totalPages: 3 });
     expect(page1.body.data.items.map((t: { type: string }) => t.type)).toEqual([
       "topup",
-      "trip_charge",
+      "tripCharge",
     ]);
     expect(page1.body.data.items[1]).toMatchObject({ amount: 5, balanceAfter: 55 });
     expect(page3.body.data.items).toHaveLength(1);
@@ -435,7 +441,7 @@ describe("walletModel.record", () => {
       moves.map(({ direction, amount }) =>
         walletModel.record({
           userId: rider.userId,
-          type: direction === "credit" ? "refund" : "trip_charge",
+          type: direction === "credit" ? "refund" : "tripCharge",
           direction,
           amount,
         }),
@@ -455,7 +461,7 @@ describe("walletModel.record", () => {
     expect(await db("transactions").where({ userId: rider.userId })).toHaveLength(moves.length);
   });
 
-  it("lets a debit take the balance below zero", async () => {
+  it("refuses a debit beyond the spendable balance", async () => {
     const rider = await newRider();
     await walletModel.record({
       userId: rider.userId,
@@ -464,15 +470,17 @@ describe("walletModel.record", () => {
       amount: 5,
     });
 
-    const debit = await walletModel.record({
-      userId: rider.userId,
-      type: "wait_charge",
-      direction: "debit",
-      amount: 7.5,
-    });
+    await expect(
+      walletModel.record({
+        userId: rider.userId,
+        type: "waitCharge",
+        direction: "debit",
+        amount: 7.5,
+      }),
+    ).rejects.toMatchObject({ statusCode: 409, message: "Insufficient wallet balance" });
 
-    expect(debit).toMatchObject({ status: "success", amount: 7.5, balanceAfter: -2.5 });
-    expect(await walletModel.getAvailableBalance(rider.userId)).toBe(-2.5);
+    expect(await walletModel.getAvailableBalance(rider.userId)).toBe(5);
+    expect(await db("transactions").where({ userId: rider.userId })).toHaveLength(1);
   });
 });
 

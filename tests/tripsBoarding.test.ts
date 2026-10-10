@@ -279,7 +279,7 @@ describe("a whole trip through the API", () => {
     const charges = (await ledger(rider.userId)).filter((row) => row.tripId === id);
     expect(charges).toEqual([
       {
-        type: "trip_charge",
+        type: "tripCharge",
         direction: "debit",
         amount: totalAmount.toFixed(2),
         tripId: id,
@@ -306,17 +306,34 @@ describe("a whole trip through the API", () => {
     expect(done.body.data).toMatchObject({ status: "completed" });
     expect(done.body.data.completedAt).not.toBeNull();
     expectError(await complete(driver, id), 409, "Can't complete a trip that is completed");
-    expect(await walletOf(driver.userId)).toEqual({ balance: fare, heldAmount: 0 });
+    // The earning is held (finance.earningsHoldHours): in pendingBalance, not balance, until it's released.
+    expect(await walletOf(driver.userId)).toEqual({ balance: 0, heldAmount: 0 });
+    expect((await walletModel.getWallet(driver.userId)).pendingBalance).toBe(fare);
     expect(await ledger(driver.userId)).toEqual([
       {
-        type: "driver_earning",
+        type: "driverEarning",
         direction: "credit",
         amount: fare.toFixed(2),
         tripId: id,
-        status: "success",
+        status: "pending",
       },
     ]);
     expect((await walletOf(rider.userId)).balance).toBe(roundMoney(200 - totalAmount));
+    // The platform's cut (its fee plus the booking fee) lands on the platform account, never a wallet.
+    const platformRows = await db("transactions")
+      .where({ account: "platform", tripId: id })
+      .select("userId", "type", "direction", "amount", "status");
+    expect(platformRows).toEqual([
+      {
+        userId: null,
+        type: "platformFee",
+        direction: "credit",
+        amount: roundMoney(
+          requested.body.data.platformFee + requested.body.data.bookingFee,
+        ).toFixed(2),
+        status: "success",
+      },
+    ]);
     await expectInvariants(rider.userId, driver.userId);
 
     await flushActivityLogs();
@@ -387,8 +404,8 @@ describe("wait billing", () => {
         rows.map((row) => [row.type, Number(row.amount)]),
         c.label,
       ).toEqual([
-        ["trip_charge", trip.totalAmount],
-        ...(charge > 0 ? [["wait_charge", charge]] : []),
+        ["tripCharge", trip.totalAmount],
+        ...(charge > 0 ? [["waitCharge", charge]] : []),
       ]);
       expect(await walletOf(rider.userId), c.label).toEqual({
         balance: roundMoney(100 - trip.totalAmount - charge),
@@ -398,23 +415,34 @@ describe("wait billing", () => {
     }
   });
 
-  it("may take the wallet below zero, which then blocks new requests", async () => {
+  it("caps the wait charge at what the rider can still spend, never going below zero", async () => {
     const [{ driver, commute }, s] = await Promise.all([bookableCommute(), settings()]);
-    const rider = await bookingRider(30.04);
     const minutes = s["fares.waitGraceMinutes"] + 20;
+    const owed = roundMoney(20 * s["fares.waitPerMinuteRate"]);
+    expect(owed).toBeGreaterThan(0);
+    // Enough for the fare and only half the wait.
+    const spare = roundMoney(owed / 2);
+    const rider = await bookingRider(roundMoney(30.04 + spare));
     const trip = await acceptedToday(commute, rider.userId, {
       pickupIn: -(minutes * MINUTE + 10_000),
       arrivedAt: new Date(Date.now() - (minutes + 5) * MINUTE),
     });
     await riderAt(trip.id, pickupOf(trip));
 
-    expectStatus(await scan(driver, trip.boardingCode, pickupOf(trip)), 200);
-    const charge = roundMoney(20 * s["fares.waitPerMinuteRate"]);
-    expect(charge).toBeGreaterThan(0);
-    expect(await walletOf(rider.userId)).toEqual({ balance: -charge, heldAmount: 0 });
+    const res = await scan(driver, trip.boardingCode, pickupOf(trip));
+    expectStatus(res, 200);
+    expect(res.body.data).toMatchObject({
+      waitMinutes: minutes,
+      waitCharge: spare,
+      driverEarnings: roundMoney(trip.fare + spare),
+    });
+    const rows = (await ledger(rider.userId)).filter((row) => row.tripId === trip.id);
+    expect(rows.map((row) => [row.type, Number(row.amount)])).toEqual([
+      ["tripCharge", trip.totalAmount],
+      ["waitCharge", spare],
+    ]);
+    expect(await walletOf(rider.userId)).toEqual({ balance: 0, heldAmount: 0 });
     await expectInvariants(rider.userId);
-
-    expectError(await requestTrip(rider, commute), 409, "Insufficient wallet balance");
   });
 });
 
@@ -542,7 +570,8 @@ describe("concurrency", () => {
     const completes = await Promise.all([complete(driver, trip.id), complete(driver, trip.id)]);
     expect(completes.map((res) => res.status).sort()).toEqual([200, 409]);
     expect(await ledger(driver.userId)).toHaveLength(1);
-    expect(await walletOf(driver.userId)).toEqual({ balance: trip.fare, heldAmount: 0 });
+    expect(await walletOf(driver.userId)).toEqual({ balance: 0, heldAmount: 0 });
+    expect((await walletModel.getWallet(driver.userId)).pendingBalance).toBe(trip.fare);
     expect((await walletOf(rider.userId)).balance).toBe(roundMoney(100 - trip.totalAmount));
     await expectInvariants(rider.userId, driver.userId);
   });
@@ -711,11 +740,11 @@ describe("the lazy sweep", () => {
     expect(await tripModel.findById(unfinished.id)).toMatchObject({ status: "completed" });
     expect(await ledger(driver.userId)).toEqual([
       {
-        type: "driver_earning",
+        type: "driverEarning",
         direction: "credit",
         amount: unfinished.driverEarnings.toFixed(2),
         tripId: unfinished.id,
-        status: "success",
+        status: "pending",
       },
     ]);
     expect(await tripModel.findById(recent.id)).toMatchObject({ status: "accepted" });

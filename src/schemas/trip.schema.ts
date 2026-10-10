@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TRIP_STATUSES } from "../models/trip.model.js";
 import { fareBreakdownSchema } from "./fare.schema.js";
+import { TRANSACTION_TYPES } from "./wallet.schema.js";
 
 const latitude = (example: number) =>
   z.number().min(-90).max(90).meta({ description: "Degrees, -90 to 90", example });
@@ -487,7 +488,7 @@ export const adminTripDetailSchema = tripSchema.extend({
           id: z.uuid(),
           party: z.enum(["rider", "driver"]),
           userId: z.uuid(),
-          type: z.enum(["topup", "trip_charge", "wait_charge", "driver_earning", "refund", "tip"]),
+          type: z.enum(TRANSACTION_TYPES),
           direction: z.enum(["credit", "debit"]),
           amount: money(20.75),
           currency: z.string().meta({ example: "GHS" }),

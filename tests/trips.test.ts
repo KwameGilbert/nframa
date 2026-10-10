@@ -576,10 +576,10 @@ describe("Admin Trip Management", () => {
         heldAmount: 0,
       });
       const rows = [
-        { userId: rider.userId, type: "trip_charge", direction: "debit", amount: trip.totalAmount },
+        { userId: rider.userId, type: "tripCharge", direction: "debit", amount: trip.totalAmount },
         {
           userId: driver.userId,
-          type: "driver_earning",
+          type: "driverEarning",
           direction: "credit",
           amount: trip.driverEarnings,
         },

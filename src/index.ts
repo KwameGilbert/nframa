@@ -6,6 +6,7 @@ import { app } from "./app.js";
 import { socketAuthenticate, type SocketData } from "./middlewares/socketAuthenticate.js";
 import { initSocketService, joinSocketRooms } from "./services/socket.service.js";
 import { startPushReceiptSweep } from "./services/pushReceipts.service.js";
+import { startEarningsReleaseSweep } from "./services/earningsRelease.service.js";
 import {
   registerSupportSocket,
   type ClientToServerEvents,
@@ -64,6 +65,9 @@ initSocketService(io);
 
 // Start the push receipt sweep (non-blocking).
 startPushReceiptSweep();
+
+// Release driver earnings and tips whose hold has ended (non-blocking).
+startEarningsReleaseSweep();
 
 const PORT = Number(process.env.PORT) || 3000;
 

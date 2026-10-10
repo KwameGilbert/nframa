@@ -282,7 +282,7 @@ registry.registerPath({
   description: [
     "The driver scans the rider's boarding code and sends their own location. Checks, in order: the code belongs to a trip on the caller's commutes (any other code, including another driver's, is the same 404, so codes can't be probed); the trip is accepted; now is inside the boarding window (trips.boardingEarlyMinutes before the scheduled pickup to trips.boardingLateMinutes after it); the driver is within trips.boardingRadiusMeters of the pickup; and the rider's shared location (PUT /trips/{id}/location) is no older than trips.locationMaxAgeSeconds and within trips.boardingRadiusMeters of the driver.",
     "",
-    "Then, in one transaction: the hold becomes the trip's charge (a trip_charge of totalAmount), and if the driver marked arrival, the wait from max(arrival, scheduled pickup) to now past fares.waitGraceMinutes is charged at fares.waitPerMinuteRate as a separate wait_charge (no fees, all to the driver; it may take the rider's wallet below zero, which blocks new requests until topped up). driverEarnings becomes fare + waitCharge, paid on completion. Two simultaneous scans charge once. Returns the trip as the driver sees it (no boarding code).",
+    "Then, in one transaction: the hold becomes the trip's charge (a tripCharge of totalAmount), and if the driver marked arrival, the wait from max(arrival, scheduled pickup) to now past fares.waitGraceMinutes is charged at fares.waitPerMinuteRate as a separate waitCharge (no fees, all to the driver; capped at what the rider can still spend, so the wallet never goes below zero). driverEarnings becomes fare + waitCharge, paid on completion. Two simultaneous scans charge once. Returns the trip as the driver sees it (no boarding code).",
   ].join("\n"),
   security: [{ bearerAuth: [] }],
   request: { body: { content: { "application/json": { schema: boardTripSchema } } } },
@@ -309,7 +309,7 @@ registry.registerPath({
   tags: ["Trips"],
   summary: "Complete a boarded trip (the trip's driver)",
   description:
-    "Credits the driver's wallet with driverEarnings (fare + waitCharge) as a driver_earning, once (a second or simultaneous complete is refused), and marks the trip completed. The rider isn't charged again. A boarded trip nobody completes is completed the same way trips.staleAfterHours after its scheduled drop-off, when it is next read.",
+    "Credits the driver with driverEarnings (fare + waitCharge) as a pending driverEarning, once (a second or simultaneous complete is refused), records the platform fee plus booking fee on the platform account, and marks the trip completed. The earning sits in the driver's pendingBalance for finance.earningsHoldHours (default 24h) after completion, then is released into their balance. The rider isn't charged again. A boarded trip nobody completes is completed the same way trips.staleAfterHours after its scheduled drop-off, when it is next read.",
   security: [{ bearerAuth: [] }],
   request: { params: idParamsSchema },
   responses: {

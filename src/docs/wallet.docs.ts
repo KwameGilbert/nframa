@@ -19,7 +19,7 @@ registry.registerPath({
   tags: ["Wallet"],
   summary: "Get my wallet balance (any signed-in user)",
   description:
-    "The caller's own wallet. heldAmount is money reserved for accepted trips that haven't been charged yet; availableBalance (balance - heldAmount) is what can be spent. An account that has never had money moved has a zero wallet.",
+    "The caller's own wallet. heldAmount is money reserved for accepted trips that haven't been charged yet; availableBalance (balance - heldAmount) is what can be spent. For a driver, pendingBalance is earnings and tips still on hold (finance.earningsHoldHours, default 24h); they move into balance shortly after nextReleaseAt. status is frozen when an admin froze the wallet: money still comes in, nothing goes out (423). An account that has never had money moved has a zero, active wallet.",
   security: [{ bearerAuth: [] }],
   responses: {
     200: successResponse("Wallet retrieved successfully", walletResponseSchema),

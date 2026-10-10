@@ -2,18 +2,25 @@ import { Router } from "express";
 import { validate } from "../middlewares/validate.js";
 import { authenticate } from "../middlewares/authenticate.js";
 import { requirePermission } from "../middlewares/authorize.js";
+import { payoutLimit } from "../middlewares/rateLimit.js";
 import {
   adminListPayoutMethodsQuerySchema,
   createPayoutMethodSchema,
+  listPayoutsQuerySchema,
   payoutMethodParamsSchema,
+  payoutParamsSchema,
+  requestPayoutSchema,
   updatePayoutMethodSchema,
 } from "../schemas/payout.schema.js";
 import {
   adminListPayoutMethods,
   adminUpdatePayoutMethod,
+  cancelPayout,
   createPayoutMethod,
   deletePayoutMethod,
   listPayoutMethods,
+  listPayouts,
+  requestPayout,
   updatePayoutMethod,
 } from "../controllers/payout.controller.js";
 
@@ -41,6 +48,31 @@ payoutRouter.delete(
   authenticate,
   validate({ params: payoutMethodParamsSchema }),
   deletePayoutMethod,
+);
+
+// A driver's own payouts.
+payoutRouter.post(
+  "/drivers/me/payouts",
+  authenticate,
+  payoutLimit,
+  validate({ body: requestPayoutSchema }),
+  requestPayout,
+);
+
+payoutRouter.get(
+  "/drivers/me/payouts",
+  authenticate,
+  payoutLimit,
+  validate({ query: listPayoutsQuerySchema }),
+  listPayouts,
+);
+
+payoutRouter.post(
+  "/drivers/me/payouts/:id/cancel",
+  authenticate,
+  payoutLimit,
+  validate({ params: payoutParamsSchema }),
+  cancelPayout,
 );
 
 // Staff.

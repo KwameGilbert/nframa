@@ -26,14 +26,14 @@ export function trackForCleanup(table: string, criteria: Criteria): void {
 const DELETE_ORDER = [
   "broadcasts", // SET NULL on users; listed first so the order stays self-documenting
   "supportTicketMessages", // cascades with its ticket; listed first so the order stays self-documenting
-  "supportTickets", // FK on supportCategories (RESTRICT), users, trips, transactions, payoutHistory
+  "supportTickets", // FK on supportCategories (RESTRICT), users, trips, transactions, payouts
   "supportCategories", // RESTRICT from supportTickets
   "notifications", // cascades with its user; listed first so the order stays self-documenting
   "pushDevices", // cascades with its user; listed first so the order stays self-documenting
   "socialAccounts", // cascades with its user; listed first so the order stays self-documenting
   "tripReports", // cascades with its trip or users; listed first so the order stays self-documenting
   "tripReviews", // cascades with its trip or user; listed first so the order stays self-documenting
-  "payoutHistory", // FK on payoutMethods and users
+  "payouts", // FK on payoutMethods (SET NULL), users and transactions (RESTRICT): before transactions
   "payoutMethods", // FK on paymentMethods and users
   "paymentMethods", // FK on users
   "transactions", // ON DELETE RESTRICT on users and trips: a ledger never vanishes with its user or trip
@@ -62,9 +62,32 @@ export async function cleanupTestData(): Promise<void> {
   await flushActivityLogs();
   await db("activityLogs").where("requestId", "like", `${REQUEST_ID_PREFIX}%`).del();
 
+  // A completed trip's platformFee row has no userId, so no transactions criteria finds it: delete it by trip,
+  // or it would block the trip's delete (RESTRICT).
+  const tripCriteria = tracked.filter((t) => t.table === "trips").map((t) => t.criteria);
+  if (tripCriteria.length > 0) {
+    await db.transaction(async (trx) => {
+      await trx.raw(`SET LOCAL ledger.allowDelete = 'on'`);
+      for (const criteria of tripCriteria) {
+        await trx("transactions")
+          .where({ account: "platform" })
+          .whereIn("tripId", trx("trips").select("id").where(criteria))
+          .del();
+      }
+    });
+  }
+
   for (const table of DELETE_ORDER) {
     for (const { criteria } of tracked.filter((t) => t.table === table)) {
-      await db(table).where(criteria).del();
+      if (table === "transactions") {
+        // The ledger is append-only (transactionsAppendOnly trigger); only test cleanup may delete from it.
+        await db.transaction(async (trx) => {
+          await trx.raw(`SET LOCAL ledger.allowDelete = 'on'`);
+          await trx(table).where(criteria).del();
+        });
+      } else {
+        await db(table).where(criteria).del();
+      }
     }
   }
   tracked.length = 0;

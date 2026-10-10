@@ -40,7 +40,7 @@ function logOutcome(req: Request, before: Transaction, outcome: TopUpOutcome) {
       action: "wallet.topup_settled",
       description: `Wallet topped up with ${after.currency} ${after.amount.toFixed(2)}`,
     });
-    void notifyWallet(after.userId, "topUp", {
+    void notifyWallet(after.userId as string, "topUp", {
       id: after.id,
       amount: after.amount,
       currency: after.currency,
@@ -52,7 +52,7 @@ function logOutcome(req: Request, before: Transaction, outcome: TopUpOutcome) {
       description: `A ${after.currency} ${after.amount.toFixed(2)} wallet top-up failed`,
       error: failedNow,
     });
-    void notifyWallet(after.userId, "topUpFailed", {
+    void notifyWallet(after.userId as string, "topUpFailed", {
       id: after.id,
       amount: after.amount,
       currency: after.currency,

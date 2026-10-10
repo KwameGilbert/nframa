@@ -49,6 +49,9 @@ describe("walletModel.hold", () => {
       balance: 50,
       heldAmount: 50,
       availableBalance: 0,
+      pendingBalance: 0,
+      status: "active",
+      nextReleaseAt: null,
     });
   });
 
@@ -106,7 +109,7 @@ describe("trip money amounts", () => {
       async (trx: Knex.Transaction) =>
         void (await walletModel.capture(trx, { userId: rider.userId, tripId: trip.id, amount })),
     ]) {
-      await expect(inTrx(move)).rejects.toThrow("Trip money amounts must be positive");
+      await expect(inTrx(move)).rejects.toThrow("Money amounts must be positive");
     }
     expect(await walletOf(rider.userId)).toEqual({ balance: 40, heldAmount: 10 });
     expect(await db("transactions").where({ userId: rider.userId })).toHaveLength(1);
@@ -156,7 +159,7 @@ describe("trip money from hold to payout", () => {
     expect(charge).toMatchObject({
       userId: rider.userId,
       tripId: trip.id,
-      type: "trip_charge",
+      type: "tripCharge",
       direction: "debit",
       amount: 30.04,
       status: "success",
@@ -166,28 +169,32 @@ describe("trip money from hold to payout", () => {
     expect(await walletOf(rider.userId)).toEqual({ balance: 39.96, heldAmount: 0 });
 
     // A second capture for the same trip is refused by the database and changes nothing: with nothing left
-    // held the release fails, and even a second trip_charge on its own hits the one-per-trip index.
+    // held the release fails, and even a second tripCharge on its own hits the one-per-trip index.
     await expect(board()).rejects.toMatchObject(CHECK_VIOLATION);
     await expect(
       walletModel.record({
         userId: rider.userId,
         tripId: trip.id,
-        type: "trip_charge",
+        type: "tripCharge",
         direction: "debit",
         amount: 1,
       }),
     ).rejects.toMatchObject(UNIQUE_VIOLATION);
     expect(await walletOf(rider.userId)).toEqual({ balance: 39.96, heldAmount: 0 });
 
-    // Wait time may take the rider below zero; it's billed once.
+    // Wait time never takes the rider below zero; it's billed once.
     const wait = {
       userId: rider.userId,
       tripId: trip.id,
-      type: "wait_charge",
+      type: "waitCharge",
       direction: "debit",
     } as const;
-    const waitCharge = await walletModel.record({ ...wait, amount: 45 });
-    expect(waitCharge.balanceAfter).toBe(-5.04);
+    await expect(walletModel.record({ ...wait, amount: 45 })).rejects.toMatchObject({
+      statusCode: 409,
+      message: "Insufficient wallet balance",
+    });
+    const waitCharge = await walletModel.record({ ...wait, amount: 5 });
+    expect(waitCharge.balanceAfter).toBe(34.96);
     await expect(walletModel.record({ ...wait, amount: 1 })).rejects.toMatchObject(
       UNIQUE_VIOLATION,
     );
@@ -196,10 +203,10 @@ describe("trip money from hold to payout", () => {
     const earning = {
       userId: driver.userId,
       tripId: trip.id,
-      type: "driver_earning",
+      type: "driverEarning",
       direction: "credit",
     } as const;
-    await walletModel.record({ ...earning, amount: trip.driverEarnings + 45 });
+    await walletModel.record({ ...earning, amount: trip.driverEarnings + 5 });
     await expect(walletModel.record({ ...earning, amount: 1 })).rejects.toMatchObject(
       UNIQUE_VIOLATION,
     );
@@ -207,7 +214,7 @@ describe("trip money from hold to payout", () => {
     for (const userId of [rider.userId, driver.userId]) {
       expect((await walletOf(userId)).balance).toBe(await ledgerSum(userId));
     }
-    expect(await walletOf(driver.userId)).toEqual({ balance: 71.4, heldAmount: 0 });
+    expect(await walletOf(driver.userId)).toEqual({ balance: 31.4, heldAmount: 0 });
     expect(await db("transactions").where({ tripId: trip.id })).toHaveLength(3);
   });
 

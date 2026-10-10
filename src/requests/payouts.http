@@ -1,0 +1,32 @@
+@baseUrl = http://localhost:3000
+
+# Driver Access Token (from /auth/login or /auth/login/verify)
+@driverToken = PASTE_DRIVER_TOKEN_HERE
+
+# One of the driver's payout methods (GET /payout-methods); its payment method must be verified
+@payoutMethodId = PASTE_PAYOUT_METHOD_ID_HERE
+
+### Ask to be paid out (Driver)
+# @name requestPayout
+POST {{baseUrl}}/drivers/me/payouts
+Authorization: Bearer {{driverToken}}
+Content-Type: application/json
+
+{
+  "amount": 100,
+  "payoutMethodId": "{{payoutMethodId}}"
+}
+
+@payoutId = {{requestPayout.response.body.data.id}}
+
+### List my payouts, newest first
+GET {{baseUrl}}/drivers/me/payouts?page=1&limit=20
+Authorization: Bearer {{driverToken}}
+
+### Only pending ones
+GET {{baseUrl}}/drivers/me/payouts?status=pending
+Authorization: Bearer {{driverToken}}
+
+### Cancel a pending payout: the amount goes back to the balance
+POST {{baseUrl}}/drivers/me/payouts/{{payoutId}}/cancel
+Authorization: Bearer {{driverToken}}
