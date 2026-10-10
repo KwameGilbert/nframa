@@ -83,3 +83,7 @@ export const supportBrowseLimit = limitBy(byUser, 300);
 export const supportTicketLimit = limitBy(byUser, 10);
 // Per account. Chat messages (which can carry files), resolving and rating: well above a busy conversation.
 export const supportMessageLimit = limitBy(byUser, 120);
+// Per account. Requesting or cancelling a payout touches the wallet/ledger: a tight guard above realistic use.
+export const payoutLimit = limitBy(byUser, 20);
+// Per account. The admin overview only reads the database: a flood guard for a page that runs several queries.
+export const overviewLimit = limitBy(byUser, 120);

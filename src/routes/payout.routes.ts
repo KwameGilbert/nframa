@@ -2,6 +2,7 @@ import { Router } from "express";
 import { validate } from "../middlewares/validate.js";
 import { authenticate } from "../middlewares/authenticate.js";
 import { requirePermission } from "../middlewares/authorize.js";
+import { payoutLimit } from "../middlewares/rateLimit.js";
 import {
   adminListPayoutMethodsQuerySchema,
   createPayoutMethodSchema,
@@ -53,6 +54,7 @@ payoutRouter.delete(
 payoutRouter.post(
   "/drivers/me/payouts",
   authenticate,
+  payoutLimit,
   validate({ body: requestPayoutSchema }),
   requestPayout,
 );
@@ -60,6 +62,7 @@ payoutRouter.post(
 payoutRouter.get(
   "/drivers/me/payouts",
   authenticate,
+  payoutLimit,
   validate({ query: listPayoutsQuerySchema }),
   listPayouts,
 );
@@ -67,6 +70,7 @@ payoutRouter.get(
 payoutRouter.post(
   "/drivers/me/payouts/:id/cancel",
   authenticate,
+  payoutLimit,
   validate({ params: payoutParamsSchema }),
   cancelPayout,
 );
