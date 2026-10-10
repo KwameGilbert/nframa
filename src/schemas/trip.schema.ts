@@ -2,6 +2,7 @@ import { z } from "zod";
 import { TRIP_STATUSES } from "../models/trip.model.js";
 import { fareBreakdownSchema } from "./fare.schema.js";
 import { TRANSACTION_TYPES } from "./wallet.schema.js";
+import { today } from "../utils/tripTime.js";
 
 const latitude = (example: number) =>
   z.number().min(-90).max(90).meta({ description: "Degrees, -90 to 90", example });
@@ -41,7 +42,7 @@ export const availableTripsQuerySchema = z.object({
     .min(-180)
     .max(180)
     .meta({ description: "Rider's longitude", example: -0.1737 }),
-  date: tripDateSchema,
+  date: tripDateSchema.default(() => today()),
   ...pageFields,
 });
 

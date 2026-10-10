@@ -1,0 +1,217 @@
+@baseUrl = http://localhost:3000
+
+# ─── Tokens (fill these in after running the login requests below) ───────────
+@driverToken = PASTE_DRIVER_ACCESS_TOKEN_HERE
+@riderToken  = PASTE_RIDER_ACCESS_TOKEN_HERE
+
+# ─── IDs (fill in after each create step) ────────────────────────────────────
+@commuteId = PASTE_COMMUTE_ID_HERE
+@tripId    = PASTE_TRIP_ID_HERE
+
+# ─── Coordinates (Real GPS in Kumasi) ──────────────────────────────────────────
+# Abuakwa Police Station (driver start / rider pickup)   6.701014, -1.715833
+# Tanoso Market (rider intermediate pickup / drop-off)   6.700100, -1.683000 (3.6 km from start)
+# Sofoline Station (driver end)                          6.699254, -1.650524 (7.2 km from start)
+#
+# NOTE: Driver in DB runs Monday to Thursday [1, 2, 3, 4] at 07:45.
+# Use a weekday date matching recurrence (e.g., 2026-10-12 or 2026-10-13).
+
+
+### ═══════════════════════════════════════════════
+###  STEP 1 — Log in as the driver
+### ═══════════════════════════════════════════════
+
+### 1a. Request OTP (driver phone)
+POST {{baseUrl}}/auth/otp/request
+Content-Type: application/json
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "200000001",
+  "role": "driver"
+}
+
+###
+
+### 1b. Verify OTP → copy accessToken into @driverToken above
+POST {{baseUrl}}/auth/otp/verify
+Content-Type: application/json
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "200000001",
+  "code": "PASTE_OTP_HERE"
+}
+
+
+### ═══════════════════════════════════════════════
+###  STEP 2 — Create the driver commute
+###           Abuakwa → Sofoline, Mon–Thu, 07:45
+### ═══════════════════════════════════════════════
+
+### 2a. Create commute → copy id into @commuteId above
+POST {{baseUrl}}/commutes
+Authorization: Bearer {{driverToken}}
+Content-Type: application/json
+
+{
+  "startAddress": "Abuakwa Police station, Kumasi",
+  "startLat": 6.701014,
+  "startLng": -1.715833,
+  "endAddress": "Sofoline Lorry Station, Kumasi",
+  "endLat": 6.699254,
+  "endLng": -1.650524,
+  "departureTime": "07:45",
+  "recurrenceDays": [1, 2, 3, 4],
+  "capacity": 3
+}
+
+###
+
+### 2b. Confirm commute is active
+GET {{baseUrl}}/commutes/{{commuteId}}
+Authorization: Bearer {{driverToken}}
+
+
+### ═══════════════════════════════════════════════
+###  STEP 3 — Log in as the rider
+### ═══════════════════════════════════════════════
+
+### 3a. Request OTP (rider phone)
+POST {{baseUrl}}/auth/otp/request
+Content-Type: application/json
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "200000002",
+  "role": "rider"
+}
+
+###
+
+### 3b. Verify OTP → copy accessToken into @riderToken above
+POST {{baseUrl}}/auth/otp/verify
+Content-Type: application/json
+
+{
+  "phoneCountryCode": "+233",
+  "phoneNumber": "200000002",
+  "code": "PASTE_OTP_HERE"
+}
+
+
+### ═══════════════════════════════════════════════
+###  STEP 4 — Browse available commutes
+###
+###  Key matching rules:
+###  1. lat/lng must be within 5 km of Abuakwa (6.701014, -1.715833).
+###  2. date must match recurrenceDays [1, 2, 3, 4] (Mon–Thu, e.g. 2026-10-12).
+### ═══════════════════════════════════════════════
+
+### 4a. Searching at Abuakwa on Monday (2026-10-12) — Returns the commute ✅
+GET {{baseUrl}}/trips/available?lat=6.701014&lng=-1.715833&date=2026-10-12&page=1&limit=20
+Authorization: Bearer {{riderToken}}
+
+###
+
+### 4b. Searching at Tanoso Market (3.6 km away, along route) — Returns the commute ✅
+GET {{baseUrl}}/trips/available?lat=6.700100&lng=-1.683000&date=2026-10-12&page=1&limit=20
+Authorization: Bearer {{riderToken}}
+
+###
+
+### 4c. Searching on Saturday (today) or Friday — Commute WON'T appear (driver only Mon-Thu) ❌
+GET {{baseUrl}}/trips/available?lat=6.701014&lng=-1.715833&date=2026-10-10&page=1&limit=20
+Authorization: Bearer {{riderToken}}
+
+###
+
+### 4d. Frontend bug reproduction: mobile app sends hardcoded Accra mock coordinates (5.6051, -0.1757) ❌
+GET {{baseUrl}}/trips/available?lat=5.6051&lng=-0.1757&date=2026-10-12&page=1&limit=20
+Authorization: Bearer {{riderToken}}
+
+
+### ═══════════════════════════════════════════════
+###  STEP 5 — Book the trip
+###           Pickup: Abuakwa
+###           Drop-off: Tanoso Market (along the route)
+### ═══════════════════════════════════════════════
+
+### 5a. Book → copy id into @tripId above
+POST {{baseUrl}}/trips
+Authorization: Bearer {{riderToken}}
+Content-Type: application/json
+
+{
+  "commuteId": "{{commuteId}}",
+  "tripDate": "2026-10-12",
+  "pickup": {
+    "address": "Abuakwa Police station, Kumasi",
+    "lat": 6.701014,
+    "lng": -1.715833
+  },
+  "dropoff": {
+    "address": "Tanoso Market, Kumasi",
+    "lat": 6.700100,
+    "lng": -1.683000
+  }
+}
+
+###
+
+### 5b. Drop-off before pickup in travel direction — should 400 ❌
+POST {{baseUrl}}/trips
+Authorization: Bearer {{riderToken}}
+Content-Type: application/json
+
+{
+  "commuteId": "{{commuteId}}",
+  "tripDate": "2026-10-12",
+  "pickup": {
+    "address": "Sofoline, Kumasi",
+    "lat": 6.699254,
+    "lng": -1.650524
+  },
+  "dropoff": {
+    "address": "Abuakwa, Kumasi",
+    "lat": 6.701014,
+    "lng": -1.715833
+  }
+}
+
+###
+
+### 5c. Drop-off too far off route — should 400 ❌
+POST {{baseUrl}}/trips
+Authorization: Bearer {{riderToken}}
+Content-Type: application/json
+
+{
+  "commuteId": "{{commuteId}}",
+  "tripDate": "2026-10-12",
+  "pickup": {
+    "address": "Abuakwa, Kumasi",
+    "lat": 6.701014,
+    "lng": -1.715833
+  },
+  "dropoff": {
+    "address": "Far off route",
+    "lat": 6.8500,
+    "lng": -1.8500
+  }
+}
+
+
+### ═══════════════════════════════════════════════
+###  STEP 6 — Inspect the booked trip
+### ═══════════════════════════════════════════════
+
+### 6a. Rider view
+GET {{baseUrl}}/trips/{{tripId}}
+Authorization: Bearer {{riderToken}}
+
+###
+
+### 6b. Driver view (their own commute's manifest)
+GET {{baseUrl}}/commutes/{{commuteId}}/trips?date=2026-10-12
+Authorization: Bearer {{driverToken}}
