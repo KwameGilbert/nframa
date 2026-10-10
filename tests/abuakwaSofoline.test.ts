@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { api, auth, expectStatus } from "./helpers/api.js";
-import { trackForCleanup } from "./helpers/cleanup.js";
 import { bookableCommute, bookingRider } from "./helpers/trips.js";
+
+type AvailableTripItem = { commuteId: string };
 
 // Exact coordinates for Abuakwa, Tanoso, Sofoline (Kumasi)
 const ABUAKWA = {
@@ -31,7 +32,7 @@ const ACCRA_MOCK = {
 describe("Abuakwa to Sofoline Commute Matching & Booking", () => {
   it("runs the full Abuakwa -> Sofoline flow and demonstrates why trips appear or do not appear", async () => {
     // 1. Set up approved Driver with vehicle and approved profile
-    const { driver, commute } = await bookableCommute({
+    const { commute } = await bookableCommute({
       startAddress: ABUAKWA.address,
       startLat: ABUAKWA.lat,
       startLng: ABUAKWA.lng,
@@ -57,7 +58,7 @@ describe("Abuakwa to Sofoline Commute Matching & Booking", () => {
 
     expectStatus(searchAbuakwa, 200);
     const foundAtAbuakwa = searchAbuakwa.body.data.items.find(
-      (item: any) => item.commuteId === commute.id,
+      (item: AvailableTripItem) => item.commuteId === commute.id,
     );
     expect(foundAtAbuakwa).toBeDefined();
     console.log("✅ SCENARIO A: Commute FOUND when rider searches at Abuakwa on Monday!");
@@ -73,7 +74,7 @@ describe("Abuakwa to Sofoline Commute Matching & Booking", () => {
 
     expectStatus(searchTanoso, 200);
     const foundAtTanoso = searchTanoso.body.data.items.find(
-      (item: any) => item.commuteId === commute.id,
+      (item: AvailableTripItem) => item.commuteId === commute.id,
     );
     expect(foundAtTanoso).toBeDefined();
     console.log("✅ SCENARIO B: Commute FOUND when rider searches at Tanoso Market on Monday!");
@@ -89,7 +90,7 @@ describe("Abuakwa to Sofoline Commute Matching & Booking", () => {
 
     expectStatus(searchSaturday, 200);
     const foundOnSaturday = searchSaturday.body.data.items.find(
-      (item: any) => item.commuteId === commute.id,
+      (item: AvailableTripItem) => item.commuteId === commute.id,
     );
     expect(foundOnSaturday).toBeUndefined();
     console.log(
@@ -107,7 +108,7 @@ describe("Abuakwa to Sofoline Commute Matching & Booking", () => {
 
     expectStatus(searchMockAccra, 200);
     const foundWithMock = searchMockAccra.body.data.items.find(
-      (item: any) => item.commuteId === commute.id,
+      (item: AvailableTripItem) => item.commuteId === commute.id,
     );
     expect(foundWithMock).toBeUndefined();
     console.log(
