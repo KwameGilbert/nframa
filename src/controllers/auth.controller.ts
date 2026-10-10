@@ -9,6 +9,7 @@ import { otpCodeModel, OTP_EXPIRY_MINUTES, OTP_MAX_ATTEMPTS } from "../models/ot
 import { authSessionModel } from "../models/authSession.model.js";
 import { pushDeviceModel } from "../models/pushDevice.model.js";
 import { socialAccountModel } from "../models/socialAccount.model.js";
+import { emergencyContactModel } from "../models/emergencyContact.model.js";
 import db from "../database/knex.js";
 import { sendSms } from "../services/sms.service.js";
 import { sendOtpEmail, sendPasswordChangedEmail } from "../services/email.service.js";
@@ -253,9 +254,21 @@ async function fetchAdminAccess(account: User) {
 }
 
 // The account as login and GET /auth/me return it.
+// isProfileComplete is derived from real data rather than the persisted boolean, which the backend never
+// updated — fullName must be set and the user must have at least one emergency contact on file.
 async function buildAccount(account: User) {
-  const [profile, access] = await Promise.all([fetchProfile(account), fetchAdminAccess(account)]);
-  return { ...account, profile, ...access };
+  const [profile, access, emergencyContacts] = await Promise.all([
+    fetchProfile(account),
+    fetchAdminAccess(account),
+    account.role === "rider" || account.role === "driver"
+      ? emergencyContactModel.listForUser(account.id)
+      : Promise.resolve([]),
+  ]);
+  const isProfileComplete =
+    account.role === "rider" || account.role === "driver"
+      ? Boolean(account.fullName) && emergencyContacts.length > 0
+      : account.isProfileComplete;
+  return { ...account, isProfileComplete, profile, ...access };
 }
 
 async function completeLogin(account: User, req: Request, res: Response, isNewUser = false) {
