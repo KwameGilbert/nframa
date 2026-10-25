@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { api, auth, expectStatus } from "./helpers/api.js";
 import { bookableCommute, bookingRider } from "./helpers/trips.js";
+import { addDays, isoWeekday, today } from "../src/utils/tripTime.js";
 
 type AvailableTripItem = { commuteId: string };
+
+// Dates relative to today, so the search never hits "can't be in the past": the next Monday (1-7 days ahead,
+// never today, whose 07:45 may have gone) and the Saturday after it.
+const MONDAY = addDays(today(), 8 - isoWeekday(today()));
+const SATURDAY = addDays(MONDAY, 5);
 
 // Exact coordinates for Abuakwa, Tanoso, Sofoline (Kumasi)
 const ABUAKWA = {
@@ -47,11 +53,11 @@ describe("Abuakwa to Sofoline Commute Matching & Booking", () => {
     // 2. Set up Rider with rider profile and funds
     const rider = await bookingRider(100);
 
-    // ── SCENARIO A: Rider searches on Monday (2026-10-12) at Abuakwa (Driver's start location) ──
+    // ── SCENARIO A: Rider searches on Monday at Abuakwa (Driver's start location) ──
     const searchAbuakwa = await api.get("/trips/available").set(auth(rider.token)).query({
       lat: ABUAKWA.lat,
       lng: ABUAKWA.lng,
-      date: "2026-10-12", // Monday (isoWeekday = 1)
+      date: MONDAY, // isoWeekday = 1
       page: 1,
       limit: 10,
     });
@@ -67,7 +73,7 @@ describe("Abuakwa to Sofoline Commute Matching & Booking", () => {
     const searchTanoso = await api.get("/trips/available").set(auth(rider.token)).query({
       lat: TANOSO_MARKET.lat,
       lng: TANOSO_MARKET.lng,
-      date: "2026-10-12", // Monday
+      date: MONDAY,
       page: 1,
       limit: 10,
     });
@@ -79,11 +85,11 @@ describe("Abuakwa to Sofoline Commute Matching & Booking", () => {
     expect(foundAtTanoso).toBeDefined();
     console.log("✅ SCENARIO B: Commute FOUND when rider searches at Tanoso Market on Monday!");
 
-    // ── SCENARIO C: Rider searches on Saturday (2026-10-10, weekend) ──
+    // ── SCENARIO C: Rider searches on Saturday (weekend) ──
     const searchSaturday = await api.get("/trips/available").set(auth(rider.token)).query({
       lat: ABUAKWA.lat,
       lng: ABUAKWA.lng,
-      date: "2026-10-10", // Saturday (isoWeekday = 6)
+      date: SATURDAY, // isoWeekday = 6
       page: 1,
       limit: 10,
     });
@@ -101,7 +107,7 @@ describe("Abuakwa to Sofoline Commute Matching & Booking", () => {
     const searchMockAccra = await api.get("/trips/available").set(auth(rider.token)).query({
       lat: ACCRA_MOCK.lat,
       lng: ACCRA_MOCK.lng,
-      date: "2026-10-12",
+      date: MONDAY,
       page: 1,
       limit: 10,
     });
@@ -121,7 +127,7 @@ describe("Abuakwa to Sofoline Commute Matching & Booking", () => {
       .set(auth(rider.token))
       .send({
         commuteId: commute.id,
-        tripDate: "2026-10-12",
+        tripDate: MONDAY,
         pickup: {
           address: ABUAKWA.address,
           lat: ABUAKWA.lat,
