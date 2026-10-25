@@ -47,7 +47,9 @@ async function send(to: string, message: string): Promise<void> {
 
   const body = (await response.json().catch(() => null)) as SmsOnlineGhResponse<unknown> | null;
   if (!isOk(response, body)) {
-    const handshake = body?.handshake ? `${body.handshake.id} ${body.handshake.label}` : "no handshake";
+    const handshake = body?.handshake
+      ? `${body.handshake.id} ${body.handshake.label}`
+      : "no handshake";
     throw new Error(`SMSOnlineGH SMS send failed (${response.status}, ${handshake})`);
   }
 }
